@@ -21,8 +21,9 @@ use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const LA_ACCEPT: &str =
-    "application/ld+json;profile=\"https://linked.art/ns/v1/linked-art.json\", application/ld+json;q=0.9, application/json;q=0.8";
+/// Linked Art is the default JSON-LD profile. Don't send `profile=` here: the
+/// Rijks resolver answers 400 "Unsupported mediatype" when it's present.
+const LA_ACCEPT: &str = "application/ld+json, application/json;q=0.8";
 /// Getty AAT concept for "English" — preferred language for titles.
 const AAT_ENGLISH: &str = "300388277";
 
@@ -110,6 +111,7 @@ impl Rijks {
         let obj = self.get_json(id).await?;
 
         // Follow object → VisualItem(s) → DigitalObject(s).
+        let mut visual_items = Vec::new();
         let mut digital_docs = Vec::new();
         for vi_id in link_ids(&obj, "shows").into_iter().take(3) {
             let Ok(vi) = self.get_json(&vi_id).await else { continue };
@@ -118,15 +120,14 @@ impl Rijks {
                     digital_docs.push(d);
                 }
             }
-            // Some records embed the digital object instead of linking it.
-            if digital_docs.is_empty() {
-                digital_docs.push(vi);
-            }
+            visual_items.push(vi);
         }
 
-        // Image: look in the digital objects first, then anywhere in the object.
+        // Image: look in the digital objects first, then the visual items (some
+        // records embed the digital object instead of linking it), then anywhere.
         let iiif = digital_docs
             .iter()
+            .chain(visual_items.iter())
             .chain(std::iter::once(&obj))
             .find_map(|d| find_string(d, &|s| is_iiif(s)))
             .map(str::to_string);
@@ -143,14 +144,13 @@ impl Rijks {
             None => id.to_string(),
         };
 
-        // Licence: only trust statements on the *image* records. The object record
-        // itself may carry a CC0 statement about the metadata, which says nothing
-        // about the artwork's copyright.
-        let lic_sources: Vec<&Value> =
-            if digital_docs.is_empty() { vec![&obj] } else { digital_docs.iter().collect() };
-        let licences: Vec<String> = lic_sources
+        // Licence: the image's rights live in `subject_to` on the VisualItem (or
+        // its DigitalObject). Records also carry a CC0 under `subject_of →
+        // subject_to`, but that covers the *metadata text*, not the artwork.
+        let licences: Vec<String> = visual_items
             .iter()
-            .flat_map(|d| all_strings(d, &|s| is_licence(s)))
+            .chain(digital_docs.iter())
+            .flat_map(image_rights)
             .map(str::to_string)
             .collect();
 
@@ -208,6 +208,11 @@ impl Rijks {
 
 fn is_licence(s: &str) -> bool {
     s.contains("creativecommons.org/") || s.contains("rightsstatements.org/")
+}
+
+/// Licence URLs from a record's own `subject_to` (not nested `subject_of`).
+fn image_rights(doc: &Value) -> Vec<&str> {
+    doc.get("subject_to").map(|r| all_strings(r, &|s| is_licence(s))).unwrap_or_default()
 }
 
 /// Returns (label, url, eligible, reason).
@@ -419,6 +424,21 @@ mod tests {
         assert!(judge_licence(&[], Some(1642), 1850).2);
         assert!(!judge_licence(&[], Some(1920), 1850).2);
         assert!(!judge_licence(&[], Some(1642), 0).2);
+    }
+
+    #[test]
+    fn image_rights_ignore_metadata_licence() {
+        // Shape of a real VisualItem (https://id.rijksmuseum.nl/202109207).
+        let vi = json!({
+            "type": "VisualItem",
+            "subject_to": [{"type": "Right", "classified_as": [
+                {"id": "https://creativecommons.org/publicdomain/mark/1.0/", "type": "Type"}
+            ]}],
+            "subject_of": [{"subject_to": [{"type": "Right", "classified_as": [
+                {"id": "https://creativecommons.org/publicdomain/zero/1.0/", "type": "Type"}
+            ]}]}]
+        });
+        assert_eq!(image_rights(&vi), vec!["https://creativecommons.org/publicdomain/mark/1.0/"]);
     }
 
     #[test]
