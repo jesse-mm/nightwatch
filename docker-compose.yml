@@ -1,0 +1,47 @@
+# Treasure Trove server.
+#
+#   LAN only:                 docker compose up -d --build
+#   LAN + public HTTPS URL:   docker compose --profile tailscale up -d --build
+#
+# The tailscale profile publishes the server through Tailscale Funnel at
+# https://<TS_HOSTNAME>.<your-tailnet>.ts.net — that's the URL the phone uses,
+# so the watchface works away from home without opening router ports.
+# See docs/DEPLOY.md.
+
+services:
+  server:
+    build: ./server
+    image: treasure-trove-server:latest
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+      SAFE_CROP_PX: ${SAFE_CROP_PX:-20}
+      PD_FALLBACK_YEAR: ${PD_FALLBACK_YEAR:-1850}
+      PALETTE_REFERENCE: ${PALETTE_REFERENCE:-defined}
+      POOL_MAX_PAGES: ${POOL_MAX_PAGES:-80}
+    volumes:
+      - art-data:/data
+
+  tailscale:
+    profiles: ["tailscale"]
+    image: tailscale/tailscale:stable
+    hostname: ${TS_HOSTNAME:-treasure-trove}
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY in .env}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      # Userspace networking: no /dev/net/tun needed, which keeps this working
+      # inside an unprivileged Proxmox LXC container.
+      TS_USERSPACE: "true"
+    volumes:
+      - ts-state:/var/lib/tailscale
+      - ./tailscale:/config:ro
+    depends_on:
+      - server
+
+volumes:
+  art-data:
+  ts-state:
