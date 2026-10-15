@@ -1,0 +1,9 @@
+node_modules/
+watchface/build/
+server/target/
+server/data/
+data/
+.env
+*.pbw
+.DS_Store
+.lock-waf*
