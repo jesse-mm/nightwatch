@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Treasure Trove settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@1,8..60,400;1,8..60,500&family=Barlow+Semi+Condensed:wght@600&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="wall">
+    <figure class="frame" id="frame">
+      <div class="screen" id="screen">
+        <img id="art" alt="" hidden>
+        <p class="screen-empty" id="screen-empty">Today’s painting appears here once your watch has loaded it.</p>
+        <div class="overlay" id="overlay" aria-hidden="true">
+          <span class="ov-date" id="ov-date"></span>
+          <span class="ov-time" id="ov-time"></span>
+        </div>
+      </div>
+    </figure>
+    <p class="preview-note">Exact pixels your watch shows</p>
+  </header>
+
+  <main>
+    <article class="label" id="label" hidden>
+      <h1 class="label-title" id="art-title"></h1>
+      <p class="label-artist" id="art-artist"></p>
+      <p class="label-meta" id="art-meta"></p>
+      <p class="label-links">
+        <a id="art-web" target="_blank" rel="noopener">View on rijksmuseum.nl</a>
+        <a id="art-image" target="_blank" rel="noopener">Open full image</a>
+      </p>
+      <button type="button" class="text-button" id="shuffle" aria-pressed="false">Hang a different painting</button>
+    </article>
+
+    <section class="group" aria-labelledby="g-time">
+      <h2 id="g-time">Time</h2>
+      <label class="row">
+        <span class="row-text">Show time</span>
+        <input type="checkbox" class="switch" data-key="showTime">
+      </label>
+      <div class="row stacked" data-show-if="showTime">
+        <span class="row-text">Clock format</span>
+        <div class="segmented" role="radiogroup" aria-label="Clock format" data-key="clockMode">
+          <label><input type="radio" name="clockMode" value="auto"><span>Like my phone</span></label>
+          <label><input type="radio" name="clockMode" value="12"><span>12-hour</span></label>
+          <label><input type="radio" name="clockMode" value="24"><span>24-hour</span></label>
+        </div>
+      </div>
+      <label class="row" data-show-if="ampm">
+        <span class="row-text">Hide AM/PM
+          <small>Only applies to the 12-hour clock.</small></span>
+        <input type="checkbox" class="switch" data-key="hideAmPm">
+      </label>
+    </section>
+
+    <section class="group" aria-labelledby="g-date">
+      <h2 id="g-date">Date</h2>
+      <label class="row">
+        <span class="row-text">Show date</span>
+        <input type="checkbox" class="switch" data-key="showDate">
+      </label>
+      <div class="row stacked" data-show-if="showDate">
+        <span class="row-text">Date format</span>
+        <div class="segmented" role="radiogroup" aria-label="Date format" data-key="dateFormat">
+          <label><input type="radio" name="dateFormat" value="dd-mm"><span id="fmt-dm">Day first</span></label>
+          <label><input type="radio" name="dateFormat" value="mm-dd"><span id="fmt-md">Month first</span></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="group" aria-labelledby="g-read" data-show-if="anyText">
+      <h2 id="g-read">Visibility</h2>
+      <label class="row">
+        <span class="row-text">Hide until I flick my wrist
+          <small>The painting stays clear; a flick shows the time for one minute.</small></span>
+        <input type="checkbox" class="switch" data-key="hideUntilShake">
+      </label>
+      <div class="row stacked">
+        <span class="row-text">Readability box
+          <small>A black box behind the time. With “Double flick”, flick twice quickly to turn it on or off.</small></span>
+        <div class="segmented" role="radiogroup" aria-label="Readability box" data-key="boxMode">
+          <label><input type="radio" name="boxMode" value="off"><span>Off</span></label>
+          <label><input type="radio" name="boxMode" value="toggle"><span>Double flick</span></label>
+          <label><input type="radio" name="boxMode" value="always"><span>Always</span></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="group" aria-labelledby="g-art">
+      <h2 id="g-art">Painting</h2>
+      <div class="row stacked">
+        <span class="row-text">Framing
+          <small>“Fill the screen” crops wide or tall paintings to their most interesting part.</small></span>
+        <div class="segmented" role="radiogroup" aria-label="Framing" data-key="fit">
+          <label><input type="radio" name="fit" value="fill"><span>Fill the screen</span></label>
+          <label><input type="radio" name="fit" value="whole"><span>Whole painting</span></label>
+        </div>
+      </div>
+      <div class="row stacked" data-show-if="colorWatch">
+        <span class="row-text">Colour tuning
+          <small>Adjusts colours for how the watch screen looks in that light.</small></span>
+        <div class="segmented" role="radiogroup" aria-label="Colour tuning" data-key="palette">
+          <label><input type="radio" name="palette" value="defined"><span>Accurate</span></label>
+          <label><input type="radio" name="palette" value="sun"><span>Daylight</span></label>
+          <label><input type="radio" name="palette" value="room"><span>Indoors</span></label>
+          <label><input type="radio" name="palette" value="backlight"><span>Backlight</span></label>
+        </div>
+      </div>
+    </section>
+
+    <footer class="credits">
+      <p>Paintings and data come from the Rijksmuseum, Amsterdam, through its open data services at
+        <a href="https://data.rijksmuseum.nl" target="_blank" rel="noopener">data.rijksmuseum.nl</a>.
+        Only works in the public domain or under an open Creative Commons licence are shown.</p>
+      <p>Treasure Trove is an independent project and is not affiliated with or endorsed by the Rijksmuseum.</p>
+    </footer>
+  </main>
+
+  <div class="savebar">
+    <button type="button" class="save" id="save">Save to watch</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
