@@ -1,6 +1,6 @@
 //! Turning a painting into exactly the pixels a Pebble screen wants.
 //!
-//! Pipeline:  plan crop  →  get pixels at the exact target size  →  tone
+//! Pipeline:  plan crop  →  cut it from the local master at the exact size  →  tone
 //! adjustments  →  dither to the Pebble palette  →  pack into the watch's raw
 //! bitmap layout (so the watch can `memcpy` it without decoding anything).
 
@@ -8,7 +8,9 @@ use image::{imageops::FilterType, Rgb, RgbImage};
 use serde::{Deserialize, Serialize};
 
 use crate::frame::Frame;
-use crate::palette::{defined_index, defined_rgb, dither_color, dither_mono, gcolor8, MatchPalette, Reference};
+use crate::palette::{
+    defined_index, defined_rgb, dither_color, dither_mono, gcolor8, MatchPalette, Reference,
+};
 use crate::saliency::best_window;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -18,6 +20,17 @@ pub enum Fit {
     Fill,
     /// Show the whole painting, with black bars if needed.
     Whole,
+}
+
+impl Fit {
+    pub const ALL: [Fit; 2] = [Fit::Fill, Fit::Whole];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Fit::Fill => "fill",
+            Fit::Whole => "whole",
+        }
+    }
 }
 
 /// What the watch told us about its screen.
@@ -61,7 +74,11 @@ impl Target {
     /// The opening inside the frame: what the painting is cropped and sized for.
     pub fn opening(&self) -> Target {
         let b = self.frame.border(self.w, self.h);
-        Target { w: self.w - 2 * b, h: self.h - 2 * b, ..*self }
+        Target {
+            w: self.w - 2 * b,
+            h: self.h - 2 * b,
+            ..*self
+        }
     }
 
     pub fn raw_len(&self) -> usize {
@@ -107,7 +124,15 @@ pub fn plan_crop(src: &RgbImage, t: &Target, safe_px: u32) -> CropPlan {
     let overflow = ((iwf * cover - tw).max(ihf * cover - th)).round() as u32;
 
     if overflow == 0 {
-        return CropPlan { mode: CropMode::None, x: 0.0, y: 0.0, w: 1.0, h: 1.0, inner_w: t.w, inner_h: t.h };
+        return CropPlan {
+            mode: CropMode::None,
+            x: 0.0,
+            y: 0.0,
+            w: 1.0,
+            h: 1.0,
+            inner_w: t.w,
+            inner_h: t.h,
+        };
     }
 
     let wide = iwf / ihf > tw / th;
@@ -139,8 +164,20 @@ pub fn plan_crop(src: &RgbImage, t: &Target, safe_px: u32) -> CropPlan {
     frac(CropMode::Smart, x, y, cw, ch, iw, ih, t)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn frac(mode: CropMode, x: u32, y: u32, cw: u32, ch: u32, iw: u32, ih: u32, t: &Target) -> CropPlan {
+#[expect(
+    clippy::too_many_arguments,
+    reason = "plain numbers from one call site; a struct would only rename them"
+)]
+fn frac(
+    mode: CropMode,
+    x: u32,
+    y: u32,
+    cw: u32,
+    ch: u32,
+    iw: u32,
+    ih: u32,
+    t: &Target,
+) -> CropPlan {
     CropPlan {
         mode,
         x: x as f64 / iw as f64,
@@ -152,19 +189,8 @@ fn frac(mode: CropMode, x: u32, y: u32, cw: u32, ch: u32, iw: u32, ih: u32, t: &
     }
 }
 
-/// IIIF Image API path (region/size/rotation/quality) that returns the planned
-/// crop already resized to the size we need — "right dimensions from the get-go".
-pub fn iiif_path(plan: &CropPlan) -> String {
-    let region = if plan.mode == CropMode::None || plan.mode == CropMode::Letterbox {
-        "full".to_string()
-    } else {
-        format!("pct:{:.4},{:.4},{:.4},{:.4}", plan.x * 100.0, plan.y * 100.0, plan.w * 100.0, plan.h * 100.0)
-    };
-    format!("{region}/{},{}/0/default.jpg", plan.inner_w, plan.inner_h)
-}
-
-/// Fallback when the IIIF server can't do the crop: do it locally from the
-/// analysis image.
+/// Cut the planned crop out of the master image and resize it to the opening
+/// (Lanczos3). Everything is rendered from the local master, never re-fetched.
 pub fn crop_locally(src: &RgbImage, plan: &CropPlan) -> RgbImage {
     let (iw, ih) = src.dimensions();
     let x = (plan.x * iw as f64).round() as u32;
@@ -173,15 +199,6 @@ pub fn crop_locally(src: &RgbImage, plan: &CropPlan) -> RgbImage {
     let h = ((plan.h * ih as f64).round() as u32).clamp(1, ih - y.min(ih - 1));
     let view = image::imageops::crop_imm(src, x, y, w, h).to_image();
     image::imageops::resize(&view, plan.inner_w, plan.inner_h, FilterType::Lanczos3)
-}
-
-/// Make sure what we got is exactly inner_w x inner_h (IIIF servers may round).
-pub fn exact_size(img: RgbImage, plan: &CropPlan) -> RgbImage {
-    if img.dimensions() == (plan.inner_w, plan.inner_h) {
-        img
-    } else {
-        image::imageops::resize(&img, plan.inner_w, plan.inner_h, FilterType::Lanczos3)
-    }
 }
 
 const SHADOW_GAMMA: f32 = 0.8;
@@ -221,7 +238,8 @@ fn tone(img: &RgbImage) -> Vec<[f32; 3]> {
 
     img.pixels()
         .map(|p| {
-            let c = p.0.map(|v| lift[((v as f32 - lo as f32) * gain).clamp(0.0, 255.0) as usize]);
+            let c =
+                p.0.map(|v| lift[((v as f32 - lo as f32) * gain).clamp(0.0, 255.0) as usize]);
             let l = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
             c.map(|v| (l + (v - l) * saturation).clamp(0.0, 255.0))
         })
@@ -229,7 +247,7 @@ fn tone(img: &RgbImage) -> Vec<[f32; 3]> {
 }
 
 pub struct Rendered {
-    /// Bytes laid out exactly like the watch's GBitmap (rows of `stride` bytes).
+    /// Bytes laid out exactly like the watch's `GBitmap` (rows of `stride` bytes).
     pub raw: Vec<u8>,
     /// What the watch will show, as a normal image (for the settings page).
     pub preview: RgbImage,
@@ -251,7 +269,7 @@ pub fn render(art: &RgbImage, t: &Target) -> Rendered {
 
     if t.color {
         // Background bytes for any letterbox bars.
-        for b in raw.iter_mut() {
+        for b in &mut raw {
             *b = gcolor8(defined_index(bg));
         }
         let mut buf: Vec<f32> = toned.iter().flatten().copied().collect();
@@ -276,8 +294,10 @@ pub fn render(art: &RgbImage, t: &Target) -> Rendered {
                 }
             }
         }
-        let mut buf: Vec<f32> =
-            toned.iter().map(|c| 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]).collect();
+        let mut buf: Vec<f32> = toned
+            .iter()
+            .map(|c| 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2])
+            .collect();
         let bits = dither_mono(&mut buf, aw, ah);
         for y in 0..ah {
             for x in 0..aw {
@@ -304,7 +324,11 @@ pub fn render(art: &RgbImage, t: &Target) -> Rendered {
             } else {
                 raw[y * stride + x / 8] &= !bit;
             }
-            preview.put_pixel(x as u32, y as u32, Rgb(if white { [255; 3] } else { [0; 3] }));
+            preview.put_pixel(
+                x as u32,
+                y as u32,
+                Rgb(if white { [255; 3] } else { [0; 3] }),
+            );
         });
     }
     Rendered { raw, preview }
@@ -337,7 +361,16 @@ mod tests {
 
     fn target(w: u32, h: u32, color: bool) -> Target {
         let stride = if color { w } else { w.div_ceil(32) * 4 };
-        Target { w, h, color, stride, round: false, fit: Fit::Fill, reference: Reference::Defined, frame: Frame::None }
+        Target {
+            w,
+            h,
+            color,
+            stride,
+            round: false,
+            fit: Fit::Fill,
+            reference: Reference::Defined,
+            frame: Frame::None,
+        }
     }
 
     #[test]
@@ -367,7 +400,10 @@ mod tests {
 
     #[test]
     fn framed_render_keeps_size_and_draws_frame() {
-        let t = Target { frame: Frame::Gold, ..target(144, 168, true) };
+        let t = Target {
+            frame: Frame::Gold,
+            ..target(144, 168, true)
+        };
         let o = t.opening();
         let b = Frame::Gold.border(144, 168);
         assert_eq!((o.w, o.h), (144 - 2 * b, 168 - 2 * b));
@@ -377,13 +413,5 @@ mod tests {
         assert_ne!(r.preview.get_pixel(1, 84).0, r.preview.get_pixel(72, 84).0);
         assert!(t.cache_name().ends_with("-gold"));
         assert!(!target(144, 168, true).cache_name().contains("none"));
-    }
-
-    #[test]
-    fn iiif_path_uses_pct_region() {
-        let img = RgbImage::from_pixel(1200, 400, Rgb([1, 2, 3]));
-        let plan = plan_crop(&img, &target(144, 168, true), 20);
-        let p = iiif_path(&plan);
-        assert!(p.starts_with("pct:") && p.ends_with("/144,168/0/default.jpg"), "{p}");
     }
 }

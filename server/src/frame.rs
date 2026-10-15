@@ -64,11 +64,23 @@ const WOOD: &[Band] = &[
 const GALLERY: &[Band] = &[
     (0.08, solid([85, 85, 85]), solid(BLACK), solid(BLACK)),
     (0.30, solid(BLACK), solid(BLACK), solid(BLACK)),
-    (0.92, solid([255, 255, 255]), solid([255, 255, 255]), solid([255, 255, 255])),
-    (1.00, solid([255, 255, 255]), solid([170, 170, 170]), solid([170, 170, 170])),
+    (
+        0.92,
+        solid([255, 255, 255]),
+        solid([255, 255, 255]),
+        solid([255, 255, 255]),
+    ),
+    (
+        1.00,
+        solid([255, 255, 255]),
+        solid([170, 170, 170]),
+        solid([170, 170, 170]),
+    ),
 ];
 
 impl Frame {
+    pub const ALL: [Frame; 4] = [Frame::None, Frame::Gold, Frame::Wood, Frame::Gallery];
+
     pub fn name(self) -> &'static str {
         match self {
             Frame::None => "none",
@@ -108,10 +120,11 @@ impl Frame {
 
     /// Colour of screen pixel (x, y), or None if it shows the painting.
     pub fn pixel(self, x: u32, y: u32, w: u32, h: u32, round: bool) -> Option<Rgb> {
-        let border = self.border(w, h) as f32;
-        if border == 0.0 {
+        let border = self.border(w, h);
+        if border == 0 {
             return None;
         }
+        let border = border as f32;
         let (depth, light) = if round {
             let (cx, cy) = (w as f32 / 2.0, h as f32 / 2.0);
             let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
@@ -123,14 +136,24 @@ impl Frame {
             let (right, bottom) = ((w - 1 - x) as f32, (h - 1 - y) as f32);
             let depth = left.min(top).min(right).min(bottom);
             // Corners are mitred: whichever edge is nearest decides the lighting.
-            (depth, if depth == top || depth == left { 1.0 } else { -1.0 })
+            (
+                depth,
+                if depth == top || depth == left {
+                    1.0
+                } else {
+                    -1.0
+                },
+            )
         };
         if depth >= border {
             return None;
         }
         let u = (depth.max(0.0) + 0.5) / border;
-        let &(_, lit, mid, shade) =
-            self.profile().iter().find(|b| u <= b.0).unwrap_or(self.profile().last()?);
+        let &(_, lit, mid, shade) = self
+            .profile()
+            .iter()
+            .find(|b| u <= b.0)
+            .unwrap_or(self.profile().last()?);
         let tone = if light > 0.35 {
             lit
         } else if light < -0.35 {

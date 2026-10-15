@@ -1,0 +1,116 @@
+# The generator
+
+`treasure-trove-generator` builds everything the server serves: metadata for
+every painting, a master image per painting, and every crop and variant for
+every supported watch. The server only reads its output.
+
+## Running it
+
+```sh
+docker compose run --rm generator            # full run, then exports catalog/paintings.jsonl
+docker compose run --rm generator --help     # all options
+```
+
+Useful options:
+
+| Option | Use |
+|---|---|
+| `--limit 20` | Test run: fetch and render only 20 paintings |
+| `--only 200107928` | One painting (repeatable) |
+| `--skip-fetch` | Render only, from what's on disk (no network at all) |
+| `--skip-render` | Fetch only |
+| `--rps 0.5` | Slower: one request every 2 seconds |
+| `--refresh-days 0` | Re-check every painting's metadata now |
+
+It's safe to stop at any time (Ctrl-C, reboot): everything written so far is
+recorded with its hash, and the next run continues where it left off.
+
+## What it does
+
+1. **Wikidata links**: one SPARQL query for all Rijksmuseum paintings.
+2. **Pools**: crawls the Search API for paintings with an image, and again per
+   century for the "Paintings from" filter (~90 requests).
+3. **Metadata**: resolves each painting (3–5 requests). Rejected paintings are
+   stored too, so they aren't re-checked until `REFRESH_DAYS` have passed.
+4. **Master image**: downloads the 1200 px image once. It's only fetched again
+   if the painting's IIIF URL changes (IIIF images are immutable).
+5. **Render** (local, all CPU cores): 32 crops and 128 variants per painting,
+   only those whose inputs changed.
+6. **Export**: `catalog/paintings.jsonl` for git.
+
+## Being polite
+
+All outside requests (Rijksmuseum, its IIIF image server, Wikidata) go through
+one pacer: `REQUESTS_PER_SECOND` (default 1). A "429 Too Many Requests" or a
+server error pauses *all* requests (honouring `Retry-After`, otherwise 30 s,
+60 s, …) before retrying, up to five times. The Rijksmuseum sends no rate-limit
+headers, so we stay well below anything that could matter.
+
+## Only redo what changed
+
+| What | Redone when |
+|---|---|
+| Pools, Wikidata | older than `REFRESH_DAYS` (25) |
+| Metadata | older than `REFRESH_DAYS`; marked *changed* only if its hash differs |
+| Master image | its IIIF URL changed, or the file is missing |
+| Crop | master image hash, crop settings or `PIPELINE_VERSION` changed |
+| Variant | its crop's hash or colour tuning changed |
+
+Adding a frame or colour tuning, or changing the render code (bump
+`PIPELINE_VERSION` in `server/src/variants.rs`), makes the next run render the
+new or changed files **from the local master images**, with no network:
+
+```sh
+docker compose run --rm generator --skip-fetch
+```
+
+## Output
+
+```
+data/catalog.sqlite                 the catalog (server loads it into memory)
+data/art/<key>/source.jpg           master image
+data/art/<key>/crops/*.webp         32 full-colour crops (lossy WebP q90, for viewing)
+data/art/<key>/v/*.png              128 variants (indexed PNG, lossless)
+catalog/paintings.jsonl             metadata for git: one painting per line, sorted
+```
+
+`data/` is not in git (binaries); `catalog/paintings.jsonl` is.
+
+## How the server picks up new output
+
+The generator works in `catalog.sqlite`, which holds a row and hash for every
+file (~100 MB when complete). The server doesn't read that. Instead the
+generator **publishes** `serve.sqlite`: a copy of only what the server needs
+(paintings, eras, Wikipedia links, crop plans, and a *ready* flag set once all
+128 variants of a painting exist).
+
+1. It writes the copy to `serve.sqlite.tmp`.
+2. It renames the temp file to `serve.sqlite`. A rename is atomic: anyone
+   opening the name gets either the old file or the new one, never a mix.
+3. The server checks the file's timestamp every minute. When it changes, it
+   reads the new file into plain in-memory maps (paintings by key, a key list
+   per era) and swaps them in; requests in flight keep using the old copy
+   until they finish. No SQL runs while answering a request.
+
+SQLite stays the file format because the generator needs transactions and
+resumable bookkeeping, and you can inspect it with the `sqlite3` CLI.
+
+It publishes after fetching, every 800 paintings while rendering, and at the
+end, so during a long first run the server offers paintings as they finish.
+File paths aren't stored: they follow from the painting key and variant name.
+
+## Expected size and time
+
+Measured on test runs (Apple silicon, 12 cores, 1 request/s):
+
+| | Per painting | ~4,900 paintings |
+|---|---|---|
+| Fetch (first run: metadata + master image) | 5–7 s (5–7 requests) | **7–10 hours** |
+| Fetch (monthly: metadata only) | 3–5 s | 4–7 hours |
+| Render (all 128 variants, 12 cores) | ~0.25 s | **~20 minutes** |
+| Disk: 128 variants (indexed PNG) | 1.6 MB | ~7.5 GB |
+| Disk: 32 crops (WebP q90) | 0.3 MB | ~1.4 GB |
+| Disk: master image | 0.17 MB | ~0.8 GB |
+| `catalog.sqlite` / `serve.sqlite` | | ~100 MB / ~25 MB |
+
+`--rps 2` roughly halves the fetch time; the default stays gentle on purpose.

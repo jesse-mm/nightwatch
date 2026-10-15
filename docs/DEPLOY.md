@@ -33,8 +33,9 @@ The Tailscale sidecar uses *userspace networking*, so you don't need to pass
 ```sh
 git clone <your repo> treasure-trove && cd treasure-trove
 cp .env.example .env        # set TS_AUTHKEY (and TS_HOSTNAME if you like)
+docker compose run --rm generator     # first time: most of a day, see GENERATOR.md
 docker compose --profile tailscale up -d --build
-docker compose logs -f server   # watch the pool being built
+docker compose logs -f server
 ```
 
 Check:
@@ -64,17 +65,35 @@ phone keeps showing its cached painting elsewhere).
 git pull && docker compose --profile tailscale up -d --build
 ```
 
-Everything lives in the `art-data` volume: the pool, metadata and rendered
-images. Deleting it is safe; it's rebuilt on demand.
+Everything the server serves lives in `./data` (`DATA_DIR`), made by the
+generator; the server mounts it read-only and reloads `serve.sqlite` within a
+minute of the generator publishing a new one. Re-run the generator monthly:
+
+```sh
+docker compose run --rm generator
+```
+
+**Generating on another machine** (e.g. a laptop) and serving from Proxmox: copy
+`data/` across with rsync. It only sends changed files, and writes each file
+under a temporary name before renaming it, so the server never reads a
+half-copied snapshot:
+
+```sh
+rsync -a --delete data/ proxmox-host:/path/to/treasure-trove/data/
+```
 
 ## Settings reference (.env)
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `DATA_DIR` | ./data | Generator output, served read-only by the server |
+| `PALETTE_REFERENCE` | defined | Server: default colour tuning (defined, sun, room, backlight) |
+| `REQUESTS_PER_SECOND` | 1 | Generator: pace of all outside requests |
+| `REFRESH_DAYS` | 25 | Generator: re-check metadata/pools older than this |
 | `SAFE_CROP_PX` | 20 | Max pixels trimmed by a plain centre crop before smart crop takes over |
 | `PD_FALLBACK_YEAR` | 1850 | Accept records without licence info only if made by this year; 0 = never |
-| `PALETTE_REFERENCE` | defined | Default colour tuning: defined, sun, room, backlight |
-| `POOL_MAX_PAGES` | 80 | Search pages crawled for the pool |
+| `POOL_MAX_PAGES` | 80 | Search pages crawled per pool |
 | `RIJKS_SEARCH_URL` | paintings with images | Change to widen/narrow the collection |
-| `SOURCE_SIZE` | 1200 | Longest side of the analysis image |
+| `SOURCE_SIZE` | 1200 | Longest side of the master image |
+| `WEBP_QUALITY` | 90 | Quality of the full-colour crops |
 | `RUST_LOG` | info | Log level (`debug` for more) |

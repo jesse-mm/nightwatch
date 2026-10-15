@@ -2,6 +2,7 @@
 // Each table holds 64 entries in the SAME order: index i in a simulated palette
 // is how the true Pebble colour DEFINED[i] looks on real hardware in that light.
 
+#[rustfmt::skip] // a 4-wide grid of swatches reads better than one per line
 pub const DEFINED: [[u8; 3]; 64] = [
     [0, 0, 0], [0, 0, 85], [0, 0, 170], [85, 0, 0],
     [0, 0, 255], [85, 0, 85], [85, 0, 170], [0, 85, 0],
@@ -21,6 +22,7 @@ pub const DEFINED: [[u8; 3]; 64] = [
     [0, 255, 85], [255, 85, 0], [85, 85, 170], [85, 0, 255],
 ];
 
+#[rustfmt::skip] // a 4-wide grid of swatches reads better than one per line
 pub const SUN: [[u8; 3]; 64] = [
     [39, 32, 32], [38, 52, 74], [27, 65, 104], [91, 36, 35],
     [3, 72, 122], [88, 52, 71], [86, 69, 99], [63, 73, 50],
@@ -40,6 +42,7 @@ pub const SUN: [[u8; 3]; 64] = [
     [98, 145, 120], [174, 91, 75], [107, 107, 120], [85, 83, 125],
 ];
 
+#[rustfmt::skip] // a 4-wide grid of swatches reads better than one per line
 pub const ROOM: [[u8; 3]; 64] = [
     [20, 19, 24], [23, 28, 40], [23, 33, 54], [39, 25, 30],
     [19, 40, 64], [47, 30, 39], [40, 38, 57], [30, 37, 40],
@@ -59,6 +62,7 @@ pub const ROOM: [[u8; 3]; 64] = [
     [49, 69, 61], [74, 49, 46], [50, 50, 59], [40, 38, 57],
 ];
 
+#[rustfmt::skip] // a 4-wide grid of swatches reads better than one per line
 pub const BACKLIGHT: [[u8; 3]; 64] = [
     [52, 68, 116], [46, 103, 163], [43, 125, 189], [115, 88, 139],
     [37, 137, 200], [112, 123, 182], [104, 136, 196], [80, 117, 152],

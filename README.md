@@ -5,11 +5,12 @@ painting from the Rijksmuseum on your wrist every day, with a small LECO time an
 date that stay out of its way.
 
 ```
-┌──────────────┐   once a day    ┌────────────────────┐   Linked Art + IIIF   ┌──────────────┐
-│  Pebble      │ ◀── bitmap ──── │  Phone (PebbleKit  │ ◀──── JSON / PNG ──── │  Treasure    │ ◀── data.rijksmuseum.nl
-│  watchface C │ ── screen info ▶│  JS, caches today) │ ──── screen info ───▶ │  Trove server│     iiif.micr.io
-└──────────────┘                 └────────────────────┘                       │  (Rust)      │
-                                         ▲ settings page served by the server └──────────────┘
+                                                                     monthly, ~1 request/s
+┌──────────────┐  once a day   ┌──────────────────┐   JSON + bytes   ┌─────────┐  reads   ┌───────────┐ ◀── data.rijksmuseum.nl
+│ Pebble       │ ◀── bitmap ── │ Phone (PebbleKit │ ◀─────────────── │ server  │ ◀─────── │ generator │ ◀── iiif.micr.io
+│ watchface C  │ ─ screen info▶│ JS, caches today)│ ── screen info ─▶│ (Rust)  │  data/   │ (Rust)    │ ◀── wikidata.org
+└──────────────┘               └──────────────────┘                  └─────────┘          └───────────┘
+                                        ▲ settings page served by the server
 ```
 
 ## What's in here
@@ -17,10 +18,11 @@ date that stay out of its way.
 | Path | What it is |
 |---|---|
 | `watchface/` | The Pebble project: C watchface (`src/c/main.c`) and phone-side JS (`src/pkjs/`). |
-| `server/` | Rust HTTP server: picks paintings, smart-crops, dithers to Pebble colours, caches results, serves the settings page. |
+| `server/` | Rust: the **generator** (fetches paintings politely, smart-crops, dithers every variant) and the **server** (serves the pre-rendered files + settings page). |
+| `catalog/paintings.jsonl` | Painting metadata exported by the generator (in git; the images in `data/` are not). |
 | `server/static/config/` | The custom settings page (plain HTML/CSS/JS, no Clay). |
 | `docker-compose.yml` | Runs the server, optionally with a Tailscale Funnel sidecar for a public HTTPS URL. |
-| `docs/` | [Architecture](docs/ARCHITECTURE.md), [deployment](docs/DEPLOY.md), [Rust for TypeScript developers](docs/RUST_FOR_TS_DEVS.md). |
+| `docs/` | [Architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [deployment](docs/DEPLOY.md), [Rust for TypeScript developers](docs/RUST_FOR_TS_DEVS.md). |
 
 ## Features
 
@@ -54,22 +56,28 @@ date that stay out of its way.
 
 ## Quick start
 
-1. **Run the server** (see [docs/DEPLOY.md](docs/DEPLOY.md) for Proxmox + Tailscale):
+1. **Generate the paintings** (see [docs/GENERATOR.md](docs/GENERATOR.md); the
+   first full run takes most of a day at one request per second):
    ```sh
    cp .env.example .env
-   docker compose up -d --build
-   curl http://localhost:8080/healthz   # wait until "paintings" > 0
+   docker compose run --rm generator --limit 20    # quick test run
+   docker compose run --rm generator               # everything
    ```
-2. **Point the watchface at it:** edit `watchface/src/pkjs/config.js` →
+2. **Run the server** (see [docs/DEPLOY.md](docs/DEPLOY.md) for Proxmox + Tailscale):
+   ```sh
+   docker compose up -d --build
+   curl http://localhost:8080/healthz   # "paintings" = how many are ready
+   ```
+3. **Point the watchface at it:** edit `watchface/src/pkjs/config.js` →
    `SERVER_URL` (use the HTTPS Funnel URL so it works away from home).
-3. **Build and install the watchface** with the Pebble SDK
+4. **Build and install the watchface** with the Pebble SDK
    ([developer.repebble.com](https://developer.repebble.com)):
    ```sh
    cd watchface
    pebble build
    pebble install --phone <phone-ip>      # or --emulator basalt
    ```
-4. Open the watchface settings in the Pebble app.
+5. Open the watchface settings in the Pebble app.
 
 ## Gestures
 

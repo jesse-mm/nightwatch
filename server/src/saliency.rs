@@ -29,7 +29,10 @@ fn energy_map(img: &RgbImage) -> EnergyMap {
     let (iw, ih) = img.dimensions();
     let scale = ANALYSIS_LONG_SIDE as f32 / iw.max(ih) as f32;
     let (w, h) = if scale < 1.0 {
-        (((iw as f32 * scale).round() as u32).max(1), ((ih as f32 * scale).round() as u32).max(1))
+        (
+            ((iw as f32 * scale).round() as u32).max(1),
+            ((ih as f32 * scale).round() as u32).max(1),
+        )
     } else {
         (iw, ih)
     };
@@ -65,7 +68,11 @@ fn energy_map(img: &RgbImage) -> EnergyMap {
             let mag = (rf * rf + gf * gf + bf * bf).sqrt().max(1.0);
             let (nr, ng, nb) = (rf / mag - 0.78, gf / mag - 0.57, bf / mag - 0.44);
             let skin_d = (nr * nr + ng * ng + nb * nb).sqrt();
-            let skin = if (0.18..0.95).contains(&light) { (1.0 - skin_d * 6.0).max(0.0) } else { 0.0 };
+            let skin = if (0.18..0.95).contains(&light) {
+                (1.0 - skin_d * 6.0).max(0.0)
+            } else {
+                0.0
+            };
 
             e[i] = edge * 1.0 + sat * 0.35 + skin * 1.2;
         }
@@ -95,9 +102,13 @@ pub fn best_window(img: &RgbImage, crop_w: u32, crop_h: u32, round: bool) -> (u3
 
     // Collapse the 2-D map into a 1-D profile along the free axis.
     let profile: Vec<f32> = if horizontal {
-        (0..map.w).map(|x| (0..map.h).map(|y| map.e[y * map.w + x]).sum()).collect()
+        (0..map.w)
+            .map(|x| (0..map.h).map(|y| map.e[y * map.w + x]).sum())
+            .collect()
     } else {
-        (0..map.h).map(|y| (0..map.w).map(|x| map.e[y * map.w + x]).sum()).collect()
+        (0..map.h)
+            .map(|y| (0..map.w).map(|x| map.e[y * map.w + x]).sum())
+            .collect()
     };
     let n = profile.len();
     let full = if horizontal { iw } else { ih } as f32;
@@ -152,6 +163,9 @@ mod tests {
         }
         let (x, y) = best_window(&img, 260, 300, false);
         assert_eq!(y, 0);
-        assert!(x > 450, "window should move right toward the detail, got {x}");
+        assert!(
+            x > 450,
+            "window should move right toward the detail, got {x}"
+        );
     }
 }

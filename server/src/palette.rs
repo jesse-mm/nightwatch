@@ -38,6 +38,8 @@ impl FromStr for Reference {
 }
 
 impl Reference {
+    pub const ALL: [Reference; 4] = [Self::Defined, Self::Sun, Self::Room, Self::Backlight];
+
     pub fn name(self) -> &'static str {
         match self {
             Self::Defined => "defined",
@@ -62,7 +64,7 @@ impl MatchPalette {
             Reference::Backlight => &BACKLIGHT,
         };
         let (mut lo, mut hi) = (255u8, 0u8);
-        for c in table.iter() {
+        for c in table {
             for &v in c {
                 lo = lo.min(v);
                 hi = hi.max(v);
@@ -129,7 +131,11 @@ pub fn dither_color(buf: &mut [f32], w: usize, h: usize, pal: &MatchPalette) -> 
             let idx = pal.nearest(px);
             out[y * w + x] = idx;
             let c = pal.colors[idx];
-            let err = [(px[0] - c[0]) / 8.0, (px[1] - c[1]) / 8.0, (px[2] - c[2]) / 8.0];
+            let err = [
+                (px[0] - c[0]) / 8.0,
+                (px[1] - c[1]) / 8.0,
+                (px[2] - c[2]) / 8.0,
+            ];
             for (dx, dy) in ATKINSON {
                 let nx = x as i32 + dx;
                 let ny = y as i32 + dy;
@@ -181,8 +187,8 @@ mod tests {
     #[test]
     fn stretched_palette_spans_full_range() {
         let p = MatchPalette::new(Reference::Room);
-        let max = p.colors.iter().flatten().cloned().fold(0.0, f32::max);
-        let min = p.colors.iter().flatten().cloned().fold(255.0, f32::min);
+        let max = p.colors.iter().flatten().copied().fold(0.0, f32::max);
+        let min = p.colors.iter().flatten().copied().fold(255.0, f32::min);
         assert!(max > 254.0 && min < 1.0);
     }
 }

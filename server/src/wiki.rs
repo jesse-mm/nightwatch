@@ -58,16 +58,24 @@ pub async fn fetch(http: &reqwest::Client) -> Result<HashMap<String, WikiLinks>>
 
 fn parse(body: &Value) -> HashMap<String, WikiLinks> {
     let value = |row: &Value, key: &str| {
-        row.get(key).and_then(|v| v.get("value")).and_then(Value::as_str).map(str::to_string)
+        row.get(key)
+            .and_then(|v| v.get("value"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
     };
     let mut out: HashMap<String, WikiLinks> = HashMap::new();
     let rows = body.pointer("/results/bindings").and_then(Value::as_array);
     for row in rows.into_iter().flatten() {
-        let (Some(inv), Some(item)) = (value(row, "inv"), value(row, "item")) else { continue };
+        let (Some(inv), Some(item)) = (value(row, "inv"), value(row, "item")) else {
+            continue;
+        };
         // A few numbers appear twice (duplicate items); keep the first item and
         // any article either row has.
         let entry = out.entry(inv).or_insert_with(|| WikiLinks {
-            wikidata: item.replace("http://www.wikidata.org/entity/", "https://www.wikidata.org/wiki/"),
+            wikidata: item.replace(
+                "http://www.wikidata.org/entity/",
+                "https://www.wikidata.org/wiki/",
+            ),
             ..Default::default()
         });
         entry.wikipedia_en = entry.wikipedia_en.take().or_else(|| value(row, "en"));
@@ -93,8 +101,14 @@ mod tests {
         let t = parse(&body);
         let nw = &t["SK-C-5"];
         assert_eq!(nw.wikidata, "https://www.wikidata.org/wiki/Q219831");
-        assert_eq!(nw.wikipedia_en.as_deref(), Some("https://en.wikipedia.org/wiki/The_Night_Watch"));
-        assert_eq!(nw.wikipedia_nl.as_deref(), Some("https://nl.wikipedia.org/wiki/De_Nachtwacht"));
+        assert_eq!(
+            nw.wikipedia_en.as_deref(),
+            Some("https://en.wikipedia.org/wiki/The_Night_Watch")
+        );
+        assert_eq!(
+            nw.wikipedia_nl.as_deref(),
+            Some("https://nl.wikipedia.org/wiki/De_Nachtwacht")
+        );
         assert_eq!(t["SK-C-302"].wikipedia_en, None);
     }
 }

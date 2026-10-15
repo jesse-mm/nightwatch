@@ -1,28 +1,45 @@
-# Treasure Trove server.
+# Treasure Trove: a generator that pre-renders everything, and a server that
+# only serves those files.
 #
-#   LAN only:                 docker compose up -d --build
-#   LAN + public HTTPS URL:   docker compose --profile tailscale up -d --build
+#   Generate (monthly; resumable; polite):  docker compose run --rm generator
+#   Serve, LAN only:                         docker compose up -d --build
+#   Serve + public HTTPS URL:                docker compose --profile tailscale up -d --build
 #
-# The tailscale profile publishes the server through Tailscale Funnel at
-# https://<TS_HOSTNAME>.<your-tailnet>.ts.net — that's the URL the phone uses,
-# so the watchface works away from home without opening router ports.
-# See docs/DEPLOY.md.
+# Both use ./data (catalog.sqlite + art/, not in git). The generator also writes
+# catalog/paintings.jsonl (metadata, in git). The tailscale profile publishes the
+# server through Tailscale Funnel at https://<TS_HOSTNAME>.<your-tailnet>.ts.net.
+# See docs/GENERATOR.md and docs/DEPLOY.md.
 
 services:
   server:
     build: ./server
-    image: treasure-trove-server:latest
+    image: treasure-trove:latest
     restart: unless-stopped
     ports:
       - "${SERVER_PORT:-8080}:8080"
     environment:
       RUST_LOG: ${RUST_LOG:-info}
+      PALETTE_REFERENCE: ${PALETTE_REFERENCE:-defined}
+    volumes:
+      - ${DATA_DIR:-./data}:/data:ro
+
+  generator:
+    profiles: ["generate"]
+    image: treasure-trove:latest
+    build: ./server
+    restart: "no"
+    command: ["treasure-trove-generator", "--export", "/catalog/paintings.jsonl"]
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+      REQUESTS_PER_SECOND: ${REQUESTS_PER_SECOND:-1}
+      REFRESH_DAYS: ${REFRESH_DAYS:-25}
       SAFE_CROP_PX: ${SAFE_CROP_PX:-20}
       PD_FALLBACK_YEAR: ${PD_FALLBACK_YEAR:-1850}
-      PALETTE_REFERENCE: ${PALETTE_REFERENCE:-defined}
       POOL_MAX_PAGES: ${POOL_MAX_PAGES:-80}
+      WEBP_QUALITY: ${WEBP_QUALITY:-90}
     volumes:
-      - art-data:/data
+      - ${DATA_DIR:-./data}:/data
+      - ./catalog:/catalog
 
   tailscale:
     profiles: ["tailscale"]
@@ -43,5 +60,4 @@ services:
       - server
 
 volumes:
-  art-data:
   ts-state:

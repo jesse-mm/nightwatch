@@ -1,4 +1,4 @@
-//! Talking to the Rijksmuseum data services (https://data.rijksmuseum.nl/docs/).
+//! Talking to the Rijksmuseum data services (<https://data.rijksmuseum.nl/docs>/).
 //!
 //! Two services are used:
 //!
@@ -15,11 +15,13 @@
 //! forgiving helpers. If the museum adds or moves a field, we degrade instead of
 //! failing (TS analogy: optional chaining everywhere).
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use crate::throttle::Throttle;
 
 /// Linked Art is the default JSON-LD profile. Don't send `profile=` here: the
 /// Rijks resolver answers 400 "Unsupported mediatype" when it's present.
@@ -27,9 +29,13 @@ const LA_ACCEPT: &str = "application/ld+json, application/json;q=0.8";
 /// Getty AAT concept for "English" — preferred language for titles.
 const AAT_ENGLISH: &str = "300388277";
 
+/// Client for the Rijksmuseum services. Every request (metadata, search pages,
+/// IIIF images) waits for the shared throttle, so the generator never sends more
+/// than its configured rate however it's used.
 #[derive(Clone)]
 pub struct Rijks {
     http: reqwest::Client,
+    throttle: Arc<Throttle>,
 }
 
 /// Everything the watch/settings page needs to know about a painting.
@@ -38,7 +44,7 @@ pub struct Rijks {
 pub struct ArtMeta {
     /// Short id used in our URLs (last path segment of the Rijks id).
     pub key: String,
-    /// Full persistent identifier, e.g. https://id.rijksmuseum.nl/200107928
+    /// Full persistent identifier, e.g. <https://id.rijksmuseum.nl/200107928>
     pub id: String,
     pub title: String,
     pub artist: String,
@@ -63,36 +69,61 @@ pub struct SearchPage {
 }
 
 impl Rijks {
-    pub fn new(user_agent: &str) -> Result<Self> {
+    pub fn new(user_agent: &str, throttle: Arc<Throttle>) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(user_agent)
-            .timeout(Duration::from_secs(25))
+            .timeout(Duration::from_secs(60))
             .build()?;
-        Ok(Self { http })
+        Ok(Self { http, throttle })
     }
 
     pub fn http(&self) -> &reqwest::Client {
         &self.http
     }
 
-    async fn get_json(&self, url: &str) -> Result<Value> {
+    pub fn throttle(&self) -> &Throttle {
+        &self.throttle
+    }
+
+    /// GET with the throttle, retries and back-off. "Too many requests" and
+    /// server errors pause *all* requests (Retry-After when given), other 4xx fail.
+    async fn send(&self, url: &str, accept: Option<&str>) -> Result<reqwest::Response> {
         let mut last_err = anyhow!("no attempt");
-        for attempt in 0..3 {
-            if attempt > 0 {
-                tokio::time::sleep(Duration::from_millis(400 * attempt)).await;
+        for attempt in 1..=5u64 {
+            self.throttle.wait().await;
+            let mut req = self.http.get(url);
+            if let Some(a) = accept {
+                req = req.header("Accept", a);
             }
-            match self.http.get(url).header("Accept", LA_ACCEPT).send().await {
-                Ok(r) if r.status().is_success() => {
-                    return r.json::<Value>().await.with_context(|| format!("invalid JSON from {url}"))
+            let pause = match req.send().await {
+                Ok(r) if r.status().is_success() => return Ok(r),
+                Ok(r) if r.status().as_u16() == 429 || r.status().is_server_error() => {
+                    let pause = retry_after(&r).unwrap_or(Duration::from_secs(30 * attempt));
+                    tracing::warn!(status = %r.status(), url, pause_s = pause.as_secs(), "backing off");
+                    last_err = anyhow!("{} from {url}", r.status());
+                    pause
                 }
-                Ok(r) if r.status().is_client_error() => {
-                    return Err(anyhow!("{} from {url}", r.status()))
+                Ok(r) => return Err(anyhow!("{} from {url}", r.status())),
+                Err(e) => {
+                    last_err = e.into();
+                    Duration::from_secs(5 * attempt)
                 }
-                Ok(r) => last_err = anyhow!("{} from {url}", r.status()),
-                Err(e) => last_err = e.into(),
-            }
+            };
+            self.throttle.pause(pause).await;
         }
         Err(last_err)
+    }
+
+    async fn get_json(&self, url: &str) -> Result<Value> {
+        let r = self.send(url, Some(LA_ACCEPT)).await?;
+        r.json::<Value>()
+            .await
+            .with_context(|| format!("invalid JSON from {url}"))
+    }
+
+    /// Download a file (e.g. a IIIF image), throttled like everything else.
+    pub async fn download(&self, url: &str) -> Result<Vec<u8>> {
+        Ok(self.send(url, None).await?.bytes().await?.to_vec())
     }
 
     pub async fn search_page(&self, url: &str) -> Result<SearchPage> {
@@ -100,7 +131,12 @@ impl Rijks {
         let ids = v
             .get("orderedItems")
             .and_then(Value::as_array)
-            .map(|items| items.iter().filter_map(|i| id_of(i).map(str::to_string)).collect())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|i| id_of(i).map(str::to_string))
+                    .collect()
+            })
             .unwrap_or_default();
         let next = v.get("next").and_then(id_of).map(str::to_string);
         Ok(SearchPage { ids, next })
@@ -114,7 +150,9 @@ impl Rijks {
         let mut visual_items = Vec::new();
         let mut digital_docs = Vec::new();
         for vi_id in link_ids(&obj, "shows").into_iter().take(3) {
-            let Ok(vi) = self.get_json(&vi_id).await else { continue };
+            let Ok(vi) = self.get_json(&vi_id).await else {
+                continue;
+            };
             for do_id in link_ids(&vi, "digitally_shown_by").into_iter().take(3) {
                 if let Ok(d) = self.get_json(&do_id).await {
                     digital_docs.push(d);
@@ -132,10 +170,15 @@ impl Rijks {
             .find_map(|d| find_string(d, &|s| is_iiif(s)))
             .map(str::to_string);
         let iiif_base = iiif.as_deref().map(iiif_base_of);
-        let image_url = iiif_base.as_ref().map(|b| format!("{b}/full/max/0/default.jpg"));
+        let image_url = iiif_base
+            .as_ref()
+            .map(|b| format!("{b}/full/max/0/default.jpg"));
 
         let title = title_of(&obj).unwrap_or_else(|| "Untitled".into());
-        let artist = self.artist_of(&obj).await.unwrap_or_else(|| "Unknown artist".into());
+        let artist = self
+            .artist_of(&obj)
+            .await
+            .unwrap_or_else(|| "Unknown artist".into());
         let (date, year) = date_of(&obj);
         let object_number = object_number_of(&obj);
         let key = id.rsplit('/').next().unwrap_or(id).to_string();
@@ -154,7 +197,8 @@ impl Rijks {
             .map(str::to_string)
             .collect();
 
-        let (license, license_url, mut eligible, mut reason) = judge_licence(&licences, year, pd_fallback_year);
+        let (license, license_url, mut eligible, mut reason) =
+            judge_licence(&licences, year, pd_fallback_year);
         if iiif_base.is_none() {
             eligible = false;
             reason = Some("no IIIF image found".into());
@@ -204,6 +248,18 @@ impl Rijks {
     }
 }
 
+fn retry_after(r: &reqwest::Response) -> Option<Duration> {
+    let secs: u64 = r
+        .headers()
+        .get("retry-after")?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    Some(Duration::from_secs(secs.min(3600)))
+}
+
 // ---------- licence rules ----------
 
 fn is_licence(s: &str) -> bool {
@@ -212,7 +268,9 @@ fn is_licence(s: &str) -> bool {
 
 /// Licence URLs from a record's own `subject_to` (not nested `subject_of`).
 fn image_rights(doc: &Value) -> Vec<&str> {
-    doc.get("subject_to").map(|r| all_strings(r, &|s| is_licence(s))).unwrap_or_default()
+    doc.get("subject_to")
+        .map(|r| all_strings(r, &|s| is_licence(s)))
+        .unwrap_or_default()
 }
 
 /// Returns (label, url, eligible, reason).
@@ -235,16 +293,23 @@ pub fn judge_licence(
         return ("CC BY".into(), Some(u), true, None);
     }
     if let Some(u) = licences.first() {
-        return ("Restricted".into(), Some(u.clone()), false, Some(format!("licence not open: {u}")));
+        return (
+            "Restricted".into(),
+            Some(u.clone()),
+            false,
+            Some(format!("licence not open: {u}")),
+        );
     }
     match year {
-        Some(y) if pd_fallback_year > 0 && y <= pd_fallback_year => (
-            "Public domain (made before 1850)".into(),
+        Some(y) if pd_fallback_year > 0 && y <= pd_fallback_year => {
+            ("Public domain (made before 1850)".into(), None, true, None)
+        }
+        _ => (
+            "Unknown".into(),
             None,
-            true,
-            None,
+            false,
+            Some("no licence statement".into()),
         ),
-        _ => ("Unknown".into(), None, false, Some("no licence statement".into())),
     }
 }
 
@@ -303,7 +368,6 @@ fn find_string<'a>(v: &'a Value, pred: &dyn Fn(&str) -> bool) -> Option<&'a str>
 }
 
 fn all_strings<'a>(v: &'a Value, pred: &dyn Fn(&str) -> bool) -> Vec<&'a str> {
-    let mut out = Vec::new();
     fn walk<'a>(v: &'a Value, pred: &dyn Fn(&str) -> bool, out: &mut Vec<&'a str>) {
         match v {
             Value::String(s) if pred(s) => out.push(s),
@@ -312,12 +376,14 @@ fn all_strings<'a>(v: &'a Value, pred: &dyn Fn(&str) -> bool) -> Vec<&'a str> {
             _ => {}
         }
     }
+    let mut out = Vec::new();
     walk(v, pred, &mut out);
     out
 }
 
 fn is_iiif(s: &str) -> bool {
-    s.starts_with("http") && (s.contains("iiif.micr.io/") || (s.contains("/iiif/") && s.contains("/full/")))
+    s.starts_with("http")
+        && (s.contains("iiif.micr.io/") || (s.contains("/iiif/") && s.contains("/full/")))
 }
 
 /// `https://iiif.micr.io/AbCd/full/max/0/default.jpg` → `https://iiif.micr.io/AbCd`
@@ -334,14 +400,22 @@ fn is_type(v: &Value, t: &str) -> bool {
 }
 
 fn is_english(v: &Value) -> bool {
-    v.get("language")
-        .map(|l| as_list(l).iter().filter_map(|x| id_of(x)).any(|id| id.ends_with(AAT_ENGLISH)))
-        .unwrap_or(false)
+    v.get("language").is_some_and(|l| {
+        as_list(l)
+            .iter()
+            .filter_map(|x| id_of(x))
+            .any(|id| id.ends_with(AAT_ENGLISH))
+    })
 }
 
 fn names(doc: &Value) -> Vec<&Value> {
     doc.get("identified_by")
-        .map(|v| as_list(v).into_iter().filter(|n| is_type(n, "Name")).collect())
+        .map(|v| {
+            as_list(v)
+                .into_iter()
+                .filter(|n| is_type(n, "Name"))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -356,7 +430,11 @@ fn title_of(obj: &Value) -> Option<String> {
 }
 
 fn name_of(doc: &Value) -> Option<String> {
-    title_of(doc).or_else(|| doc.get("_label").and_then(Value::as_str).map(str::to_string))
+    title_of(doc).or_else(|| {
+        doc.get("_label")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    })
 }
 
 fn object_number_of(obj: &Value) -> Option<String> {
@@ -371,7 +449,9 @@ fn object_number_of(obj: &Value) -> Option<String> {
 
 /// (display date, latest year for licence fallback)
 fn date_of(obj: &Value) -> (Option<String>, Option<i32>) {
-    let Some(prod) = obj.get("produced_by") else { return (None, None) };
+    let Some(prod) = obj.get("produced_by") else {
+        return (None, None);
+    };
     let mut spans = Vec::new();
     collect_key(prod, "timespan", &mut spans);
     let mut display = None;
@@ -380,7 +460,11 @@ fn date_of(obj: &Value) -> (Option<String>, Option<i32>) {
         if display.is_none() {
             display = span
                 .get("identified_by")
-                .and_then(|v| as_list(v).into_iter().find_map(|n| n.get("content").and_then(Value::as_str)))
+                .and_then(|v| {
+                    as_list(v)
+                        .into_iter()
+                        .find_map(|n| n.get("content").and_then(Value::as_str))
+                })
                 .map(str::to_string);
         }
         for key in ["end_of_the_end", "begin_of_the_end", "begin_of_the_begin"] {
@@ -399,7 +483,11 @@ fn date_of(obj: &Value) -> (Option<String>, Option<i32>) {
 fn parse_year(s: &str) -> Option<i32> {
     let s = s.trim_start_matches('+');
     let neg = s.starts_with('-');
-    let digits: String = s.trim_start_matches('-').chars().take_while(|c| c.is_ascii_digit()).collect();
+    let digits: String = s
+        .trim_start_matches('-')
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
     let y: i32 = digits.parse().ok()?;
     Some(if neg { -y } else { y })
 }
@@ -410,24 +498,46 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn iiif_base_strips_parameters() {
-        assert_eq!(iiif_base_of("https://iiif.micr.io/AbCd/full/max/0/default.jpg"), "https://iiif.micr.io/AbCd");
-        assert_eq!(iiif_base_of("https://iiif.micr.io/AbCd/info.json"), "https://iiif.micr.io/AbCd");
+    fn iiif_base_of_strips_region_and_info_json() {
+        assert_eq!(
+            iiif_base_of("https://iiif.micr.io/AbCd/full/max/0/default.jpg"),
+            "https://iiif.micr.io/AbCd"
+        );
+        assert_eq!(
+            iiif_base_of("https://iiif.micr.io/AbCd/info.json"),
+            "https://iiif.micr.io/AbCd"
+        );
     }
 
     #[test]
-    fn licence_rules() {
-        let cc0 = vec!["https://creativecommons.org/publicdomain/zero/1.0/".to_string()];
+    fn judge_licence_allows_cc0_whatever_the_date() {
+        let cc0 = ["https://creativecommons.org/publicdomain/zero/1.0/".to_string()];
         assert!(judge_licence(&cc0, Some(1990), 1850).2);
-        let inc = vec!["http://rightsstatements.org/vocab/InC/1.0/".to_string()];
+    }
+
+    #[test]
+    fn judge_licence_rejects_in_copyright_even_for_old_works() {
+        let inc = ["http://rightsstatements.org/vocab/InC/1.0/".to_string()];
         assert!(!judge_licence(&inc, Some(1600), 1850).2);
+    }
+
+    #[test]
+    fn judge_licence_allows_unlicensed_works_made_before_the_fallback_year() {
         assert!(judge_licence(&[], Some(1642), 1850).2);
+    }
+
+    #[test]
+    fn judge_licence_rejects_unlicensed_works_made_after_the_fallback_year() {
         assert!(!judge_licence(&[], Some(1920), 1850).2);
+    }
+
+    #[test]
+    fn judge_licence_rejects_unlicensed_works_when_the_fallback_is_off() {
         assert!(!judge_licence(&[], Some(1642), 0).2);
     }
 
     #[test]
-    fn image_rights_ignore_metadata_licence() {
+    fn image_rights_ignores_the_metadata_licence() {
         // Shape of a real VisualItem (https://id.rijksmuseum.nl/202109207).
         let vi = json!({
             "type": "VisualItem",
@@ -438,7 +548,10 @@ mod tests {
                 {"id": "https://creativecommons.org/publicdomain/zero/1.0/", "type": "Type"}
             ]}]}]
         });
-        assert_eq!(image_rights(&vi), vec!["https://creativecommons.org/publicdomain/mark/1.0/"]);
+        assert_eq!(
+            image_rights(&vi),
+            vec!["https://creativecommons.org/publicdomain/mark/1.0/"]
+        );
     }
 
     #[test]

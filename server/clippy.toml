@@ -1,0 +1,4 @@
+# Tests may unwrap/expect: a panic there is a clear test failure.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+doc-valid-idents = ["PebbleKit", "GColor8", "SQLite", "WebP", "IIIF", "JSON-LD", ".."]

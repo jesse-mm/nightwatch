@@ -1,15 +1,18 @@
 //! HTTP layer (axum). TS analogy: an Express router where each handler receives
 //! already-parsed query params (`Query<T>`) and shared state (`State<T>`).
 //!
-//! GET /healthz                              → pool status
-//! GET /api/art/random?w&h&color&stride&round&fit&palette&frame[&era] → pick + render, returns JSON
+//! Everything is answered from the in-memory snapshot and the generator's files:
+//!
+//! GET /healthz                                          → catalog counts
+//! GET /api/art/random?w&h&color&stride&round&fit&palette&frame[&era] → random painting, JSON
 //!     era: any | pre1600 | 1600s | 1700s | 1800s | 1900s
-//! GET /api/art/{key}?…same…                 → render a specific painting
-//! GET /api/art/{key}/raw?…same…[&format=b64] → watch bitmap bytes
-//! GET /api/art/{key}/preview.png?…same…     → preview of those pixels
-//! GET /config/                              → settings page (static files)
+//! GET /api/art/{key}?…same…                             → one painting, JSON
+//! GET /api/art/{key}/raw?…same…[&format=b64]            → watch bitmap bytes
+//! GET /api/art/{key}/preview.png?…same…                 → the stored indexed PNG
+//! GET /api/art/{key}/crop.webp?…same…                   → full-colour crop before dithering
+//! GET /config/                                          → settings page (static files)
 
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError, RwLock};
 
 use axum::{
     extract::{Path, Query, State},
@@ -21,16 +24,41 @@ use axum::{
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-
-use crate::{
+use treasure_trove::{
     era::Era,
     frame::Frame,
-    imaging::{Fit, Target},
+    imaging::{CropPlan, Fit, Target},
     palette::Reference,
+    png8,
     rijks::ArtMeta,
-    service::{AppState, RenderInfo},
+    snapshot::Snapshot,
+    variants,
     wiki::WikiLinks,
 };
+
+use crate::config::Config;
+
+pub struct AppState {
+    pub cfg: Config,
+    /// Swapped wholesale when the generator publishes a new snapshot; requests
+    /// take a cheap `Arc` clone and never hold the lock while working.
+    pub snapshot: RwLock<Arc<Snapshot>>,
+}
+
+impl AppState {
+    /// The current snapshot. A poisoned lock (a panic while swapping) still
+    /// holds a complete `Arc`, so we keep serving it.
+    pub fn snapshot(&self) -> Arc<Snapshot> {
+        Arc::clone(&self.snapshot.read().unwrap_or_else(PoisonError::into_inner))
+    }
+
+    pub fn replace(&self, fresh: Snapshot) {
+        *self
+            .snapshot
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = Arc::new(fresh);
+    }
+}
 
 type Shared = Arc<AppState>;
 
@@ -42,6 +70,7 @@ pub fn router(state: Shared) -> Router {
         .route("/api/art/{key}", get(by_key))
         .route("/api/art/{key}/raw", get(raw))
         .route("/api/art/{key}/preview.png", get(preview))
+        .route("/api/art/{key}/crop.webp", get(crop))
         .with_state(state)
 }
 
@@ -58,12 +87,19 @@ impl IntoResponse for AppError {
 impl From<anyhow::Error> for AppError {
     fn from(e: anyhow::Error) -> Self {
         tracing::error!(error = %e, "request failed");
-        AppError(StatusCode::BAD_GATEWAY, e.to_string())
+        AppError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
     }
 }
 
 fn bad_request(msg: impl Into<String>) -> AppError {
     AppError(StatusCode::BAD_REQUEST, msg.into())
+}
+
+fn not_generated() -> AppError {
+    AppError(
+        StatusCode::NOT_FOUND,
+        "this painting or variant has not been generated".into(),
+    )
 }
 
 // ---------- query parsing ----------
@@ -82,22 +118,17 @@ pub struct TargetQuery {
 }
 
 impl TargetQuery {
+    /// The generated variant to look up. Variants are stored with stride = w;
+    /// `stride()` gives the row stride to unpack the bytes to.
     fn target(&self, default_ref: Reference) -> Result<Target, AppError> {
-        if !(16..=400).contains(&self.w) || !(16..=400).contains(&self.h) {
-            return Err(bad_request("w and h must be between 16 and 400"));
+        if self.color.unwrap_or(1) != 1 {
+            return Err(bad_request("only colour watches are supported"));
         }
-        let color = self.color.unwrap_or(1) == 1;
-        let min_stride = if color { self.w } else { self.w.div_ceil(8) };
-        let default_stride = if color { self.w } else { self.w.div_ceil(32) * 4 };
-        let stride = self.stride.unwrap_or(default_stride);
-        if stride < min_stride || stride > 1024 {
-            return Err(bad_request(format!("stride must be between {min_stride} and 1024")));
-        }
-        Ok(Target {
+        let t = Target {
             w: self.w,
             h: self.h,
-            color,
-            stride,
+            color: true,
+            stride: self.w,
             round: self.round.unwrap_or(0) == 1,
             fit: self.fit.unwrap_or(Fit::Fill),
             reference: match &self.palette {
@@ -105,22 +136,32 @@ impl TargetQuery {
                 None => default_ref,
             },
             frame: self.frame.unwrap_or_default(),
-        })
+        };
+        if !variants::SCREENS.contains(&(t.w, t.h, t.round)) {
+            return Err(bad_request(format!("unsupported screen {}x{}", t.w, t.h)));
+        }
+        Ok(t)
+    }
+
+    fn stride(&self) -> Result<u32, AppError> {
+        let s = self.stride.unwrap_or(self.w);
+        if s < self.w || s > 1024 {
+            return Err(bad_request(format!(
+                "stride must be between {} and 1024",
+                self.w
+            )));
+        }
+        Ok(s)
     }
 }
 
-fn query_string(t: &Target) -> String {
+fn query_string(t: &Target, stride: u32) -> String {
     format!(
-        "w={}&h={}&color={}&stride={}&round={}&fit={}&palette={}&frame={}",
+        "w={}&h={}&color=1&stride={stride}&round={}&fit={}&palette={}&frame={}",
         t.w,
         t.h,
-        t.color as u8,
-        t.stride,
         t.round as u8,
-        match t.fit {
-            Fit::Fill => "fill",
-            Fit::Whole => "whole",
-        },
+        t.fit.name(),
         t.reference.name(),
         t.frame.name()
     )
@@ -135,39 +176,51 @@ pub struct EraQuery {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ArtResponse {
+struct RenderInfo {
+    crop: CropPlan,
+    raw_len: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArtResponse<'a> {
     #[serde(flatten)]
-    meta: ArtMeta,
+    meta: &'a ArtMeta,
     render: RenderInfo,
     /// Wikidata item and Wikipedia articles, when Wikidata knows the painting.
     #[serde(skip_serializing_if = "Option::is_none")]
-    wiki: Option<WikiLinks>,
+    wiki: Option<&'a WikiLinks>,
     raw_url: String,
     preview_url: String,
+    crop_url: String,
     attribution: &'static str,
 }
 
 const ATTRIBUTION: &str =
     "Artwork data and images: Rijksmuseum, Amsterdam, via the Rijksmuseum data services (https://data.rijksmuseum.nl/about/). Treasure Trove is not affiliated with the Rijksmuseum.";
 
-async fn respond(state: &AppState, meta: ArtMeta, t: &Target) -> Result<Response, AppError> {
-    let render = state.render(&meta, t).await?;
-    let qs = query_string(t);
-    let wiki = state.wiki_links(meta.object_number.as_deref()).await;
+fn respond(snap: &Snapshot, key: &str, t: &Target, stride: u32) -> Result<Response, AppError> {
+    let s = snap.served(key, t).ok_or_else(not_generated)?;
+    let qs = query_string(t, stride);
+    let key = &s.painting.meta.key;
     let body = ArtResponse {
-        wiki,
-        raw_url: format!("/api/art/{}/raw?{qs}", meta.key),
-        preview_url: format!("/api/art/{}/preview.png?{qs}", meta.key),
-        meta,
-        render,
+        raw_url: format!("/api/art/{key}/raw?{qs}"),
+        preview_url: format!("/api/art/{key}/preview.png?{qs}"),
+        crop_url: format!("/api/art/{key}/crop.webp?{qs}"),
+        render: RenderInfo {
+            crop: *s.plan,
+            raw_len: (stride * t.h) as usize,
+        },
+        wiki: s.painting.wiki.as_ref(),
+        meta: &s.painting.meta,
         attribution: ATTRIBUTION,
     };
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(body)).into_response())
 }
 
-async fn health(State(state): State<Shared>) -> impl IntoResponse {
-    let pool = state.pool.read().await;
-    Json(json!({ "ok": true, "paintings": pool.ids.len(), "poolComplete": pool.complete }))
+async fn health(State(state): State<Shared>) -> Response {
+    let snap = state.snapshot();
+    Json(json!({ "ok": true, "paintings": snap.ready(), "eligible": snap.eligible, "pool": snap.pool })).into_response()
 }
 
 async fn random(
@@ -176,8 +229,17 @@ async fn random(
     Query(e): Query<EraQuery>,
 ) -> Result<Response, AppError> {
     let t = q.target(state.cfg.reference)?;
-    let meta = state.pick_random(e.era.unwrap_or_default()).await?;
-    respond(&state, meta, &t).await
+    let stride = q.stride()?;
+    let era = e.era.unwrap_or_default();
+    let snap = state.snapshot();
+    let key = snap.random(era).ok_or_else(|| {
+        let msg = match era {
+            Era::Any => "no paintings generated yet".to_string(),
+            e => format!("no paintings from the {} generated yet", e.name()),
+        };
+        AppError(StatusCode::NOT_FOUND, msg)
+    })?;
+    respond(&snap, key, &t, stride)
 }
 
 async fn by_key(
@@ -186,14 +248,30 @@ async fn by_key(
     Query(q): Query<TargetQuery>,
 ) -> Result<Response, AppError> {
     let t = q.target(state.cfg.reference)?;
-    let meta = state.meta_by_key(&key).await?;
-    if !meta.eligible {
-        return Err(AppError(StatusCode::NOT_FOUND, "painting is not available".into()));
-    }
-    respond(&state, meta, &t).await
+    let stride = q.stride()?;
+    respond(&state.snapshot(), &key, &t, stride)
+}
+
+/// Path of a variant (or its crop) for this request, if generated.
+fn file_path(
+    state: &AppState,
+    key: &str,
+    t: &Target,
+    crop: bool,
+) -> Result<std::path::PathBuf, AppError> {
+    let snap = state.snapshot();
+    let s = snap.served(key, t).ok_or_else(not_generated)?;
+    Ok(if crop { s.crop_path } else { s.variant_path })
 }
 
 const IMMUTABLE: &str = "public, max-age=31536000, immutable";
+
+async fn read_file(path: std::path::PathBuf) -> Result<Vec<u8>, AppError> {
+    tokio::fs::read(&path).await.map_err(|e| {
+        tracing::warn!(path = %path.display(), error = %e, "file in catalog is missing");
+        not_generated()
+    })
+}
 
 async fn raw(
     State(state): State<Shared>,
@@ -201,13 +279,29 @@ async fn raw(
     Query(q): Query<TargetQuery>,
 ) -> Result<Response, AppError> {
     let t = q.target(state.cfg.reference)?;
-    let bytes = state.read_render(&key, &t, "raw").await?;
+    let stride = q.stride()?;
+    let png = read_file(file_path(&state, &key, &t, false)?).await?;
+    let (_, _, bytes) = png8::decode_to_raw(&png, stride)?;
     if q.format.as_deref() == Some("b64") {
         // PebbleKit JS can't always read binary XHR responses; text is universal.
         let text = base64::engine::general_purpose::STANDARD.encode(bytes);
-        return Ok(([(header::CONTENT_TYPE, "text/plain"), (header::CACHE_CONTROL, IMMUTABLE)], text).into_response());
+        return Ok((
+            [
+                (header::CONTENT_TYPE, "text/plain"),
+                (header::CACHE_CONTROL, IMMUTABLE),
+            ],
+            text,
+        )
+            .into_response());
     }
-    Ok(([(header::CONTENT_TYPE, "application/octet-stream"), (header::CACHE_CONTROL, IMMUTABLE)], bytes).into_response())
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/octet-stream"),
+            (header::CACHE_CONTROL, IMMUTABLE),
+        ],
+        bytes,
+    )
+        .into_response())
 }
 
 async fn preview(
@@ -216,6 +310,30 @@ async fn preview(
     Query(q): Query<TargetQuery>,
 ) -> Result<Response, AppError> {
     let t = q.target(state.cfg.reference)?;
-    let bytes = state.read_render(&key, &t, "png").await?;
-    Ok(([(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, IMMUTABLE)], bytes).into_response())
+    let png = read_file(file_path(&state, &key, &t, false)?).await?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/png"),
+            (header::CACHE_CONTROL, IMMUTABLE),
+        ],
+        png,
+    )
+        .into_response())
+}
+
+async fn crop(
+    State(state): State<Shared>,
+    Path(key): Path<String>,
+    Query(q): Query<TargetQuery>,
+) -> Result<Response, AppError> {
+    let t = q.target(state.cfg.reference)?;
+    let webp = read_file(file_path(&state, &key, &t, true)?).await?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/webp"),
+            (header::CACHE_CONTROL, IMMUTABLE),
+        ],
+        webp,
+    )
+        .into_response())
 }

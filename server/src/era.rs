@@ -67,9 +67,15 @@ mod tests {
     fn parses_query_values() {
         let e: Era = serde_json::from_str("\"1600s\"").unwrap();
         assert_eq!(e, Era::C17);
-        assert_eq!(serde_json::from_str::<Era>("\"pre1600\"").unwrap(), Era::Before1600);
+        assert_eq!(
+            serde_json::from_str::<Era>("\"pre1600\"").unwrap(),
+            Era::Before1600
+        );
         for e in Era::FILTERED {
-            assert_eq!(serde_json::from_str::<Era>(&format!("\"{}\"", e.name())).unwrap(), e);
+            assert_eq!(
+                serde_json::from_str::<Era>(&format!("\"{}\"", e.name())).unwrap(),
+                e
+            );
         }
     }
 
@@ -79,6 +85,9 @@ mod tests {
             with_date("https://x/search?type=painting", "16*"),
             "https://x/search?type=painting&creationDate=16*"
         );
-        assert_eq!(with_date("https://x/search", "16*"), "https://x/search?creationDate=16*");
+        assert_eq!(
+            with_date("https://x/search", "16*"),
+            "https://x/search?creationDate=16*"
+        );
     }
 }

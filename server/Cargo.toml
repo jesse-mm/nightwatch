@@ -2,23 +2,71 @@
 name = "treasure-trove-server"
 version = "0.1.0"
 edition = "2021"
-description = "Fetches public-domain paintings from the Rijksmuseum and converts them into Pebble-ready pixels"
+description = "Pre-renders public-domain Rijksmuseum paintings for Pebble watches, and serves them"
 license = "MIT"
 publish = false
+
+[lib]
+name = "treasure_trove"
+path = "src/lib.rs"
+
+[[bin]]
+name = "treasure-trove-server"
+path = "src/main.rs"
+
+[[bin]]
+name = "treasure-trove-generator"
+path = "src/bin/generator.rs"
 
 [dependencies]
 anyhow = "1"
 axum = "0.8"
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+png = "0.18"
 rand = "0.9"
+rayon = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "sync", "time", "signal"] }
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+webp = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "test-util"] }
+
+# Lint policy (see the rust-best-practices skill, ch. 2). The default clippy set
+# plus selected pedantic/restriction lints; the full pedantic set is mostly
+# numeric casts in the image maths, which are intended.
+# CI / before committing: cargo clippy --all-targets --locked -- -D warnings
+[lints.rust]
+unsafe_code = "forbid"
+future-incompatible = { level = "warn", priority = -2 }
+nonstandard_style = { level = "deny", priority = -1 }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+allow_attributes = "warn"
+cloned_instead_of_copied = "warn"
+doc_markdown = "warn"
+expect_used = "warn"
+explicit_iter_loop = "warn"
+format_collect = "warn"
+ignored_unit_patterns = "warn"
+items_after_statements = "warn"
+manual_ok_or = "warn"
+map_unwrap_or = "warn"
+needless_collect = "warn"
+needless_raw_string_hashes = "warn"
+redundant_clone = "warn"
+redundant_closure_for_method_calls = "warn"
+unnecessary_wraps = "warn"
+unwrap_used = "warn"
 
 [profile.release]
 opt-level = 3
