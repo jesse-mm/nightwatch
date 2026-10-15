@@ -1,0 +1,24 @@
+{
+  "name": "treasure-trove",
+  "author": "Treasure Trove",
+  "version": "1.0.0",
+  "keywords": ["pebble-app", "watchface", "art"],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Treasure Trove",
+    "uuid": "4ad5c70c-9174-4fb8-83b8-4e26d302a156",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery", "flint", "gabbro"],
+    "watchapp": { "watchface": true },
+    "capabilities": ["configurable"],
+    "messageKeys": [
+      "Hello", "PhoneReady",
+      "ScreenW", "ScreenH", "IsColor", "RowStride", "IsRound", "ChunkSize",
+      "ShowTime", "ClockMode", "HideAmPm", "ShowDate", "DateFormat", "HideUntilShake", "BoxMode",
+      "ImgBegin", "ImgOffset", "ImgChunk", "ImgEnd"
+    ],
+    "resources": { "media": [] }
+  }
+}

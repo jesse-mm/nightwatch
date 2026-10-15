@@ -1,0 +1,294 @@
+/**
+ * Treasure Trove — phone side.
+ *
+ * Responsibilities:
+ *  1. Learn the watch's screen (size, colour, row stride, shape) from its Hello.
+ *  2. Once per day, ask the server for a random painting rendered for that
+ *     screen, and keep it in localStorage so relaunching the face is instant
+ *     and works offline.
+ *  3. Stream the bytes to the watch in chunks.
+ *  4. Open the custom settings page and forward the choices to the watch.
+ *
+ * Written in ES5 on purpose: the PebbleKit JS runtime is not a modern browser.
+ */
+var CONFIG = require('./config');
+var base64 = require('./base64');
+
+var SETTINGS_KEY = 'tt-settings';
+var ART_KEY = 'tt-art';
+
+var DEFAULTS = {
+  showTime: true,
+  clockMode: 'auto',     // auto | 12 | 24
+  hideAmPm: false,
+  showDate: true,
+  dateFormat: 'dd-mm',   // dd-mm | mm-dd
+  hideUntilShake: false,
+  boxMode: 'toggle',     // off | always | toggle
+  fit: 'fill',           // fill | whole
+  palette: 'defined'     // defined | sun | room | backlight
+};
+
+var watch = null;        // screen info from the watch's Hello
+var fetching = false;
+
+// ------------------------------------------------------------------ storage
+
+function readJson(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key));
+  } catch (e) {
+    console.log('Ignoring unreadable ' + key + ': ' + e);
+    return null;
+  }
+}
+
+function loadSettings() {
+  var saved = readJson(SETTINGS_KEY) || {};
+  var s = {};
+  for (var k in DEFAULTS) {
+    if (Object.prototype.hasOwnProperty.call(DEFAULTS, k)) {
+      s[k] = Object.prototype.hasOwnProperty.call(saved, k) ? saved[k] : DEFAULTS[k];
+    }
+  }
+  return s;
+}
+
+function pad(n) {
+  return n < 10 ? '0' + n : '' + n;
+}
+
+function today() {
+  var d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+/** Identifies one rendering of a painting for this watch + settings. */
+function renderKey(settings) {
+  return [watch.w, watch.h, watch.color, watch.stride, watch.round, settings.fit, settings.palette].join(':');
+}
+
+function screenQuery(settings) {
+  return 'w=' + watch.w + '&h=' + watch.h + '&color=' + watch.color + '&stride=' + watch.stride +
+    '&round=' + watch.round + '&fit=' + settings.fit + '&palette=' + settings.palette;
+}
+
+// ---------------------------------------------------------------- messaging
+
+var queue = [];
+var sending = false;
+
+/** AppMessages must go one at a time; retry with back-off on NACK. */
+function enqueue(message, onDone) {
+  queue.push({ message: message, onDone: onDone, tries: 0 });
+  pump();
+}
+
+function pump() {
+  if (sending || queue.length === 0) {
+    return;
+  }
+  sending = true;
+  var item = queue[0];
+  Pebble.sendAppMessage(item.message, function () {
+    queue.shift();
+    sending = false;
+    if (item.onDone) {
+      item.onDone();
+    }
+    pump();
+  }, function () {
+    sending = false;
+    item.tries += 1;
+    if (item.tries > 5) {
+      console.log('Giving up on message after 5 tries');
+      queue.shift();
+    }
+    setTimeout(pump, 250 * item.tries);
+  });
+}
+
+function sendSettings(s) {
+  enqueue({
+    ShowTime: s.showTime ? 1 : 0,
+    ClockMode: s.clockMode === '12' ? 1 : (s.clockMode === '24' ? 2 : 0),
+    HideAmPm: s.hideAmPm ? 1 : 0,
+    ShowDate: s.showDate ? 1 : 0,
+    DateFormat: s.dateFormat === 'mm-dd' ? 1 : 0,
+    HideUntilShake: s.hideUntilShake ? 1 : 0,
+    BoxMode: s.boxMode === 'always' ? 1 : (s.boxMode === 'off' ? 0 : 2)
+  });
+}
+
+function sendImage(bytes) {
+  if (bytes.length !== watch.stride * watch.h) {
+    console.log('Image has ' + bytes.length + ' bytes, watch expects ' + (watch.stride * watch.h));
+    return;
+  }
+  // Drop any half-sent older image still in the queue.
+  queue = queue.filter(function (item) {
+    return item.message.ImgChunk === undefined && item.message.ImgBegin === undefined &&
+      item.message.ImgEnd === undefined;
+  });
+  enqueue({ ImgBegin: bytes.length });
+  for (var offset = 0; offset < bytes.length; offset += watch.chunk) {
+    enqueue({ ImgOffset: offset, ImgChunk: bytes.slice(offset, offset + watch.chunk) });
+  }
+  enqueue({ ImgEnd: 1 });
+}
+
+// -------------------------------------------------------------------- server
+
+function get(url, onSuccess, onError) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url, true);
+  xhr.timeout = 60000;
+  xhr.onload = function () {
+    if (xhr.status >= 200 && xhr.status < 300) {
+      onSuccess(xhr.responseText);
+    } else {
+      onError('HTTP ' + xhr.status + ': ' + xhr.responseText);
+    }
+  };
+  xhr.onerror = function () { onError('network error'); };
+  xhr.ontimeout = function () { onError('timeout'); };
+  xhr.send();
+}
+
+/**
+ * Make sure the watch shows today's painting.
+ * @param {boolean} forceNew pick a different painting even if today's exists
+ */
+function ensureArt(forceNew) {
+  if (!watch || fetching) {
+    return;
+  }
+  var settings = loadSettings();
+  var art = readJson(ART_KEY);
+  var key = renderKey(settings);
+
+  if (art && art.date === today() && !forceNew) {
+    if (art.renderKey === key && art.raw) {
+      sendImage(base64.decode(art.raw));
+      return;
+    }
+    // Same painting, different screen/framing/colours: re-render it.
+    fetchArt('/api/art/' + encodeURIComponent(art.meta.key), settings, art);
+    return;
+  }
+  fetchArt('/api/art/random', settings, art);
+}
+
+function fetchArt(path, settings, previous) {
+  fetching = true;
+  var base = CONFIG.SERVER_URL;
+  var fail = function (why) {
+    fetching = false;
+    console.log('Could not load painting: ' + why);
+    // Better yesterday's painting than a black screen.
+    if (previous && previous.raw && previous.renderKey === renderKey(settings)) {
+      sendImage(base64.decode(previous.raw));
+    }
+  };
+
+  get(base + path + '?' + screenQuery(settings), function (text) {
+    var meta;
+    try {
+      meta = JSON.parse(text);
+    } catch (e) {
+      fail('bad JSON from server: ' + e);
+      return;
+    }
+    get(base + meta.rawUrl + '&format=b64', function (raw) {
+      fetching = false;
+      var record = {
+        date: today(),
+        renderKey: renderKey(settings),
+        raw: raw,
+        meta: {
+          key: meta.key,
+          title: meta.title,
+          artist: meta.artist,
+          date: meta.date,
+          objectNumber: meta.objectNumber,
+          webUrl: meta.webUrl,
+          imageUrl: meta.imageUrl,
+          license: meta.license,
+          licenseUrl: meta.licenseUrl,
+          crop: meta.render && meta.render.crop ? meta.render.crop.mode : null,
+          previewUrl: base + meta.previewUrl
+        }
+      };
+      try {
+        localStorage.setItem(ART_KEY, JSON.stringify(record));
+      } catch (e) {
+        console.log('Could not cache painting: ' + e);
+      }
+      sendImage(base64.decode(raw));
+    }, fail);
+  }, fail);
+}
+
+// -------------------------------------------------------------------- events
+
+Pebble.addEventListener('ready', function () {
+  // The watch may have said hello before we were running; ask again.
+  enqueue({ PhoneReady: 1 });
+});
+
+Pebble.addEventListener('appmessage', function (e) {
+  var p = e.payload;
+  if (p.Hello === undefined) {
+    return;
+  }
+  watch = {
+    w: p.ScreenW,
+    h: p.ScreenH,
+    color: p.IsColor,
+    stride: p.RowStride,
+    round: p.IsRound,
+    chunk: p.ChunkSize
+  };
+  if (p.Hello === 1) {
+    sendSettings(loadSettings());
+  }
+  ensureArt(false); // Hello 2 = new day; the date check picks a new painting.
+});
+
+Pebble.addEventListener('showConfiguration', function () {
+  var art = readJson(ART_KEY);
+  var state = {
+    settings: loadSettings(),
+    art: art ? art.meta : null,
+    watch: watch
+  };
+  Pebble.openURL(CONFIG.SERVER_URL + '/config/#' + encodeURIComponent(JSON.stringify(state)));
+});
+
+Pebble.addEventListener('webviewclosed', function (e) {
+  if (!e || !e.response) {
+    return; // closed without saving
+  }
+  var result;
+  try {
+    result = JSON.parse(decodeURIComponent(e.response));
+  } catch (err) {
+    // Some phones hand us the response already decoded.
+    try {
+      result = JSON.parse(e.response);
+    } catch (err2) {
+      console.log('Could not read settings: ' + err + ' / ' + err2);
+      return;
+    }
+  }
+  var settings = loadSettings();
+  for (var k in DEFAULTS) {
+    if (Object.prototype.hasOwnProperty.call(result.settings || {}, k)) {
+      settings[k] = result.settings[k];
+    }
+  }
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  sendSettings(settings);
+  // New painting on request; otherwise re-render only if framing/colours changed.
+  ensureArt(!!result.newPainting);
+});
