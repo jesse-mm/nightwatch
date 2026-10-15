@@ -1,13 +1,17 @@
 # Notices
 
 ## Artwork and data
-Paintings, images and metadata come from the Rijksmuseum, Amsterdam, via
-https://data.rijksmuseum.nl. Only works the data marks as public domain (CC0 /
+Paintings, images and metadata come from the Rijksmuseum, Amsterdam, via the
+Rijksmuseum data services (https://data.rijksmuseum.nl/about/). Only works the data marks as public domain (CC0 /
 Public Domain Mark) or under CC BY / CC BY-SA are shown. See
 https://data.rijksmuseum.nl/policy/ for the museum's terms.
 
 Treasure Trove is an independent project and is not affiliated with or endorsed
 by the Rijksmuseum.
+
+## Wikidata
+Links to Wikidata items and Wikipedia articles come from Wikidata
+(https://www.wikidata.org), whose data is available under CC0.
 
 ## pebble-color-optimizer (MIT)
 `server/src/palette_data.rs` contains colour tables extracted from the palette

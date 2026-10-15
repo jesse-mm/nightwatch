@@ -4,6 +4,8 @@
 //!
 //! ```text
 //! pool.json                      ids we can pick from + when it was built
+//! pool-<era>.json                same, filtered to one century (e.g. pool-1600s.json)
+//! wikidata.json                  object number → Wikidata item + Wikipedia articles
 //! art/<key>/meta.json            ArtMeta (also stored for ineligible paintings,
 //!                                so we never resolve them twice)
 //! art/<key>/source.jpg           analysis image (longest side ≈ SOURCE_SIZE)
@@ -59,6 +61,16 @@ impl Store {
 
     pub fn pool_path(&self) -> PathBuf {
         self.root.join("pool.json")
+    }
+
+    /// Object number → Wikidata/Wikipedia links (see wiki.rs).
+    pub fn wiki_path(&self) -> PathBuf {
+        self.root.join("wikidata.json")
+    }
+
+    /// Pool for one "Paintings from" era, e.g. `pool-1600s.json`.
+    pub fn era_pool_path(&self, era: &str) -> PathBuf {
+        self.root.join(format!("pool-{era}.json"))
     }
 
     pub async fn read_json<T: DeserializeOwned>(&self, path: &Path) -> Option<T> {

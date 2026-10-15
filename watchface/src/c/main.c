@@ -7,22 +7,18 @@
  * they arrive, like a canvas being unrolled.
  *
  * Gestures (watchfaces get no buttons, so we use the accelerometer "tap"):
- *   flick wrist once   → show the time for a minute (when "hide until flick" is on)
- *   flick twice <1.5 s → toggle the black readability box (when set to toggle)
+ *   flick wrist → show the time for a minute (when "hide until flick" is on)
  */
 #include <pebble.h>
 
 #define SETTINGS_KEY 1
-#define BOX_STATE_KEY 2
-#define REVEAL_MS 60000
-#define DOUBLE_TAP_MS 1500
+/* How long a flick shows the time is a setting: 1..REVEAL_MAX_MIN minutes. */
+#define REVEAL_MAX_MIN 60
 #define HELLO_RETRIES 5
 
-#ifdef PBL_PLATFORM_APLITE
-#define INBOX_SIZE 1024
-#else
+/* Colour watches only (basalt, chalk, emery, gabbro), so the paintings can be
+ * 8-bit and the inbox can be large. */
 #define INBOX_SIZE 4096
-#endif
 /* Room for dictionary + tuple headers + the offset tuple. */
 #define CHUNK_SIZE (INBOX_SIZE - 48)
 
@@ -32,11 +28,12 @@
 /* System fonts draw with some empty space above the glyphs; these trim the box
  * so it hugs the digits. Tune in the emulator if a future font changes. */
 #define TIME_TOP_INSET 7
-#define DATE_TOP_INSET 5
+#define DATE_TOP_INSET 6
 
 typedef enum { ClockAuto = 0, Clock12 = 1, Clock24 = 2 } ClockMode;
 typedef enum { DateDayMonth = 0, DateMonthDay = 1 } DateFormat;
-typedef enum { BoxOff = 0, BoxAlways = 1, BoxToggle = 2 } BoxMode;
+/* 2 was a double-flick toggle; older saved settings with it now mean Off. */
+typedef enum { BoxOff = 0, BoxAlways = 1 } BoxMode;
 
 typedef struct {
   bool show_time;
@@ -46,6 +43,8 @@ typedef struct {
   uint8_t date_format;
   bool hide_until_shake;
   uint8_t box_mode;
+  /* Added later: settings saved before it existed keep the default. */
+  uint8_t reveal_minutes;
 } Settings;
 
 static Settings s_settings;
@@ -62,8 +61,6 @@ static bool s_art_ready;        /* a complete painting has been received */
 
 static bool s_revealed;
 static AppTimer *s_reveal_timer;
-static bool s_box_on;
-static uint32_t s_last_tap_ms;
 static bool s_tap_subscribed;
 static int s_hello_tries;
 
@@ -82,7 +79,8 @@ static void default_settings(void) {
     .show_date = true,
     .date_format = DateDayMonth,
     .hide_until_shake = false,
-    .box_mode = BoxToggle,
+    .box_mode = BoxOff,
+    .reveal_minutes = 1,
   };
 }
 
@@ -91,7 +89,6 @@ static void load_settings(void) {
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
   }
-  s_box_on = persist_exists(BOX_STATE_KEY) ? persist_read_bool(BOX_STATE_KEY) : false;
 }
 
 static bool any_text_enabled(void) {
@@ -129,10 +126,11 @@ static void send_hello(int32_t reason) {
   dict_write_int32(it, MESSAGE_KEY_Hello, reason);
   dict_write_int32(it, MESSAGE_KEY_ScreenW, s_screen.w);
   dict_write_int32(it, MESSAGE_KEY_ScreenH, s_screen.h);
-  dict_write_int32(it, MESSAGE_KEY_IsColor, PBL_IF_COLOR_ELSE(1, 0));
   dict_write_int32(it, MESSAGE_KEY_RowStride, s_stride);
   dict_write_int32(it, MESSAGE_KEY_IsRound, PBL_IF_ROUND_ELSE(1, 0));
   dict_write_int32(it, MESSAGE_KEY_ChunkSize, CHUNK_SIZE);
+  /* The watch's own clock style, so the settings page knows if "Like my phone" is 12h. */
+  dict_write_int32(it, MESSAGE_KEY_Is24h, clock_is_24h_style() ? 1 : 0);
   app_message_outbox_send();
 }
 
@@ -206,6 +204,10 @@ static void inbox_received(DictionaryIterator *iter, void *ctx) {
   if (read_int(iter, MESSAGE_KEY_DateFormat, &v)) { s_settings.date_format = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_HideUntilShake, &v)) { s_settings.hide_until_shake = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_BoxMode, &v)) { s_settings.box_mode = v; changed = true; }
+  if (read_int(iter, MESSAGE_KEY_RevealMinutes, &v)) {
+    s_settings.reveal_minutes = v < 1 ? 1 : (v > REVEAL_MAX_MIN ? REVEAL_MAX_MIN : v);
+    changed = true;
+  }
 
   if (changed) {
     persist_write_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
@@ -219,44 +221,32 @@ static void inbox_received(DictionaryIterator *iter, void *ctx) {
 
 /* ---------------------------------------------------------------- gestures */
 
-static uint32_t now_ms(void) {
-  time_t s;
-  uint16_t ms;
-  time_ms(&s, &ms);
-  return (uint32_t)s * 1000u + ms;
-}
-
 static void reveal_timeout(void *data) {
   s_reveal_timer = NULL;
   s_revealed = false;
   layer_mark_dirty(s_text_layer);
 }
 
-static void tap_handler(AccelAxisType axis, int32_t direction) {
-  uint32_t now = now_ms();
-  bool is_double = s_last_tap_ms && (now - s_last_tap_ms) < DOUBLE_TAP_MS;
-  /* A double tap consumes both taps so a third doesn't toggle again. */
-  s_last_tap_ms = is_double ? 0 : now;
+static uint32_t reveal_ms(void) {
+  uint8_t m = s_settings.reveal_minutes;
+  return (uint32_t)(m < 1 ? 1 : m) * 60000u;
+}
 
+static void tap_handler(AccelAxisType axis, int32_t direction) {
   if (s_settings.hide_until_shake) {
     s_revealed = true;
     if (s_reveal_timer) {
-      app_timer_reschedule(s_reveal_timer, REVEAL_MS);
+      app_timer_reschedule(s_reveal_timer, reveal_ms());
     } else {
-      s_reveal_timer = app_timer_register(REVEAL_MS, reveal_timeout, NULL);
+      s_reveal_timer = app_timer_register(reveal_ms(), reveal_timeout, NULL);
     }
-  }
-  if (is_double && s_settings.box_mode == BoxToggle) {
-    s_box_on = !s_box_on;
-    persist_write_bool(BOX_STATE_KEY, s_box_on);
   }
   layer_mark_dirty(s_text_layer);
 }
 
 /* Only listen to the accelerometer when a setting needs it (battery). */
 static void apply_tap_subscription(void) {
-  bool want = any_text_enabled() &&
-              (s_settings.hide_until_shake || s_settings.box_mode == BoxToggle);
+  bool want = any_text_enabled() && s_settings.hide_until_shake;
   if (want && !s_tap_subscribed) {
     accel_tap_service_subscribe(tap_handler);
   } else if (!want && s_tap_subscribed) {
@@ -334,8 +324,7 @@ static void text_update(Layer *layer, GContext *ctx) {
 #endif
   int16_t top = bottom - block_h;
 
-  bool boxed = s_settings.box_mode == BoxAlways ||
-               (s_settings.box_mode == BoxToggle && s_box_on);
+  bool boxed = s_settings.box_mode == BoxAlways;
   if (boxed) {
     graphics_context_set_fill_color(ctx, GColorBlack);
     graphics_fill_rect(ctx, GRect(left - BOX_PAD, top - BOX_PAD, block_w + 2 * BOX_PAD,
@@ -385,11 +374,11 @@ static void window_load(Window *window) {
   GRect bounds = layer_get_bounds(root);
   s_screen = bounds.size;
 
-  s_art = gbitmap_create_blank(s_screen, PBL_IF_COLOR_ELSE(GBitmapFormat8Bit, GBitmapFormat1Bit));
+  s_art = gbitmap_create_blank(s_screen, GBitmapFormat8Bit);
   if (s_art) {
     s_stride = gbitmap_get_bytes_per_row(s_art);
-    /* 0xC0 = opaque black in 8-bit; 0x00 = black in 1-bit. */
-    memset(gbitmap_get_data(s_art), PBL_IF_COLOR_ELSE(0xC0, 0x00),
+    /* 0xC0 = opaque black (0b11RRGGBB). */
+    memset(gbitmap_get_data(s_art), 0xC0,
            (size_t)s_stride * s_screen.h);
   }
 

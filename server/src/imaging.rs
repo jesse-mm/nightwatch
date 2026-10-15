@@ -7,7 +7,8 @@
 use image::{imageops::FilterType, Rgb, RgbImage};
 use serde::{Deserialize, Serialize};
 
-use crate::palette::{defined_rgb, dither_color, dither_mono, gcolor8, MatchPalette, Reference};
+use crate::frame::Frame;
+use crate::palette::{defined_index, defined_rgb, dither_color, dither_mono, gcolor8, MatchPalette, Reference};
 use crate::saliency::best_window;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -31,12 +32,18 @@ pub struct Target {
     pub fit: Fit,
     /// Which light the colours are tuned for (see palette.rs).
     pub reference: Reference,
+    pub frame: Frame,
 }
 
 impl Target {
     pub fn cache_name(&self) -> String {
+        // Unframed renders keep their original names so existing caches stay valid.
+        let frame = match self.frame {
+            Frame::None => String::new(),
+            f => format!("-{}", f.name()),
+        };
         format!(
-            "{}x{}-{}-s{}-{}-{}-{}",
+            "{}x{}-{}-s{}-{}-{}-{}{}",
             self.w,
             self.h,
             if self.color { "c" } else { "bw" },
@@ -46,8 +53,15 @@ impl Target {
                 Fit::Fill => "fill",
                 Fit::Whole => "whole",
             },
-            self.reference.name()
+            self.reference.name(),
+            frame
         )
+    }
+
+    /// The opening inside the frame: what the painting is cropped and sized for.
+    pub fn opening(&self) -> Target {
+        let b = self.frame.border(self.w, self.h);
+        Target { w: self.w - 2 * b, h: self.h - 2 * b, ..*self }
     }
 
     pub fn raw_len(&self) -> usize {
@@ -221,7 +235,8 @@ pub struct Rendered {
     pub preview: RgbImage,
 }
 
-/// Dither `art` (inner size) and place it centred on a black screen of t.w x t.h.
+/// Dither `art` (inner size), place it centred on a screen of t.w x t.h, and
+/// draw the frame around it.
 pub fn render(art: &RgbImage, t: &Target) -> Rendered {
     let pal = &MatchPalette::new(t.reference);
     let (aw, ah) = (art.width() as usize, art.height() as usize);
@@ -230,13 +245,14 @@ pub fn render(art: &RgbImage, t: &Target) -> Rendered {
     let toned = tone(art);
 
     let mut raw = vec![0u8; t.raw_len()];
-    let mut preview = RgbImage::from_pixel(t.w, t.h, Rgb([0, 0, 0]));
+    let bg = t.frame.background();
+    let mut preview = RgbImage::from_pixel(t.w, t.h, Rgb(bg));
     let stride = t.stride as usize;
 
     if t.color {
-        // Black background bytes for any letterbox bars.
+        // Background bytes for any letterbox bars.
         for b in raw.iter_mut() {
-            *b = gcolor8(0);
+            *b = gcolor8(defined_index(bg));
         }
         let mut buf: Vec<f32> = toned.iter().flatten().copied().collect();
         let idx = dither_color(&mut buf, aw, ah, pal);
@@ -248,7 +264,18 @@ pub fn render(art: &RgbImage, t: &Target) -> Rendered {
                 preview.put_pixel(sx as u32, sy as u32, Rgb(defined_rgb(i)));
             }
         }
+        draw_frame(t, |x, y, c| {
+            raw[y * stride + x] = gcolor8(defined_index(c));
+            preview.put_pixel(x as u32, y as u32, Rgb(c));
+        });
     } else {
+        if bg != [0, 0, 0] {
+            for y in 0..t.h as usize {
+                for x in 0..t.w as usize {
+                    raw[y * stride + x / 8] |= 1 << (x % 8);
+                }
+            }
+        }
         let mut buf: Vec<f32> =
             toned.iter().map(|c| 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]).collect();
         let bits = dither_mono(&mut buf, aw, ah);
@@ -260,11 +287,48 @@ pub fn render(art: &RgbImage, t: &Target) -> Rendered {
                     // pixel, 1 = white.
                     raw[sy * stride + sx / 8] |= 1 << (sx % 8);
                     preview.put_pixel(sx as u32, sy as u32, Rgb([255, 255, 255]));
+                } else if bg != [0, 0, 0] {
+                    let (sx, sy) = (x + ox, y + oy);
+                    raw[sy * stride + sx / 8] &= !(1 << (sx % 8));
+                    preview.put_pixel(sx as u32, sy as u32, Rgb([0, 0, 0]));
                 }
             }
         }
+        draw_frame(t, |x, y, c| {
+            // Ordered dither keeps the frame's shading as a fine, regular texture.
+            let l = 0.299 * c[0] as f32 + 0.587 * c[1] as f32 + 0.114 * c[2] as f32;
+            let white = l > BAYER4[y % 4][x % 4];
+            let bit = 1 << (x % 8);
+            if white {
+                raw[y * stride + x / 8] |= bit;
+            } else {
+                raw[y * stride + x / 8] &= !bit;
+            }
+            preview.put_pixel(x as u32, y as u32, Rgb(if white { [255; 3] } else { [0; 3] }));
+        });
     }
     Rendered { raw, preview }
+}
+
+/// 4x4 Bayer thresholds scaled to 0..255.
+const BAYER4: [[f32; 4]; 4] = [
+    [8.0, 136.0, 40.0, 168.0],
+    [200.0, 72.0, 232.0, 104.0],
+    [56.0, 184.0, 24.0, 152.0],
+    [248.0, 120.0, 216.0, 88.0],
+];
+
+fn draw_frame(t: &Target, mut put: impl FnMut(usize, usize, [u8; 3])) {
+    if t.frame == Frame::None {
+        return;
+    }
+    for y in 0..t.h {
+        for x in 0..t.w {
+            if let Some(c) = t.frame.pixel(x, y, t.w, t.h, t.round) {
+                put(x as usize, y as usize, c);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -273,7 +337,7 @@ mod tests {
 
     fn target(w: u32, h: u32, color: bool) -> Target {
         let stride = if color { w } else { w.div_ceil(32) * 4 };
-        Target { w, h, color, stride, round: false, fit: Fit::Fill, reference: Reference::Defined }
+        Target { w, h, color, stride, round: false, fit: Fit::Fill, reference: Reference::Defined, frame: Frame::None }
     }
 
     #[test]
@@ -299,6 +363,20 @@ mod tests {
         assert_eq!(c.raw.len(), 144 * 168);
         let bw = render(&art, &target(144, 168, false));
         assert_eq!(bw.raw.len(), 20 * 168);
+    }
+
+    #[test]
+    fn framed_render_keeps_size_and_draws_frame() {
+        let t = Target { frame: Frame::Gold, ..target(144, 168, true) };
+        let o = t.opening();
+        let b = Frame::Gold.border(144, 168);
+        assert_eq!((o.w, o.h), (144 - 2 * b, 168 - 2 * b));
+        let art = RgbImage::from_pixel(o.w, o.h, Rgb([0, 0, 255]));
+        let r = render(&art, &t);
+        assert_eq!(r.raw.len(), 144 * 168);
+        assert_ne!(r.preview.get_pixel(1, 84).0, r.preview.get_pixel(72, 84).0);
+        assert!(t.cache_name().ends_with("-gold"));
+        assert!(!target(144, 168, true).cache_name().contains("none"));
     }
 
     #[test]

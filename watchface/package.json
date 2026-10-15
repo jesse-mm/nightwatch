@@ -10,13 +10,13 @@
     "uuid": "4ad5c70c-9174-4fb8-83b8-4e26d302a156",
     "sdkVersion": "3",
     "enableMultiJS": true,
-    "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery", "flint", "gabbro"],
+    "targetPlatforms": ["basalt", "chalk", "emery", "gabbro"],
     "watchapp": { "watchface": true },
     "capabilities": ["configurable"],
     "messageKeys": [
       "Hello", "PhoneReady",
-      "ScreenW", "ScreenH", "IsColor", "RowStride", "IsRound", "ChunkSize",
-      "ShowTime", "ClockMode", "HideAmPm", "ShowDate", "DateFormat", "HideUntilShake", "BoxMode",
+      "ScreenW", "ScreenH", "RowStride", "IsRound", "ChunkSize", "Is24h",
+      "ShowTime", "ClockMode", "HideAmPm", "ShowDate", "DateFormat", "HideUntilShake", "RevealMinutes", "BoxMode",
       "ImgBegin", "ImgOffset", "ImgChunk", "ImgEnd"
     ],
     "resources": { "media": [] }

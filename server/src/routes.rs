@@ -2,7 +2,8 @@
 //! already-parsed query params (`Query<T>`) and shared state (`State<T>`).
 //!
 //! GET /healthz                              → pool status
-//! GET /api/art/random?w&h&color&stride&round&fit   → pick + render, returns JSON
+//! GET /api/art/random?w&h&color&stride&round&fit&palette&frame[&era] → pick + render, returns JSON
+//!     era: any | pre1600 | 1600s | 1700s | 1800s | 1900s
 //! GET /api/art/{key}?…same…                 → render a specific painting
 //! GET /api/art/{key}/raw?…same…[&format=b64] → watch bitmap bytes
 //! GET /api/art/{key}/preview.png?…same…     → preview of those pixels
@@ -22,10 +23,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
+    era::Era,
+    frame::Frame,
     imaging::{Fit, Target},
     palette::Reference,
     rijks::ArtMeta,
     service::{AppState, RenderInfo},
+    wiki::WikiLinks,
 };
 
 type Shared = Arc<AppState>;
@@ -73,6 +77,7 @@ pub struct TargetQuery {
     round: Option<u8>,
     fit: Option<Fit>,
     palette: Option<String>,
+    frame: Option<Frame>,
     format: Option<String>,
 }
 
@@ -99,13 +104,14 @@ impl TargetQuery {
                 Some(p) => p.parse().map_err(bad_request)?,
                 None => default_ref,
             },
+            frame: self.frame.unwrap_or_default(),
         })
     }
 }
 
 fn query_string(t: &Target) -> String {
     format!(
-        "w={}&h={}&color={}&stride={}&round={}&fit={}&palette={}",
+        "w={}&h={}&color={}&stride={}&round={}&fit={}&palette={}&frame={}",
         t.w,
         t.h,
         t.color as u8,
@@ -115,8 +121,14 @@ fn query_string(t: &Target) -> String {
             Fit::Fill => "fill",
             Fit::Whole => "whole",
         },
-        t.reference.name()
+        t.reference.name(),
+        t.frame.name()
     )
+}
+
+#[derive(Deserialize)]
+pub struct EraQuery {
+    era: Option<Era>,
 }
 
 // ---------- handlers ----------
@@ -127,18 +139,23 @@ struct ArtResponse {
     #[serde(flatten)]
     meta: ArtMeta,
     render: RenderInfo,
+    /// Wikidata item and Wikipedia articles, when Wikidata knows the painting.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    wiki: Option<WikiLinks>,
     raw_url: String,
     preview_url: String,
     attribution: &'static str,
 }
 
 const ATTRIBUTION: &str =
-    "Artwork data and images: Rijksmuseum, Amsterdam (data.rijksmuseum.nl). Treasure Trove is not affiliated with the Rijksmuseum.";
+    "Artwork data and images: Rijksmuseum, Amsterdam, via the Rijksmuseum data services (https://data.rijksmuseum.nl/about/). Treasure Trove is not affiliated with the Rijksmuseum.";
 
 async fn respond(state: &AppState, meta: ArtMeta, t: &Target) -> Result<Response, AppError> {
     let render = state.render(&meta, t).await?;
     let qs = query_string(t);
+    let wiki = state.wiki_links(meta.object_number.as_deref()).await;
     let body = ArtResponse {
+        wiki,
         raw_url: format!("/api/art/{}/raw?{qs}", meta.key),
         preview_url: format!("/api/art/{}/preview.png?{qs}", meta.key),
         meta,
@@ -153,9 +170,13 @@ async fn health(State(state): State<Shared>) -> impl IntoResponse {
     Json(json!({ "ok": true, "paintings": pool.ids.len(), "poolComplete": pool.complete }))
 }
 
-async fn random(State(state): State<Shared>, Query(q): Query<TargetQuery>) -> Result<Response, AppError> {
+async fn random(
+    State(state): State<Shared>,
+    Query(q): Query<TargetQuery>,
+    Query(e): Query<EraQuery>,
+) -> Result<Response, AppError> {
     let t = q.target(state.cfg.reference)?;
-    let meta = state.pick_random().await?;
+    let meta = state.pick_random(e.era.unwrap_or_default()).await?;
     respond(&state, meta, &t).await
 }
 

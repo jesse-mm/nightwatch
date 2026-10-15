@@ -24,9 +24,12 @@ var DEFAULTS = {
   showDate: true,
   dateFormat: 'dd-mm',   // dd-mm | mm-dd
   hideUntilShake: false,
-  boxMode: 'toggle',     // off | always | toggle
+  revealMinutes: 1,      // how long a flick shows the time (1-60)
+  boxMode: 'off',        // off | always
   fit: 'fill',           // fill | whole
-  palette: 'defined'     // defined | sun | room | backlight
+  palette: 'defined',    // defined | sun | room | backlight
+  frame: 'none',         // none | gold | wood | gallery
+  era: 'any'             // any | pre1600 | 1600s | 1700s | 1800s | 1900s
 };
 
 var watch = null;        // screen info from the watch's Hello
@@ -65,12 +68,14 @@ function today() {
 
 /** Identifies one rendering of a painting for this watch + settings. */
 function renderKey(settings) {
-  return [watch.w, watch.h, watch.color, watch.stride, watch.round, settings.fit, settings.palette].join(':');
+  return [watch.w, watch.h, watch.stride, watch.round, settings.fit, settings.palette,
+    settings.frame].join(':');
 }
 
 function screenQuery(settings) {
-  return 'w=' + watch.w + '&h=' + watch.h + '&color=' + watch.color + '&stride=' + watch.stride +
-    '&round=' + watch.round + '&fit=' + settings.fit + '&palette=' + settings.palette;
+  return 'w=' + watch.w + '&h=' + watch.h + '&color=1&stride=' + watch.stride +
+    '&round=' + watch.round + '&fit=' + settings.fit + '&palette=' + settings.palette +
+    '&frame=' + settings.frame + '&era=' + settings.era;
 }
 
 // ---------------------------------------------------------------- messaging
@@ -116,7 +121,8 @@ function sendSettings(s) {
     ShowDate: s.showDate ? 1 : 0,
     DateFormat: s.dateFormat === 'mm-dd' ? 1 : 0,
     HideUntilShake: s.hideUntilShake ? 1 : 0,
-    BoxMode: s.boxMode === 'always' ? 1 : (s.boxMode === 'off' ? 0 : 2)
+    RevealMinutes: Math.min(60, Math.max(1, Math.round(Number(s.revealMinutes) || 1))),
+    BoxMode: s.boxMode === 'always' ? 1 : 0
   });
 }
 
@@ -157,9 +163,9 @@ function get(url, onSuccess, onError) {
 
 /**
  * Make sure the watch shows today's painting.
- * @param {boolean} forceNew pick a different painting even if today's exists
+ * @param {string} [hangKey] hang this painting (picked on the settings page) instead
  */
-function ensureArt(forceNew) {
+function ensureArt(hangKey) {
   if (!watch || fetching) {
     return;
   }
@@ -167,7 +173,11 @@ function ensureArt(forceNew) {
   var art = readJson(ART_KEY);
   var key = renderKey(settings);
 
-  if (art && art.date === today() && !forceNew) {
+  if (hangKey) {
+    fetchArt('/api/art/' + encodeURIComponent(hangKey), settings, art);
+    return;
+  }
+  if (art && art.date === today()) {
     if (art.renderKey === key && art.raw) {
       sendImage(base64.decode(art.raw));
       return;
@@ -215,6 +225,7 @@ function fetchArt(path, settings, previous) {
           imageUrl: meta.imageUrl,
           license: meta.license,
           licenseUrl: meta.licenseUrl,
+          wiki: meta.wiki || null,
           crop: meta.render && meta.render.crop ? meta.render.crop.mode : null,
           previewUrl: base + meta.previewUrl
         }
@@ -244,15 +255,15 @@ Pebble.addEventListener('appmessage', function (e) {
   watch = {
     w: p.ScreenW,
     h: p.ScreenH,
-    color: p.IsColor,
     stride: p.RowStride,
     round: p.IsRound,
-    chunk: p.ChunkSize
+    chunk: p.ChunkSize,
+    is24h: p.Is24h
   };
   if (p.Hello === 1) {
     sendSettings(loadSettings());
   }
-  ensureArt(false); // Hello 2 = new day; the date check picks a new painting.
+  ensureArt(); // Hello 2 = new day; the date check picks a new painting.
 });
 
 Pebble.addEventListener('showConfiguration', function () {
@@ -289,6 +300,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
   }
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   sendSettings(settings);
-  // New painting on request; otherwise re-render only if framing/colours changed.
-  ensureArt(!!result.newPainting);
+  // The painting previewed on the settings page; otherwise re-render only if
+  // framing, frame or colours changed.
+  ensureArt(typeof result.artKey === 'string' ? result.artKey : undefined);
 });

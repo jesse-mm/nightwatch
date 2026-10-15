@@ -106,6 +106,11 @@ pub fn defined_rgb(index: usize) -> [u8; 3] {
     DEFINED[index]
 }
 
+/// Palette index of an exact Pebble colour (channels are multiples of 85).
+pub fn defined_index(rgb: [u8; 3]) -> usize {
+    DEFINED.iter().position(|c| *c == rgb).unwrap_or(0)
+}
+
 /// Atkinson error diffusion: 6 neighbours each get 1/8 of the error (3/4 total),
 /// the rest is dropped, which keeps highlights and shadows crisp.
 const ATKINSON: [(i32, i32); 6] = [(1, 0), (2, 0), (-1, 1), (0, 1), (1, 1), (0, 2)];

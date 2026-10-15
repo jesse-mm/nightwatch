@@ -25,7 +25,8 @@ date that stay out of its way.
 ## Features
 
 - A random painting each day (public domain / CC only), rendered for *your* watch's
-  exact screen: 144×168, 180×180 round, 200×228, colour or black-and-white.
+  exact screen: 144×168, 180×180 round, 200×228 or 260×260 round. Colour watches
+  only for now (Pebble Time, Time Steel, Time Round, Time 2, Round 2).
 - Images arrive already sized from the museum's IIIF server, so no stretching.
 - Paintings that almost fit (≤ 20 px off) get a simple centre crop; very wide or tall
   ones get a smart crop that finds faces, detail and colour. Or choose "Whole painting".
@@ -34,8 +35,19 @@ date that stay out of its way.
 - Time on/off, 12/24h (follows the phone by default), hide AM/PM, date on/off,
   DD-MM or MM-DD, all in LECO.
 - **Hide until flick:** the painting stays clean; flick your wrist to see the time
-  for a minute.
-- **Readability box:** off, always, or toggled with a double flick. Without the box
+  for 1 to 60 minutes (default 1).
+- **Frames:** none (default), gold, wood or a gallery mat, drawn into the bitmap in
+  exact Pebble colours. The painting is cropped to fit the opening.
+- **Live preview:** frame, colour tuning, framing and "Hang a different painting"
+  re-render the preview on the settings page straight away; nothing reaches the
+  watch until you save.
+- **Paintings from:** any time, before 1600, or the 1600s, 1700s, 1800s or 1900s
+  (the Search API's `creationDate` wildcards). Applies to the daily pick and to
+  "Hang a different painting". There's no 2000s option: the collection has almost
+  no 21st-century paintings, and those are still in copyright.
+- **Visit the Rijksmuseum:** the settings page links to the museum's ticket page
+  (Dutch for Dutch-language phones).
+- **Readability box:** off (default) or always. Without the box
   the digits get a thin black outline.
 - The settings page shows today's painting, its artist, a link to the object on
   rijksmuseum.nl and to the full image, plus attribution.
@@ -66,8 +78,7 @@ Watchfaces don't receive button presses on Pebble, so gestures use the accelerom
 
 | Gesture | Effect |
 |---|---|
-| One flick | Shows the time for 60 s (when *Hide until I flick my wrist* is on) |
-| Two flicks within 1.5 s | Turns the readability box on/off (when set to *Double flick*) |
+| One flick | Shows the time for the chosen number of minutes (when *Hide until I flick my wrist* is on) |
 
 ## Development
 
@@ -79,23 +90,24 @@ cd server && cargo run                   # server on :8080, data in ./data
 
 ## Verify on first run
 
-These parts were written against the documentation but could not be exercised
-against the live services or a physical watch while building:
+Checked against the live services and the SDK 4.17 emulators (basalt, chalk, emery):
 
-- **Rijksmuseum API shapes.** The search URL and the Linked Art path
-  (`shows → digitally_shown_by → access_point`) are read defensively, but check the
-  server log on first start. If `/healthz` stays at 0 paintings, adjust
-  `RIJKS_SEARCH_URL`.
-- **LECO glyphs.** `LECO_20_BOLD_NUMBERS` is a numbers-only font; confirm the `-`
-  separator renders in the emulator. If not, change the `strftime` formats in
-  `update_strings()`.
-- **Text box insets.** `TIME_TOP_INSET` / `DATE_TOP_INSET` in `main.c` trim the
-  font's built-in top padding; tweak them in the emulator so the box hugs the digits.
+- **Rijksmuseum API.** The search URL works as is. Object records must be requested
+  with plain `Accept: application/ld+json`; adding `profile=` gets a 400. The image
+  licence is read from `subject_to` on the VisualItem (the CC0 under `subject_of` is
+  the metadata licence, not the artwork's).
+- **LECO glyphs.** `LECO_20_BOLD_NUMBERS` includes `-`, so the date renders as `15-10`.
+- **Text box insets.** `TIME_TOP_INSET 7` / `DATE_TOP_INSET 6` give the "Always" box
+  3 px of padding above and below the digits.
+
+Still to check on a real watch:
+
 - **Colour tuning.** "Daylight / Indoors / Backlight" stretch the simulated palettes;
   compare them on a real screen and pick a default with `PALETTE_REFERENCE`.
 
 ## Credits
 
-Artwork and data: Rijksmuseum, Amsterdam (data.rijksmuseum.nl). Not affiliated with
+Artwork and data: Rijksmuseum, Amsterdam, via the
+[Rijksmuseum data services](https://data.rijksmuseum.nl/about/). Not affiliated with
 the Rijksmuseum. Colour approach: czmanix/pebble-color-optimizer (MIT). See
 [NOTICE.md](NOTICE.md).

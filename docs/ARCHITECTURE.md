@@ -2,13 +2,13 @@
 
 ## The daily flow
 
-1. The watchface starts, creates an empty bitmap matching its screen
-   (`GBitmapFormat8Bit` on colour watches, `1Bit` on black-and-white) and sends a
-   **Hello** with width, height, colour, *row stride* (bytes per bitmap row, read
-   from the bitmap itself), shape, and the largest chunk it can receive.
+1. The watchface starts, creates an empty 8-bit bitmap matching its screen (only
+   colour watches are supported: basalt, chalk, emery, gabbro) and sends a
+   **Hello** with width, height, *row stride* (bytes per bitmap row, read from the
+   bitmap itself), shape, the largest chunk it can receive, and its 12/24h setting.
 2. The phone JS checks `localStorage`: if today's painting is already cached for
    this exact screen + framing + colour tuning, it sends it straight away.
-   Otherwise it calls `GET /api/art/random?w=…&h=…&color=…&stride=…&round=…&fit=…&palette=…`.
+   Otherwise it calls `GET /api/art/random?w=…&h=…&color=1&stride=…&round=…&fit=…&palette=…&frame=…`.
 3. The server picks a random painting from its pool, renders it for that screen
    (or reuses a cached render) and replies with metadata plus a `rawUrl`.
 4. The phone downloads the raw bytes (base64), caches them, and streams them to
@@ -20,7 +20,7 @@
 
 ### Why raw bitmap bytes instead of PNG?
 
-Pebble apps have little RAM (24 KB on aplite, 64 KB on basalt). Decoding a PNG
+Pebble apps have little RAM (64 KB on basalt). Decoding a PNG
 needs the compressed file *and* the decoded bitmap in memory at once, plus decoder
 work space. Sending bytes already in the watch's own layout means the only large
 allocation is the bitmap itself, and there's no decoding on the watch at all.
@@ -85,9 +85,10 @@ the Pebble palette. With colour tuning other than *Accurate*, pixels are matched
 against how each Pebble colour actually looks on the screen in that light, and the
 true Pebble colour with the same index is written (pebble-color-optimizer's idea).
 
-**Output layout:** colour bytes are `0b11RRGGBB`. Black-and-white bitmaps are
-1 bit per pixel, least-significant bit = leftmost pixel, 1 = white, rows padded to
-the stride the watch reported.
+**Output layout:** colour bytes are `0b11RRGGBB`, rows padded to the stride the
+watch reported. The server can also render 1-bit black-and-white (`color=0`: least-
+significant bit = leftmost pixel, 1 = white), but the watchface doesn't target
+black-and-white watches for now.
 
 ## Storage
 
@@ -105,9 +106,9 @@ Bump `RENDER_VERSION` in `store.rs` after changing the image pipeline.
 | Key | Direction | Meaning |
 |---|---|---|
 | `Hello` | watch → phone | 1 = launch, 2 = new day |
-| `ScreenW`, `ScreenH`, `IsColor`, `RowStride`, `IsRound`, `ChunkSize` | watch → phone | screen description |
+| `ScreenW`, `ScreenH`, `RowStride`, `IsRound`, `ChunkSize`, `Is24h` | watch → phone | screen description |
 | `PhoneReady` | phone → watch | JS started; watch replies with Hello |
-| `ShowTime`, `ClockMode`, `HideAmPm`, `ShowDate`, `DateFormat`, `HideUntilShake`, `BoxMode` | phone → watch | settings (ints) |
+| `ShowTime`, `ClockMode`, `HideAmPm`, `ShowDate`, `DateFormat`, `HideUntilShake`, `RevealMinutes`, `BoxMode` | phone → watch | settings (ints) |
 | `ImgBegin`, `ImgOffset`, `ImgChunk`, `ImgEnd` | phone → watch | image transfer |
 
 ## HTTP API

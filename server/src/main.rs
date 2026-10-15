@@ -5,6 +5,8 @@
 //! this order: config → routes → service → rijks → imaging → saliency → palette.
 
 mod config;
+mod era;
+mod frame;
 mod imaging;
 mod palette;
 mod palette_data;
@@ -13,6 +15,7 @@ mod routes;
 mod saliency;
 mod service;
 mod store;
+mod wiki;
 
 use std::time::Duration;
 
@@ -61,6 +64,10 @@ async fn main() -> anyhow::Result<()> {
                 tokio::time::sleep(Duration::from_secs(300)).await;
                 continue;
             }
+            // Per-century pools for the "Paintings from" filter (small, quick).
+            bg.warm_eras().await;
+            // Wikidata/Wikipedia links: one bulk query, refreshed with the pool.
+            bg.ensure_wiki().await;
             tokio::time::sleep(Duration::from_secs(12 * 3600)).await;
         }
     });

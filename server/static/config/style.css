@@ -343,3 +343,127 @@ main {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* ---------------- live preview ---------------- */
+
+.screen img { transition: opacity 160ms ease; }
+.screen.loading img { opacity: 0.45; }
+
+.label-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+}
+
+.label-actions .text-button { margin-top: 0; }
+
+.label-status {
+  min-height: 1.25em;
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+/* Frame + colour tuning sit right under the preview so changes are visible
+   without scrolling. */
+.group.look { padding-top: 0.5rem; }
+.group.look .row { padding: 0.65rem 0; }
+
+/* ---------------- paintings from (era) ---------------- */
+
+.era { margin-top: 1.1rem; }
+
+.era-title {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+.segmented.compact span {
+  padding: 0.5rem 0.25rem;
+  font-size: var(--step--1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- visit the museum ---------------- */
+
+.visit {
+  margin-top: 2.25rem;
+  padding: 1.25rem 1.25rem 1.35rem;
+  border: 1px solid color-mix(in srgb, var(--gilt) 55%, transparent);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--gilt) 16%, transparent), transparent 70%),
+    var(--control);
+}
+
+.visit p { margin: 0; }
+
+.visit-kicker {
+  color: var(--gilt-dark);
+  font-size: var(--step--1);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.visit-title {
+  margin-top: 0.3rem !important;
+  font: italic 500 var(--step-2)/1.2 var(--serif);
+}
+
+.visit-text {
+  margin-top: 0.35rem !important;
+  color: var(--muted);
+}
+
+.visit-link {
+  display: inline-block;
+  margin-top: 0.9rem;
+  padding: 0.55rem 1rem;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.visit-link::after { content: " \2197"; }
+
+@media (prefers-color-scheme: dark) {
+  .visit-kicker { color: var(--gilt); }
+}
+
+.label-credit {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+.label-credit a { color: inherit; }
+
+/* Minutes field for "Show the time for" */
+.minutes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: none;
+}
+
+.number {
+  width: 4.25rem;
+  padding: 0.5rem 0.6rem;
+  font: 600 var(--step-0) var(--sans);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--ink);
+  background: var(--control);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.number:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.minutes-unit { color: var(--muted); min-width: 4.2em; }

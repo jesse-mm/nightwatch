@@ -5,19 +5,21 @@
 //! one writer at a time (needed because the pool is filled in the background
 //! while requests read it).
 
-use std::{io::Cursor, sync::Arc, time::Duration};
+use std::{collections::HashMap, io::Cursor, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Result};
 use image::{ImageFormat, RgbImage};
 use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, Semaphore};
+use tokio::sync::{Mutex, RwLock, Semaphore};
 
 use crate::{
     config::Config,
+    era::{self, Era},
     imaging::{self, CropPlan, Target},
     rijks::{ArtMeta, Rijks},
     store::{now_secs, sanitize, Pool, Store},
+    wiki::{self, WikiLinks, WikiTable},
 };
 
 pub struct AppState {
@@ -25,6 +27,11 @@ pub struct AppState {
     pub rijks: Rijks,
     pub store: Store,
     pub pool: RwLock<Pool>,
+    /// Smaller pools per century, built on first use (or warmed at startup).
+    era_pools: RwLock<HashMap<Era, Pool>>,
+    /// One era crawl at a time, so simultaneous first requests don't duplicate it.
+    era_crawl: Mutex<()>,
+    wiki: RwLock<WikiTable>,
     /// Limits simultaneous downloads/renders so a burst of requests can't
     /// overload a small home server.
     render_slots: Semaphore,
@@ -48,6 +55,9 @@ impl AppState {
             rijks,
             store,
             pool: RwLock::new(Pool::default()),
+            era_pools: RwLock::new(HashMap::new()),
+            era_crawl: Mutex::new(()),
+            wiki: RwLock::new(WikiTable::default()),
             render_slots: Semaphore::new(4),
         }))
     }
@@ -107,6 +117,102 @@ impl AppState {
         pool.ids.choose(&mut rand::rng()).cloned()
     }
 
+    fn is_fresh(&self, pool: &Pool) -> bool {
+        let age_days = now_secs().saturating_sub(pool.built_at) / 86_400;
+        pool.complete && age_days < self.cfg.pool_refresh_days
+    }
+
+    /// Follow a search's `next` links and collect the object ids.
+    async fn crawl_search(&self, start: &str) -> Result<Vec<String>> {
+        let mut ids = Vec::new();
+        let mut url = Some(start.to_string());
+        let mut pages = 0;
+        while let Some(u) = url {
+            if pages >= self.cfg.pool_max_pages {
+                break;
+            }
+            let page = self.rijks.search_page(&u).await.with_context(|| format!("search page {pages} of {start}"))?;
+            ids.extend(page.ids);
+            url = page.next;
+            pages += 1;
+            tokio::time::sleep(Duration::from_millis(150)).await; // be polite
+        }
+        Ok(ids)
+    }
+
+    /// Painting ids for one era: from memory, from disk, or crawled now.
+    async fn era_ids(&self, era: Era) -> Result<Vec<String>> {
+        if let Some(p) = self.era_pools.read().await.get(&era).filter(|p| self.is_fresh(p)) {
+            return Ok(p.ids.clone());
+        }
+        let _crawling = self.era_crawl.lock().await;
+        // Someone else may have built it while we waited for the lock.
+        if let Some(p) = self.era_pools.read().await.get(&era).filter(|p| self.is_fresh(p)) {
+            return Ok(p.ids.clone());
+        }
+        let path = self.store.era_pool_path(era.name());
+        let pool = match self.store.read_json::<Pool>(&path).await.filter(|p| self.is_fresh(p)) {
+            Some(saved) => saved,
+            None => {
+                let mut ids = Vec::new();
+                for pattern in era.patterns() {
+                    ids.extend(self.crawl_search(&era::with_date(&self.cfg.search_url, pattern)).await?);
+                }
+                ids.sort();
+                ids.dedup();
+                let pool = Pool { built_at: now_secs(), ids, complete: true };
+                self.store.write_json(&path, &pool).await?;
+                tracing::info!(era = era.name(), paintings = pool.ids.len(), "era pool ready");
+                pool
+            }
+        };
+        let ids = pool.ids.clone();
+        self.era_pools.write().await.insert(era, pool);
+        Ok(ids)
+    }
+
+    // ---------------- wikidata ----------------
+
+    /// Load the Wikidata link table from disk; refetch it when missing or stale.
+    /// A failed refresh keeps the old table.
+    pub async fn ensure_wiki(&self) {
+        let path = self.store.wiki_path();
+        if self.wiki.read().await.links.is_empty() {
+            if let Some(saved) = self.store.read_json::<WikiTable>(&path).await {
+                *self.wiki.write().await = saved;
+            }
+        }
+        let age_days = now_secs().saturating_sub(self.wiki.read().await.built_at) / 86_400;
+        if !self.wiki.read().await.links.is_empty() && age_days < self.cfg.pool_refresh_days {
+            return;
+        }
+        match wiki::fetch(self.rijks.http()).await {
+            Ok(links) if !links.is_empty() => {
+                let table = WikiTable { built_at: now_secs(), links };
+                let articles = table.links.values().filter(|l| l.wikipedia_en.is_some() || l.wikipedia_nl.is_some()).count();
+                tracing::info!(paintings = table.links.len(), articles, "wikidata links ready");
+                if let Err(e) = self.store.write_json(&path, &table).await {
+                    tracing::warn!(error = %e, "could not save wikidata links");
+                }
+                *self.wiki.write().await = table;
+            }
+            Ok(_) => tracing::warn!("wikidata returned no links; keeping the old table"),
+            Err(e) => tracing::warn!(error = %e, "could not fetch wikidata links"),
+        }
+    }
+
+    pub async fn wiki_links(&self, object_number: Option<&str>) -> Option<WikiLinks> {
+        self.wiki.read().await.links.get(object_number?).cloned()
+    }
+
+    pub async fn warm_eras(&self) {
+        for era in Era::FILTERED {
+            if let Err(e) = self.era_ids(era).await {
+                tracing::warn!(era = era.name(), error = %e, "could not build era pool");
+            }
+        }
+    }
+
     // ---------------- metadata ----------------
 
     pub async fn meta_by_id(&self, id: &str) -> Result<ArtMeta> {
@@ -127,17 +233,27 @@ impl AppState {
         self.meta_by_id(&format!("https://id.rijksmuseum.nl/{}", sanitize(key))).await
     }
 
-    /// Pick a random painting that we're allowed to show and that has an image.
-    pub async fn pick_random(&self) -> Result<ArtMeta> {
-        // On a fresh install the pool may still be filling; wait briefly.
-        for _ in 0..20 {
-            if !self.pool.read().await.ids.is_empty() {
-                break;
+    /// Pick a random painting that we're allowed to show and that has an image,
+    /// optionally from one era.
+    pub async fn pick_random(&self, era: Era) -> Result<ArtMeta> {
+        let era_ids = if era == Era::Any {
+            // On a fresh install the pool may still be filling; wait briefly.
+            for _ in 0..20 {
+                if !self.pool.read().await.ids.is_empty() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
             }
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
+            None
+        } else {
+            Some(self.era_ids(era).await?)
+        };
         for _ in 0..15 {
-            let Some(id) = self.random_id().await else { bail!("painting pool is empty") };
+            let id = match &era_ids {
+                Some(ids) => ids.choose(&mut rand::rng()).cloned(),
+                None => self.random_id().await,
+            };
+            let Some(id) = id else { bail!("no paintings in the {} pool", era.name()) };
             match self.meta_by_id(&id).await {
                 Ok(m) if m.eligible => return Ok(m),
                 Ok(_) => continue,
@@ -185,7 +301,7 @@ impl AppState {
 
         let _slot = self.render_slots.acquire().await?;
         let src = self.source(meta).await?;
-        let plan = imaging::plan_crop(&src, t, self.cfg.safe_crop_px);
+        let plan = imaging::plan_crop(&src, &t.opening(), self.cfg.safe_crop_px);
 
         // Preferred: ask the IIIF server for exactly the region and size we need.
         let base = meta.iiif_base.as_ref().ok_or_else(|| anyhow!("painting has no image"))?;
