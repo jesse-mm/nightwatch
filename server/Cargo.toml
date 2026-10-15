@@ -1,0 +1,27 @@
+[package]
+name = "treasure-trove-server"
+version = "0.1.0"
+edition = "2021"
+description = "Fetches public-domain paintings from the Rijksmuseum and converts them into Pebble-ready pixels"
+license = "MIT"
+publish = false
+
+[dependencies]
+anyhow = "1"
+axum = "0.8"
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+rand = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "sync", "time", "signal"] }
+tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
