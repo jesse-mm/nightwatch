@@ -22,6 +22,7 @@ export default defineConfig([
         XMLHttpRequest: 'readonly',
         console: 'readonly',
         setTimeout: 'readonly',
+        clearTimeout: 'readonly',
       },
     },
     rules: {

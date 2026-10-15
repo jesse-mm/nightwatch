@@ -34,6 +34,13 @@ var DEFAULTS = {
 
 var watch = null;        // screen info from the watch's Hello
 var fetching = false;
+var pendingHang = null;  // painting picked in settings while a fetch was running
+// True after the watchface (re)starts: its screen is black until we send a
+// painting. Cleared once we've sent one.
+var watchEmpty = true;
+var retryTimer = null;
+var retryCount = 0;
+var RETRY_MINUTES = [2, 5, 15, 30];
 
 // ------------------------------------------------------------------ storage
 
@@ -141,6 +148,7 @@ function sendImage(bytes) {
     enqueue({ ImgOffset: offset, ImgChunk: bytes.slice(offset, offset + watch.chunk) });
   }
   enqueue({ ImgEnd: 1 });
+  watchEmpty = false;
 }
 
 // -------------------------------------------------------------------- server
@@ -166,39 +174,71 @@ function get(url, onSuccess, onError) {
  * @param {string} [hangKey] hang this painting (picked on the settings page) instead
  */
 function ensureArt(hangKey) {
-  if (!watch || fetching) {
+  if (!watch) {
     return;
   }
   var settings = loadSettings();
   var art = readJson(ART_KEY);
-  var key = renderKey(settings);
+  var current = !!(art && art.raw && art.renderKey === renderKey(settings));
 
+  // A freshly started watchface is black until it gets a painting. Send the
+  // cached one straight away (even yesterday's, or one made with other
+  // settings), then fetch anything newer in the background. Never leave the
+  // watch waiting on the network.
+  if (watchEmpty && art && art.raw) {
+    sendImage(base64.decode(art.raw));
+  }
+  if (fetching) {
+    if (hangKey) {
+      pendingHang = hangKey;
+    }
+    return;
+  }
   if (hangKey) {
-    fetchArt('/api/art/' + encodeURIComponent(hangKey), settings, art);
+    fetchArt('/api/art/' + encodeURIComponent(hangKey), settings);
     return;
   }
   if (art && art.date === today()) {
-    if (art.renderKey === key && art.raw) {
-      sendImage(base64.decode(art.raw));
-      return;
+    if (!current) {
+      // Same painting, different screen/framing/colours: re-render it.
+      fetchArt('/api/art/' + encodeURIComponent(art.meta.key), settings);
     }
-    // Same painting, different screen/framing/colours: re-render it.
-    fetchArt('/api/art/' + encodeURIComponent(art.meta.key), settings, art);
     return;
   }
-  fetchArt('/api/art/random', settings, art);
+  fetchArt('/api/art/random', settings);
 }
 
-function fetchArt(path, settings, previous) {
+/** Try again later when the server or network is unavailable. */
+function scheduleRetry() {
+  if (retryTimer) {
+    return;
+  }
+  var minutes = RETRY_MINUTES[Math.min(retryCount, RETRY_MINUTES.length - 1)];
+  retryCount += 1;
+  console.log('Retrying in ' + minutes + ' min');
+  retryTimer = setTimeout(function () {
+    retryTimer = null;
+    ensureArt();
+  }, minutes * 60000);
+}
+
+function fetchArt(path, settings) {
   fetching = true;
   var base = CONFIG.SERVER_URL;
-  var fail = function (why) {
+  var done = function () {
     fetching = false;
-    console.log('Could not load painting: ' + why);
-    // Better yesterday's painting than a black screen.
-    if (previous && previous.raw && previous.renderKey === renderKey(settings)) {
-      sendImage(base64.decode(previous.raw));
+    if (pendingHang) {
+      var key = pendingHang;
+      pendingHang = null;
+      ensureArt(key);
     }
+  };
+  var fail = function (why) {
+    console.log('Could not load painting: ' + why);
+    // The watch keeps whatever it shows (a launch already got the cached
+    // painting); just try again later.
+    scheduleRetry();
+    done();
   };
 
   get(base + path + '?' + screenQuery(settings), function (text) {
@@ -210,7 +250,11 @@ function fetchArt(path, settings, previous) {
       return;
     }
     get(base + meta.rawUrl + '&format=b64', function (raw) {
-      fetching = false;
+      retryCount = 0;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
       var record = {
         date: today(),
         renderKey: renderKey(settings),
@@ -236,6 +280,7 @@ function fetchArt(path, settings, previous) {
         console.log('Could not cache painting: ' + e);
       }
       sendImage(base64.decode(raw));
+      done();
     }, fail);
   }, fail);
 }
@@ -261,6 +306,8 @@ Pebble.addEventListener('appmessage', function (e) {
     is24h: p.Is24h
   };
   if (p.Hello === 1) {
+    // The watchface just started: its screen is empty.
+    watchEmpty = true;
     sendSettings(loadSettings());
   }
   ensureArt(); // Hello 2 = new day; the date check picks a new painting.
