@@ -28,6 +28,9 @@ services:
     image: treasure-trove:latest
     build: ./server
     restart: "no"
+    # The image's HEALTHCHECK probes the web server, which the generator doesn't run.
+    healthcheck:
+      disable: true
     command: ["treasure-trove-generator", "--export", "/catalog/paintings.jsonl", "--featured", "/catalog/featured.json"]
     environment:
       RUST_LOG: ${RUST_LOG:-info}
