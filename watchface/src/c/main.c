@@ -43,7 +43,7 @@ static const TextSize TEXT_SIZES[] = {
   { FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM, FONT_KEY_LECO_20_BOLD_NUMBERS, 7, 6, true },
   { FONT_KEY_LECO_36_BOLD_NUMBERS, FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM, 10, 7, false },
 };
-#define SIZE_M 1
+#define SIZE_S 0
 
 typedef enum { ClockAuto = 0, Clock12 = 1, Clock24 = 2 } ClockMode;
 typedef enum { DateDayMonth = 0, DateMonthDay = 1, DateDay = 2 } DateFormat;
@@ -109,7 +109,7 @@ static void default_settings(void) {
     .reveal_minutes = 1,
     /* Bottom-right corner on rectangular screens, bottom-center on round ones. */
     .text_pos = RowBottom * 3 + PBL_IF_ROUND_ELSE(ColCenter, ColRight),
-    .time_size = SIZE_M,
+    .time_size = SIZE_S,
   };
 }
 
@@ -121,7 +121,7 @@ static void load_settings(void) {
 }
 
 static const TextSize *text_size(void) {
-  return &TEXT_SIZES[s_settings.time_size < ARRAY_LENGTH(TEXT_SIZES) ? s_settings.time_size : SIZE_M];
+  return &TEXT_SIZES[s_settings.time_size < ARRAY_LENGTH(TEXT_SIZES) ? s_settings.time_size : SIZE_S];
 }
 
 static void load_fonts(void) {

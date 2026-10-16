@@ -31,7 +31,7 @@ var DEFAULTS = {
   boxMode: 'off',        // off | always
   textRow: 'bottom',     // top | bottom
   textCol: 'auto',       // left | center | right; auto = right (round screens: always center)
-  timeSize: 'm',         // s | m | l
+  timeSize: 's',         // s | m | l
   fit: 'fill',           // fill | whole
   palette: 'defined',    // defined | sun | room | backlight
   dither: 'atkinson',    // atkinson | checker | none (applied here, render.js)

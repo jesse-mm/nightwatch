@@ -226,7 +226,7 @@
         </div>
       </div>
       <div class="row stacked" data-show-if="anyText">
-        <span class="row-text" id="position-title">Position</span>
+        <span class="row-text" id="position-title">Position &amp; size</span>
         <div class="segmented" role="radiogroup" aria-labelledby="position-title" data-key="textRow">
           <label><input type="radio" name="textRow" value="top"><span>Top</span></label>
           <label><input type="radio" name="textRow" value="bottom"><span>Bottom</span></label>
@@ -235,6 +235,11 @@
           <label><input type="radio" name="textCol" value="left"><span>Left</span></label>
           <label><input type="radio" name="textCol" value="center"><span>Center</span></label>
           <label><input type="radio" name="textCol" value="right"><span>Right</span></label>
+        </div>
+        <div class="segmented" role="radiogroup" aria-label="Time size" data-key="timeSize" data-show-if="showTime">
+          <label><input type="radio" name="timeSize" value="s"><span aria-label="Small">S</span></label>
+          <label><input type="radio" name="timeSize" value="m"><span aria-label="Medium">M</span></label>
+          <label><input type="radio" name="timeSize" value="l"><span aria-label="Large">L</span></label>
         </div>
       </div>
       <label class="row" data-show-if="anyText">
@@ -254,17 +259,6 @@
           <small>A dark box behind the time and date.</small></span>
         <input type="checkbox" class="switch" id="readability">
       </label>
-      <details class="advanced nested" data-show-if="showTime">
-        <summary>Advanced time options</summary>
-        <div class="row stacked">
-          <span class="row-text">Size</span>
-          <div class="segmented" role="radiogroup" aria-label="Time size" data-key="timeSize">
-            <label><input type="radio" name="timeSize" value="s"><span aria-label="Small">S</span></label>
-            <label><input type="radio" name="timeSize" value="m"><span aria-label="Medium">M</span></label>
-            <label><input type="radio" name="timeSize" value="l"><span aria-label="Large">L</span></label>
-          </div>
-        </div>
-      </details>
     </section>
 
     <section class="group" aria-label="Advanced">

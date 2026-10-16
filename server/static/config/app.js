@@ -14,7 +14,7 @@ const DEFAULTS = {
   boxMode: 'off',
   textRow: 'bottom',
   textCol: 'auto',
-  timeSize: 'm',
+  timeSize: 's',
   fit: 'fill',
   palette: 'defined',
   frame: 'none',
