@@ -56,7 +56,7 @@ date that stay out of its way.
   or a link to the painting. Pinning turns rotation off until you unpin.
 - **Explore:** zoom into the full-resolution painting in the settings page, with a
   minimap, streamed from the museum's IIIF image server.
-- **Visit the Rijksmuseum:** the settings page links to the museum's ticket page
+- **Support the Rijksmuseum:** the settings page links to the museum's donation page
   (Dutch for Dutch-language phones).
 - **Readability box:** off (default) or always. Without the box
   the digits get a thin black outline.

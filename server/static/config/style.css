@@ -432,6 +432,7 @@ main {
 
 .visit-link::after { content: " \2197"; }
 
+
 @media (prefers-color-scheme: dark) {
   .visit-kicker { color: var(--gilt); }
 }

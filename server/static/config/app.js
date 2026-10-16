@@ -339,12 +339,12 @@ $('viewer').addEventListener('close', () => {
   viewer = null;
 });
 
-// ---------------- visit ----------------
+// ---------------- support the museum ----------------
 
-// Dutch visitors get the Dutch ticket page.
+// Dutch visitors get the Dutch donation page.
 if (dutch) {
-  $('visit-link').href = 'https://www.rijksmuseum.nl/nl/tickets/articles';
-  $('visit-link').textContent = 'Tickets kopen';
+  $('donate-link').href = 'https://www.rijksmuseum.nl/nl/steun/doneer';
+  $('donate-link').textContent = 'Doneer';
 }
 
 // ---------------- controls ----------------
