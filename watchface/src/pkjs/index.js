@@ -153,19 +153,43 @@ function sendImage(bytes) {
 
 // -------------------------------------------------------------------- server
 
+var REQUEST_TIMEOUT_MS = 60000;
+
+/**
+ * GET with a timeout that works everywhere. iOS's XMLHttpRequest has no
+ * `timeout`/`ontimeout`, so a hanging request would never call back and leave
+ * `fetching` stuck; we time out ourselves and call back exactly once.
+ */
 function get(url, onSuccess, onError) {
   var xhr = new XMLHttpRequest();
+  var settled = false;
+  var finish = function (fn, value) {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    clearTimeout(timer);
+    fn(value);
+  };
+  var timer = setTimeout(function () {
+    finish(onError, 'timeout');
+    try {
+      xhr.abort();
+    } catch (e) {
+      console.log('Could not abort timed-out request: ' + e);
+    }
+  }, REQUEST_TIMEOUT_MS);
+
   xhr.open('GET', url, true);
-  xhr.timeout = 60000;
   xhr.onload = function () {
     if (xhr.status >= 200 && xhr.status < 300) {
-      onSuccess(xhr.responseText);
+      finish(onSuccess, xhr.responseText);
     } else {
-      onError('HTTP ' + xhr.status + ': ' + xhr.responseText);
+      finish(onError, 'HTTP ' + xhr.status + ': ' + xhr.responseText);
     }
   };
-  xhr.onerror = function () { onError('network error'); };
-  xhr.ontimeout = function () { onError('timeout'); };
+  xhr.onerror = function () { finish(onError, 'network error'); };
+  xhr.onabort = function () { finish(onError, 'aborted'); };
   xhr.send();
 }
 
