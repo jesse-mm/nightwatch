@@ -90,6 +90,7 @@ rsync -a --delete data/ proxmox-host:/path/to/treasure-trove/data/
 | `PALETTE_REFERENCE` | defined | Server: default colour tuning (defined, sun, room, backlight) |
 | `REQUESTS_PER_SECOND` | 1 | Generator: pace of all outside requests |
 | `REFRESH_DAYS` | 25 | Generator: re-check metadata/pools older than this |
+| `CONTACT` | (empty) | Generator: your email or URL for the User-Agent; needed for Wikipedia pageviews |
 | `SAFE_CROP_PX` | 20 | Max pixels trimmed by a plain centre crop before smart crop takes over |
 | `PD_FALLBACK_YEAR` | 1850 | Accept records without licence info only if made by this year; 0 = never |
 | `POOL_MAX_PAGES` | 80 | Search pages crawled per pool |

@@ -34,11 +34,22 @@ recorded with its hash, and the next run continues where it left off.
    stored too, so they aren't re-checked until `REFRESH_DAYS` have passed.
 4. **Master image**: downloads the 1200 px image once. It's only fetched again
    if the painting's IIIF URL changes (IIIF images are immutable).
-5. **Render** (local, all CPU cores): 32 crops and 128 variants per painting,
+5. **Popularity** (for Featured): one SPARQL query lists the Wikipedia articles
+   about Rijksmuseum paintings (~415 paintings, ~1,200 articles, all
+   languages), then one Wikimedia pageviews request per article for the last
+   12 full months (~20 minutes). The top 365 ready paintings, topped up with
+   others when fewer have an article, become the year's Featured list in a
+   fixed per-year order; once complete it's frozen for that year.
+6. **Render** (local, all CPU cores): 32 crops and 128 variants per painting,
    only those whose inputs changed.
-6. **Export**: `catalog/paintings.jsonl` for git.
+7. **Export**: `catalog/paintings.jsonl` for git.
 
 ## Being polite
+
+**Set `CONTACT`** (in `.env`) to an email address or URL. It goes into the
+User-Agent, as [Wikimedia's policy](https://meta.wikimedia.org/wiki/User-Agent_policy)
+requires: without it the pageviews API answers 429 to every request, and the
+generator falls back to ranking Featured by the number of Wikipedia articles.
 
 All outside requests (Rijksmuseum, its IIIF image server, Wikidata) go through
 one pacer: `REQUESTS_PER_SECOND` (default 1). A "429 Too Many Requests" or a
@@ -50,7 +61,8 @@ headers, so we stay well below anything that could matter.
 
 | What | Redone when |
 |---|---|
-| Pools, Wikidata | older than `REFRESH_DAYS` (25) |
+| Pools, Wikidata, popularity | older than `REFRESH_DAYS` (25) |
+| Featured list | once per calendar year, when 365 ready paintings exist |
 | Metadata | older than `REFRESH_DAYS`; marked *changed* only if its hash differs |
 | Master image | its IIIF URL changed, or the file is missing |
 | Crop | master image hash, crop settings or `PIPELINE_VERSION` changed |

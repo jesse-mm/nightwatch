@@ -6,13 +6,13 @@
 //! so we fetch the whole table now and then and look paintings up by object
 //! number locally, instead of one rate-limited API call per painting.
 
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const ENDPOINT: &str = "https://query.wikidata.org/sparql";
+use crate::rijks::Rijks;
 
 /// Paintings (SK-… inventory numbers) in the Rijksmuseum, with their English and
 /// Dutch Wikipedia articles when they have one.
@@ -41,19 +41,8 @@ pub struct WikiTable {
     pub links: HashMap<String, WikiLinks>,
 }
 
-pub async fn fetch(http: &reqwest::Client) -> Result<HashMap<String, WikiLinks>> {
-    let body: Value = http
-        .get(ENDPOINT)
-        .query(&[("query", QUERY)])
-        .header("Accept", "application/sparql-results+json")
-        .timeout(Duration::from_secs(90))
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await
-        .context("invalid JSON from Wikidata")?;
-    Ok(parse(&body))
+pub async fn fetch(rijks: &Rijks) -> Result<HashMap<String, WikiLinks>> {
+    Ok(parse(&rijks.sparql(QUERY).await?))
 }
 
 fn parse(body: &Value) -> HashMap<String, WikiLinks> {

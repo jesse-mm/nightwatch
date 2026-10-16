@@ -19,6 +19,7 @@ pub mod imaging;
 pub mod palette;
 pub mod palette_data;
 pub mod png8;
+pub mod popularity;
 pub mod rijks;
 pub mod saliency;
 pub mod snapshot;

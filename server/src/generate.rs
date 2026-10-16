@@ -33,7 +33,7 @@ use crate::{
     catalog::{key_of, Catalog, Table},
     era::{self, Era},
     imaging::{self, CropPlan},
-    png8,
+    png8, popularity,
     rijks::Rijks,
     throttle::Throttle,
     variants::{self, CropSet},
@@ -64,6 +64,8 @@ pub struct Options {
     pub source_size: u32,
     pub webp_quality: f32,
     pub user_agent: String,
+    /// Email or URL in the User-Agent; Wikimedia requires it for pageviews.
+    pub contact: Option<String>,
 }
 
 pub async fn run(opts: Options) -> Result<()> {
@@ -76,6 +78,7 @@ pub async fn run(opts: Options) -> Result<()> {
         refresh_wiki(&mut catalog, &rijks, &opts).await?;
         refresh_pools(&mut catalog, &rijks, &opts).await?;
         fetch_paintings(&catalog, &rijks, &opts).await?;
+        refresh_popularity(&catalog, &rijks, &opts).await?;
         catalog.publish()?;
     }
     if !opts.skip_render {
@@ -113,8 +116,7 @@ async fn refresh_wiki(catalog: &mut Catalog, rijks: &Rijks, opts: &Options) -> R
     if !is_stale(catalog, "wiki_built_at", opts)? {
         return Ok(());
     }
-    rijks.throttle().wait().await;
-    match wiki::fetch(rijks.http()).await {
+    match wiki::fetch(rijks).await {
         Ok(links) if !links.is_empty() => {
             catalog.set_wiki(&links)?;
             catalog.set_kv("wiki_built_at", &now_secs().to_string())?;
@@ -122,6 +124,59 @@ async fn refresh_wiki(catalog: &mut Catalog, rijks: &Rijks, opts: &Options) -> R
         }
         Ok(_) => tracing::warn!("wikidata returned nothing; keeping old links"),
         Err(e) => tracing::warn!(error = %e, "wikidata failed; keeping old links"),
+    }
+    Ok(())
+}
+
+/// Wikipedia readership for eligible paintings, for the Featured year: one
+/// SPARQL query for the article list, then one pageviews request per article
+/// (~1,200 for the whole collection, ~20 minutes at 1 request/s).
+async fn refresh_popularity(catalog: &Catalog, rijks: &Rijks, opts: &Options) -> Result<()> {
+    let now = now_secs();
+    let due = catalog.popularity_due(now.saturating_sub(opts.refresh_days * 86_400))?;
+    if due.is_empty() {
+        return Ok(());
+    }
+    let articles = match popularity::articles(rijks).await {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(error = %e, "could not list Wikipedia articles; popularity unchanged");
+            return Ok(());
+        }
+    };
+    let todo: Vec<(&String, &Vec<String>)> = due
+        .iter()
+        .filter_map(|num| articles.get(num).map(|list| (num, list)))
+        .collect();
+    // Without contact info Wikimedia rejects pageview requests (429), so rank by
+    // the number of Wikipedia articles instead, and check again next run.
+    if opts.contact.is_none() {
+        tracing::warn!(
+            "CONTACT not set: Featured is ranked by number of Wikipedia articles, not pageviews"
+        );
+        for (num, list) in &todo {
+            catalog.set_popularity(num, list.len(), 0, 0)?;
+        }
+        return Ok(());
+    }
+    let range = popularity::last_twelve_months(now);
+    tracing::info!(
+        paintings = todo.len(),
+        articles = todo.iter().map(|(_, l)| l.len()).sum::<usize>(),
+        "fetching Wikipedia pageviews"
+    );
+    for (i, (num, list)) in todo.iter().enumerate() {
+        let mut views = 0;
+        for article in *list {
+            match popularity::views(rijks, article, &range).await {
+                Ok(v) => views += v,
+                Err(e) => tracing::warn!(article, error = %e, "pageviews failed; counted as 0"),
+            }
+        }
+        catalog.set_popularity(num, list.len(), views, now)?;
+        if (i + 1) % 50 == 0 || i + 1 == todo.len() {
+            tracing::info!(done = i + 1, total = todo.len(), "pageviews progress");
+        }
     }
     Ok(())
 }

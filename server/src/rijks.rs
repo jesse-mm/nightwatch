@@ -126,6 +126,21 @@ impl Rijks {
         Ok(self.send(url, None).await?.bytes().await?.to_vec())
     }
 
+    /// Run a Wikidata SPARQL query through the same throttle and back-off
+    /// (the query service answers 429 when it's busy).
+    pub async fn sparql(&self, query: &str) -> Result<Value> {
+        let url = reqwest::Url::parse_with_params(
+            "https://query.wikidata.org/sparql",
+            [("query", query)],
+        )?;
+        let r = self
+            .send(url.as_str(), Some("application/sparql-results+json"))
+            .await?;
+        r.json::<Value>()
+            .await
+            .context("invalid JSON from Wikidata")
+    }
+
     pub async fn search_page(&self, url: &str) -> Result<SearchPage> {
         let v = self.get_json(url).await?;
         let ids = v

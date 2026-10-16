@@ -18,6 +18,9 @@ OPTIONS (environment variable in brackets):
   --data DIR            output directory: catalog.sqlite + art/   [DATA_DIR, ./data]
   --export FILE         write the git-friendly catalog here        [EXPORT_PATH]
   --rps N               requests per second to outside services   [REQUESTS_PER_SECOND, 1]
+  --contact TEXT        your email or a URL, sent in the User-Agent [CONTACT]
+                        (Wikimedia requires it for Wikipedia pageviews; without it
+                        Featured is ranked by number of Wikipedia articles)
   --refresh-days N      re-check metadata/pools older than this   [REFRESH_DAYS, 25]
   --limit N             only N paintings (test runs)
   --only KEY            only this painting (repeatable), e.g. 200107928
@@ -56,11 +59,10 @@ fn parse_args() -> Result<Options> {
         safe_crop_px: var("SAFE_CROP_PX", 20),
         source_size: var("SOURCE_SIZE", 1200),
         webp_quality: var("WEBP_QUALITY", 90.0),
-        user_agent: var(
-            "USER_AGENT",
-            "TreasureTrove/0.2 (Pebble watchface generator; not affiliated with the Rijksmuseum)"
-                .to_string(),
-        ),
+        contact: std::env::var("CONTACT")
+            .ok()
+            .filter(|c| !c.trim().is_empty()),
+        user_agent: String::new(),
     };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
@@ -72,6 +74,7 @@ fn parse_args() -> Result<Options> {
             "--data" => o.data_dir = value("--data")?.into(),
             "--export" => o.export = Some(value("--export")?.into()),
             "--rps" => o.requests_per_second = value("--rps")?.parse()?,
+            "--contact" => o.contact = Some(value("--contact")?),
             "--refresh-days" => o.refresh_days = value("--refresh-days")?.parse()?,
             "--limit" => o.limit = Some(value("--limit")?.parse()?),
             "--only" => o.only.push(value("--only")?),
@@ -84,6 +87,11 @@ fn parse_args() -> Result<Options> {
             other => bail!("unknown option {other}\n\n{HELP}"),
         }
     }
+    // Wikimedia's policy: "<client>/<version> (<contact>) <library>".
+    o.user_agent = std::env::var("USER_AGENT").unwrap_or_else(|_| match &o.contact {
+        Some(c) => format!("TreasureTrove/0.2 ({c}; Pebble watchface generator) reqwest"),
+        None => "TreasureTrove/0.2 (Pebble watchface generator; not affiliated with the Rijksmuseum) reqwest".to_string(),
+    });
     Ok(o)
 }
 
