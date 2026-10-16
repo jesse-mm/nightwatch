@@ -45,6 +45,10 @@ pub struct Snapshot {
     paintings: HashMap<String, Painting>,
     any: Vec<String>,
     by_era: HashMap<Era, Vec<String>>,
+    /// The Featured year: index = day of the year (0-based).
+    featured: Vec<String>,
+    /// Lower-cased object number (e.g. "sk-c-5") → key, for pinning.
+    by_object_number: HashMap<String, String>,
     pub pool: usize,
     pub eligible: usize,
 }
@@ -98,6 +102,10 @@ impl Snapshot {
             let meta: ArtMeta = serde_json::from_str(&meta)?;
             let plans: HashMap<String, CropPlan> = serde_json::from_str(&plans)?;
             let links = meta.object_number.as_ref().and_then(|n| wiki.remove(n));
+            if let Some(num) = &meta.object_number {
+                snap.by_object_number
+                    .insert(num.to_lowercase(), meta.key.clone());
+            }
             snap.any.push(meta.key.clone());
             snap.paintings.insert(
                 meta.key.clone(),
@@ -119,7 +127,49 @@ impl Snapshot {
                 snap.by_era.entry(era).or_default().push(key);
             }
         }
+
+        // Older snapshots have no featured table: then Featured is just empty.
+        if let Ok(mut stmt) = db.prepare("SELECT key FROM featured ORDER BY day") {
+            for key in stmt.query_map([], |r| r.get::<_, String>(0))? {
+                let key = key?;
+                if snap.paintings.contains_key(&key) {
+                    snap.featured.push(key);
+                }
+            }
+        }
         Ok(snap)
+    }
+
+    /// Featured painting for a day of the year (0-based); wraps around, so day
+    /// 365 of a leap year and partial lists still get a painting.
+    pub fn featured(&self, day: usize) -> Option<&str> {
+        if self.featured.is_empty() {
+            return None;
+        }
+        self.featured
+            .get(day % self.featured.len())
+            .map(String::as_str)
+    }
+
+    pub fn featured_len(&self) -> usize {
+        self.featured.len()
+    }
+
+    /// Find a painting from what a person might paste: an object number
+    /// (`SK-C-5`), a key (`200107928`), an id URL
+    /// (`https://id.rijksmuseum.nl/200107928`) or a rijksmuseum.nl collection
+    /// link (`…/collection/SK-C-5`). Only paintings the server can show match.
+    pub fn resolve(&self, query: &str) -> Option<&str> {
+        let q = query.trim().trim_end_matches('/');
+        let last = q.rsplit('/').next().unwrap_or(q);
+        // Collection links may carry a query or a "#…" fragment.
+        let last = last.split(['?', '#']).next().unwrap_or(last);
+        if let Some((key, _)) = self.paintings.get_key_value(last) {
+            return Some(key.as_str());
+        }
+        self.by_object_number
+            .get(&last.to_lowercase())
+            .map(String::as_str)
     }
 
     /// Paintings the server can offer (fully rendered).
@@ -251,6 +301,93 @@ mod tests {
         let snap = Snapshot::load(dir.path()).unwrap();
 
         assert_eq!(snap.served("1", &variant()).unwrap().plan.inner_w, 144);
+    }
+
+    fn snapshot_with_featured(name: &str) -> (TempDir, Snapshot) {
+        let dir = TempDir::new(name);
+        let c = published(&dir, 1);
+        c.set_popularity("SK-C-5", 2, 1000, 100).unwrap();
+        c.publish().unwrap();
+        let snap = Snapshot::load(dir.path()).unwrap();
+        (dir, snap)
+    }
+
+    #[test]
+    fn featured_returns_the_painting_for_a_day() {
+        let (_dir, snap) = snapshot_with_featured("snap-featured");
+
+        assert_eq!(snap.featured(0), Some("1"));
+    }
+
+    #[test]
+    fn featured_wraps_past_the_end_of_the_list() {
+        let (_dir, snap) = snapshot_with_featured("snap-featured-wrap");
+
+        assert_eq!(snap.featured(364), Some("1"));
+    }
+
+    #[test]
+    fn featured_is_none_when_nothing_is_featured() {
+        let dir = TempDir::new("snap-featured-none");
+        published(&dir, 1);
+
+        assert_eq!(Snapshot::load(dir.path()).unwrap().featured(0), None);
+    }
+
+    #[test]
+    fn resolve_finds_an_object_number_in_any_case() {
+        let dir = TempDir::new("snap-resolve-num");
+        published(&dir, 1);
+
+        assert_eq!(
+            Snapshot::load(dir.path()).unwrap().resolve("sk-c-5"),
+            Some("1")
+        );
+    }
+
+    #[test]
+    fn resolve_finds_a_key() {
+        let dir = TempDir::new("snap-resolve-key");
+        published(&dir, 1);
+
+        assert_eq!(
+            Snapshot::load(dir.path()).unwrap().resolve(" 1 "),
+            Some("1")
+        );
+    }
+
+    #[test]
+    fn resolve_finds_an_id_link() {
+        let dir = TempDir::new("snap-resolve-id");
+        published(&dir, 1);
+
+        assert_eq!(
+            Snapshot::load(dir.path())
+                .unwrap()
+                .resolve("https://id.rijksmuseum.nl/1"),
+            Some("1")
+        );
+    }
+
+    #[test]
+    fn resolve_finds_a_collection_link() {
+        let dir = TempDir::new("snap-resolve-link");
+        published(&dir, 1);
+
+        assert_eq!(
+            Snapshot::load(dir.path())
+                .unwrap()
+                .resolve("https://www.rijksmuseum.nl/en/collection/SK-C-5?lang=en"),
+            Some("1")
+        );
+    }
+
+    #[test]
+    fn resolve_rejects_unknown_identifiers() {
+        let dir = TempDir::new("snap-resolve-unknown");
+        published(&dir, 1);
+
+        assert_eq!(Snapshot::load(dir.path()).unwrap().resolve("RP-P-1"), None);
     }
 
     #[test]

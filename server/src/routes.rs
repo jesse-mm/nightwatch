@@ -6,6 +6,8 @@
 //! GET /healthz                                          → catalog counts
 //! GET /api/art/random?w&h&color&stride&round&fit&palette&frame[&era] → random painting, JSON
 //!     era: any | pre1600 | 1600s | 1700s | 1800s | 1900s
+//! GET /api/art/featured?day=N&…same…                     → the Featured painting for day N (0-based)
+//! GET /api/art/resolve?q=SK-C-5                          → { key } for an object number, key or link
 //! GET /api/art/{key}?…same…                             → one painting, JSON
 //! GET /api/art/{key}/raw?…same…[&format=b64]            → watch bitmap bytes
 //! GET /api/art/{key}/preview.png?…same…                 → the stored indexed PNG
@@ -67,6 +69,8 @@ pub fn router(state: Shared) -> Router {
         .route("/", get(|| async { Redirect::temporary("/config/") }))
         .route("/healthz", get(health))
         .route("/api/art/random", get(random))
+        .route("/api/art/featured", get(featured))
+        .route("/api/art/resolve", get(resolve))
         .route("/api/art/{key}", get(by_key))
         .route("/api/art/{key}/raw", get(raw))
         .route("/api/art/{key}/preview.png", get(preview))
@@ -220,7 +224,59 @@ fn respond(snap: &Snapshot, key: &str, t: &Target, stride: u32) -> Result<Respon
 
 async fn health(State(state): State<Shared>) -> Response {
     let snap = state.snapshot();
-    Json(json!({ "ok": true, "paintings": snap.ready(), "eligible": snap.eligible, "pool": snap.pool })).into_response()
+    Json(json!({
+        "ok": true,
+        "paintings": snap.ready(),
+        "eligible": snap.eligible,
+        "pool": snap.pool,
+        "featured": snap.featured_len(),
+    }))
+    .into_response()
+}
+
+#[derive(Deserialize)]
+pub struct FeaturedQuery {
+    day: usize,
+}
+
+async fn featured(
+    State(state): State<Shared>,
+    Query(q): Query<TargetQuery>,
+    Query(f): Query<FeaturedQuery>,
+) -> Result<Response, AppError> {
+    let t = q.target(state.cfg.reference)?;
+    let stride = q.stride()?;
+    let snap = state.snapshot();
+    let key = snap.featured(f.day).ok_or_else(|| {
+        AppError(
+            StatusCode::NOT_FOUND,
+            "no featured paintings generated yet".into(),
+        )
+    })?;
+    respond(&snap, key, &t, stride)
+}
+
+#[derive(Deserialize)]
+pub struct ResolveQuery {
+    q: String,
+}
+
+/// Look up a painting from an object number, key or link, for pinning.
+async fn resolve(
+    State(state): State<Shared>,
+    Query(r): Query<ResolveQuery>,
+) -> Result<Response, AppError> {
+    let snap = state.snapshot();
+    let key = snap.resolve(&r.q).ok_or_else(|| {
+        AppError(
+            StatusCode::NOT_FOUND,
+            format!(
+                "\"{}\" isn't one of the public-domain paintings available here",
+                r.q.trim()
+            ),
+        )
+    })?;
+    Ok(Json(json!({ "key": key })).into_response())
 }
 
 async fn random(
