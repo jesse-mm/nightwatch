@@ -636,3 +636,132 @@ main {
 }
 
 .screen.mip .overlay { color: var(--screen-white, #fff); }
+
+/* ---------------- touch: no grey flash when tapping controls ---------------- */
+
+label, button, input, summary, a { -webkit-tap-highlight-color: transparent; }
+
+/* ---------------- watch preview heading ---------------- */
+
+.wall-kicker {
+  margin: 0 0 0.9rem;
+  color: #d5dcd8;
+  font-size: var(--step--1);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ---------------- painting details on the dark wall ---------------- */
+
+.wall .label {
+  width: 100%;
+  max-width: 34rem;
+  margin-top: 1.25rem;
+  padding: 1.25rem 0 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom: 0;
+  color: #eef0ec;
+}
+
+.wall .label-meta,
+.wall .label-credit,
+.wall .label-status { color: #b9c4bf; }
+
+.wall .text-button {
+  color: #eef0ec;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* ---------------- small preview pinned to the top while scrolling ---------------- */
+
+.mini {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  padding: calc(0.5rem + env(safe-area-inset-top)) 1rem 0.5rem;
+  background: var(--wall);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  transform: translateY(-110%);
+  transition: transform 200ms ease;
+}
+
+.mini.shown { transform: none; }
+
+.mini canvas {
+  height: 96px;
+  width: auto;
+  image-rendering: pixelated;
+  border: 3px solid var(--gilt);
+}
+
+.mini-title {
+  flex: 0 1 14rem;
+  margin: 0;
+  color: #eef0ec;
+  font: italic 500 var(--step-0)/1.25 var(--serif);
+}
+
+/* ---------------- loader ---------------- */
+
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  background: radial-gradient(120% 90% at 50% 20%, var(--wall-light), var(--wall) 70%);
+  color: #d5dcd8;
+  transition: opacity 250ms ease;
+}
+
+.loader.done { opacity: 0; pointer-events: none; }
+
+.loader-frame {
+  width: 96px;
+  height: 112px;
+  border: 8px solid var(--gilt);
+  box-shadow: inset 0 0 0 2px var(--gilt-dark), 0 8px 24px rgba(0, 0, 0, 0.35);
+  background: #111;
+  animation: hang 1.4s ease-in-out infinite;
+}
+
+@keyframes hang {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loader-frame { animation: none; }
+}
+
+/* ---------------- advanced colour settings ---------------- */
+
+.advanced.nested { border-bottom: 1px solid var(--line); }
+.advanced.nested summary { font: 600 var(--step-0)/1.3 var(--sans); padding: 0.85rem 0; }
+
+.range-label {
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.range-label output {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.range {
+  width: 100%;
+  accent-color: var(--ink);
+}
+
+.reset-row { margin: 0.75rem 0 1rem; }

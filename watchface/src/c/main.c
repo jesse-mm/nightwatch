@@ -31,7 +31,9 @@
 #define DATE_TOP_INSET 6
 
 typedef enum { ClockAuto = 0, Clock12 = 1, Clock24 = 2 } ClockMode;
-typedef enum { DateDayMonth = 0, DateMonthDay = 1 } DateFormat;
+typedef enum { DateDayMonth = 0, DateMonthDay = 1, DateDay = 2 } DateFormat;
+/* Separator between day and month: '-', '/' or '.'. */
+static const char DATE_SEPARATORS[] = { '-', '/', '.' };
 /* 2 was a double-flick toggle; older saved settings with it now mean Off. */
 typedef enum { BoxOff = 0, BoxAlways = 1 } BoxMode;
 
@@ -43,8 +45,9 @@ typedef struct {
   uint8_t date_format;
   bool hide_until_shake;
   uint8_t box_mode;
-  /* Added later: settings saved before it existed keep the default. */
+  /* Added later: settings saved before these existed keep the defaults. */
   uint8_t reveal_minutes;
+  uint8_t date_sep;
 } Settings;
 
 static Settings s_settings;
@@ -112,8 +115,16 @@ static void update_strings(void) {
       memmove(s_time_text, s_time_text + 1, strlen(s_time_text));
     }
   }
-  strftime(s_date_text, sizeof(s_date_text),
-           s_settings.date_format == DateMonthDay ? "%m-%d" : "%d-%m", t);
+  char format[8];
+  char sep = DATE_SEPARATORS[s_settings.date_sep < sizeof(DATE_SEPARATORS) ? s_settings.date_sep : 0];
+  if (s_settings.date_format == DateDay) {
+    snprintf(format, sizeof(format), "%%d");
+  } else if (s_settings.date_format == DateMonthDay) {
+    snprintf(format, sizeof(format), "%%m%c%%d", sep);
+  } else {
+    snprintf(format, sizeof(format), "%%d%c%%m", sep);
+  }
+  strftime(s_date_text, sizeof(s_date_text), format, t);
 }
 
 /* --------------------------------------------------------------- messaging */
@@ -202,6 +213,7 @@ static void inbox_received(DictionaryIterator *iter, void *ctx) {
   if (read_int(iter, MESSAGE_KEY_HideAmPm, &v)) { s_settings.hide_ampm = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_ShowDate, &v)) { s_settings.show_date = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_DateFormat, &v)) { s_settings.date_format = v; changed = true; }
+  if (read_int(iter, MESSAGE_KEY_DateSep, &v)) { s_settings.date_sep = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_HideUntilShake, &v)) { s_settings.hide_until_shake = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_BoxMode, &v)) { s_settings.box_mode = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_RevealMinutes, &v)) {

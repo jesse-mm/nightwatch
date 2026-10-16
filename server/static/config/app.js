@@ -8,12 +8,16 @@ const DEFAULTS = {
   hideAmPm: false,
   showDate: true,
   dateFormat: 'dd-mm',
+  dateSep: '-',
   hideUntilShake: false,
   revealMinutes: 1,
   boxMode: 'off',
   fit: 'fill',
   palette: 'defined',
   frame: 'none',
+  dither: 'atkinson',
+  brightness: 0,
+  contrast: 0,
   selection: 'featured',
   era: 'any',
   rotation: 'daily',
@@ -23,7 +27,9 @@ const DEFAULTS = {
 // Settings the preview reacts to: a new fit needs another crop from the server;
 // tuning and frame are applied right here (render.js, the same code as the phone).
 const CROP_KEYS = ['fit'];
-const LOCAL_KEYS = ['palette', 'frame'];
+const LOCAL_KEYS = ['palette', 'frame', 'dither', 'brightness', 'contrast'];
+// What "Reset to defaults" restores under Advanced colour settings.
+const COLOUR_KEYS = ['palette', 'dither', 'brightness', 'contrast'];
 
 function readState() {
   try {
@@ -71,19 +77,14 @@ let crop = null;
 
 // ---------------- how the preview is shown ----------------
 // A page-only preference (not a watch setting): show the watch's pixels as they
-// look on a Pebble Time 2 screen in some light (measured palettes), or exactly.
+// look on a Pebble Time 2 screen indoors or in daylight (measured palettes).
 
-const PREVIEW_NOTES = {
-  room: 'As it looks on a Pebble Time 2 indoors',
-  sun: 'As it looks on a Pebble Time 2 in daylight',
-  backlight: 'As it looks on a Pebble Time 2 with the backlight on',
-  pixels: 'The exact pixels sent to your watch',
-};
+const LIGHTS = ['room', 'sun'];
 
 function savedPreviewLight() {
   try {
     const saved = localStorage.getItem('tt-preview-light');
-    return saved in PREVIEW_NOTES ? saved : 'room';
+    return LIGHTS.includes(saved) ? saved : 'room';
   } catch {
     return 'room';
   }
@@ -92,12 +93,10 @@ function savedPreviewLight() {
 let previewLight = savedPreviewLight();
 
 function applyPreviewLight() {
-  $('preview-note').textContent = PREVIEW_NOTES[previewLight];
   // The time is drawn in white on the watch: show the white this screen can show.
   const [r, g, b] = window.TreasureRender.toScreenRGBA(Uint8Array.of(0xff), 1, 1, 1, previewLight);
   screenEl.style.setProperty('--screen-white', `rgb(${r} ${g} ${b})`);
-  // Reflective screens show a fine pixel grid; exact pixels don't.
-  screenEl.classList.toggle('mip', previewLight !== 'pixels');
+  screenEl.classList.add('mip');
 }
 
 document.querySelectorAll('input[name=previewLight]').forEach((radio) => {
@@ -127,11 +126,20 @@ function draw() {
     fit: settings.fit,
     frame: settings.frame,
     palette: settings.palette,
+    dither: settings.dither,
+    brightness: settings.brightness,
+    contrast: settings.contrast,
   });
   const rgba = window.TreasureRender.toScreenRGBA(bytes, watch.w, watch.h, watch.w, previewLight);
   canvas.getContext('2d').putImageData(new ImageData(rgba, watch.w, watch.h), 0, 0);
   canvas.hidden = false;
   $('screen-empty').hidden = true;
+  // The small preview pinned to the top shows the same pixels.
+  const mini = $('mini-art');
+  mini.width = watch.w;
+  mini.height = watch.h;
+  mini.getContext('2d').drawImage(canvas, 0, 0);
+  hideLoader();
 }
 
 /** Load a crop image and read its pixels. */
@@ -195,12 +203,15 @@ function renderPreview() {
   }
   const dd = pad(now.getDate());
   const mm = pad(now.getMonth() + 1);
+  const sep = settings.dateSep;
+  const dates = { dd, 'dd-mm': `${dd}${sep}${mm}`, 'mm-dd': `${mm}${sep}${dd}` };
   $('ov-time').textContent = settings.showTime ? time : '';
-  $('ov-date').textContent = settings.showDate ? (settings.dateFormat === 'mm-dd' ? `${mm}-${dd}` : `${dd}-${mm}`) : '';
+  $('ov-date').textContent = settings.showDate ? dates[settings.dateFormat] || dates['dd-mm'] : '';
   $('ov-time').hidden = !settings.showTime;
   $('ov-date').hidden = !settings.showDate;
-  $('fmt-dm').textContent = `${dd}-${mm}`;
-  $('fmt-md').textContent = `${mm}-${dd}`;
+  $('fmt-d').textContent = dates.dd;
+  $('fmt-dm').textContent = dates['dd-mm'];
+  $('fmt-md').textContent = dates['mm-dd'];
 
   const overlay = $('overlay');
   const anyText = settings.showTime || settings.showDate;
@@ -227,6 +238,7 @@ function showWikiLink(wiki) {
 function showLabel(meta) {
   $('label').hidden = false;
   $('art-title').textContent = meta.title || 'Untitled';
+  $('mini-title').textContent = meta.title || '';
   $('art-artist').textContent = meta.artist || 'Unknown artist';
   $('art-meta').textContent = [meta.date, meta.objectNumber].filter(Boolean).join(', ');
   // Credit line: source + licence, linked to the licence when we know it.
@@ -287,6 +299,7 @@ async function loadPreview(path, { pick = false, extra = '' } = {}) {
     if (id !== requestId) return null;
     screenEl.classList.remove('loading');
     setStatus(`Couldn’t load a preview (${err.message}).`);
+    hideLoader();
     return null;
   }
 }
@@ -313,7 +326,10 @@ function refreshPreview() {
 // First paint: the phone passes the cached painting's crop URL. Older phone
 // code only had a preview image, so ask the server for the crop instead.
 if (art?.cropUrl) {
-  showPainting(art).catch((err) => setStatus(`Couldn’t load a preview (${err.message}).`));
+  showPainting(art).catch((err) => {
+    setStatus(`Couldn’t load a preview (${err.message}).`);
+    hideLoader();
+  });
 } else if (art?.key) {
   refreshPreview();
 }
@@ -413,6 +429,8 @@ $('explore').addEventListener('click', async () => {
       navigatorPosition: 'BOTTOM_RIGHT',
       navigatorAutoFade: false,
       visibilityRatio: 1,
+      // Never smaller than the whole painting fitting the screen.
+      minZoomImageRatio: 1,
       constrainDuringPan: true,
       maxZoomPixelRatio: 2,
       gestureSettingsTouch: { pinchRotate: false },
@@ -424,7 +442,10 @@ $('explore').addEventListener('click', async () => {
 });
 
 $('zoom-in').addEventListener('click', () => viewer?.viewport.zoomBy(1.6));
-$('zoom-out').addEventListener('click', () => viewer?.viewport.zoomBy(1 / 1.6));
+$('zoom-out').addEventListener('click', () => {
+  viewer?.viewport.zoomBy(1 / 1.6);
+  viewer?.viewport.applyConstraints();
+});
 $('zoom-home').addEventListener('click', () => viewer?.viewport.goHome());
 $('viewer-close').addEventListener('click', () => $('viewer').close());
 $('viewer').addEventListener('close', () => {
@@ -449,6 +470,8 @@ function conditions() {
     ampm: settings.showTime && (settings.clockMode === '12' || (settings.clockMode === 'auto' && !clockIs24h())),
     anyText: settings.showTime || settings.showDate,
     hideUntilShake: settings.hideUntilShake,
+    revealMinutes: (settings.showTime || settings.showDate) && settings.hideUntilShake,
+    dateSeparator: settings.showDate && settings.dateFormat !== 'dd',
     pinned: Boolean(settings.pinned),
     notPinned: !settings.pinned,
     randomSelection: !settings.pinned && settings.selection === 'random',
@@ -512,6 +535,62 @@ document.querySelectorAll('.segmented[data-key]').forEach((group) => {
     });
   });
 });
+
+// "Improve readability" is the readability box, shown as an on/off switch.
+const readability = $('readability');
+readability.checked = settings.boxMode === 'always';
+readability.addEventListener('change', () => {
+  settings.boxMode = readability.checked ? 'always' : 'off';
+  update();
+});
+
+// Brightness and contrast sliders: redraw as they move.
+function showRange(input) {
+  $(`${input.dataset.key}-out`).textContent = settings[input.dataset.key] > 0
+    ? `+${settings[input.dataset.key]}` : String(settings[input.dataset.key]);
+}
+
+document.querySelectorAll('input.range[data-key]').forEach((input) => {
+  const key = input.dataset.key;
+  settings[key] = Number(settings[key]) || 0;
+  input.value = settings[key];
+  showRange(input);
+  input.addEventListener('input', () => {
+    settings[key] = Number(input.value);
+    showRange(input);
+    draw();
+  });
+});
+
+$('colour-reset').addEventListener('click', () => {
+  for (const key of COLOUR_KEYS) settings[key] = DEFAULTS[key];
+  document.querySelectorAll('input[name=palette], input[name=dither]').forEach((r) => {
+    r.checked = r.value === settings[r.name];
+  });
+  document.querySelectorAll('input.range[data-key]').forEach((input) => {
+    input.value = settings[input.dataset.key];
+    showRange(input);
+  });
+  draw();
+});
+
+// ---------------- loader + sticky mini preview ----------------
+
+let loaderTimer = setTimeout(hideLoader, 8000); // never block the page for long
+// Nothing to load yet (first set-up, before the watch has a painting).
+if (!art?.cropUrl && !art?.key) setTimeout(hideLoader, 0);
+
+function hideLoader() {
+  if (!loaderTimer) return;
+  clearTimeout(loaderTimer);
+  loaderTimer = null;
+  $('loader').classList.add('done');
+}
+
+// Pin a small preview to the top once the big one has scrolled away.
+new IntersectionObserver(([entry]) => {
+  $('mini').classList.toggle('shown', !entry.isIntersecting && !canvas.hidden);
+}).observe($('frame'));
 
 function update() {
   applyVisibility();

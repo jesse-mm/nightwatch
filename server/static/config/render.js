@@ -191,6 +191,86 @@
     return out;
   }
 
+  /** Index of the nearest palette colour (same weighting as `dither`). */
+  function nearest(colors, r, g, b) {
+    var best = 0;
+    var bestD = Infinity;
+    for (var k = 0; k < 64; k++) {
+      var dr = r - colors[k * 3];
+      var dg = g - colors[k * 3 + 1];
+      var db = b - colors[k * 3 + 2];
+      var d = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
+      if (d < bestD) {
+        bestD = d;
+        best = k;
+      }
+    }
+    return best;
+  }
+
+  /** No dithering: every pixel gets its nearest colour (flat, posterised). */
+  function nearestOnly(rgb, w, h, paletteName) {
+    var colors = matchPalette(paletteName);
+    var out = new Uint8Array(w * h);
+    for (var i = 0; i < w * h; i++) {
+      out[i] = nearest(colors, rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+    }
+    return out;
+  }
+
+  /**
+   * 50:50 checkerboard: mix the nearest colour with the one that, averaged
+   * with it, lands closest to the pixel, alternating them like a chessboard.
+   * Falls back to the nearest colour when mixing doesn't get closer. A calm,
+   * regular texture instead of error-diffusion noise.
+   */
+  function checker(rgb, w, h, paletteName) {
+    var colors = matchPalette(paletteName);
+    var out = new Uint8Array(w * h);
+    var dist = function (r, g, b, cr, cg, cb) {
+      return 2 * (r - cr) * (r - cr) + 4 * (g - cg) * (g - cg) + 3 * (b - cb) * (b - cb);
+    };
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var p = (y * w + x) * 3;
+        var r = rgb[p];
+        var g = rgb[p + 1];
+        var b = rgb[p + 2];
+        var a = nearest(colors, r, g, b);
+        var ar = colors[a * 3];
+        var ag = colors[a * 3 + 1];
+        var ab = colors[a * 3 + 2];
+        // The partner that would make the 50:50 mix equal the pixel.
+        var c = nearest(colors,
+          Math.min(Math.max(2 * r - ar, 0), 255),
+          Math.min(Math.max(2 * g - ag, 0), 255),
+          Math.min(Math.max(2 * b - ab, 0), 255));
+        var mixBetter = dist(r, g, b, (ar + colors[c * 3]) / 2, (ag + colors[c * 3 + 1]) / 2,
+          (ab + colors[c * 3 + 2]) / 2) < dist(r, g, b, ar, ag, ab);
+        out[y * w + x] = mixBetter && (x + y) % 2 ? c : a;
+      }
+    }
+    return out;
+  }
+
+  var DITHERS = { atkinson: dither, checker: checker, none: nearestOnly };
+
+  /**
+   * Brightness and contrast, each -100..100 (0 = unchanged), around mid-grey.
+   * Contrast 100 triples it, -100 flattens everything to grey.
+   */
+  function adjust(rgb, brightness, contrast) {
+    var b = (brightness || 0) / 200;
+    var c = contrast || 0;
+    var k = c >= 0 ? 1 + c / 50 : 1 + c / 100;
+    var out = new Uint8Array(rgb.length);
+    for (var i = 0; i < rgb.length; i++) {
+      var v = (rgb[i] / 255 - 0.5) * k + 0.5 + b;
+      out[i] = Math.min(Math.max(Math.round(v * 255), 0), 255);
+    }
+    return out;
+  }
+
   // ------------------------------------------------------------ frames
 
   var BLACK = [0, 0, 0];
@@ -371,7 +451,8 @@
    * The watch's bytes for a crop: fit it into the frame's opening, dither it
    * with the colour tuning, centre it, and draw the frame around it.
    * @param {Uint8Array|Array} crop full-colour RGB, cw*ch*3
-   * @param {object} o {w, h, stride, round, fit, frame, palette}
+   * @param {object} o {w, h, stride, round, fit, frame, palette,
+   *   dither ('atkinson' | 'checker' | 'none'), brightness, contrast (-100..100)}
    * @returns {Uint8Array} stride*h GColor8 bytes
    */
   function compose(crop, cw, ch, o) {
@@ -381,7 +462,8 @@
     var border = frameBorder(o.frame, w, h);
     var art = fitArt(crop instanceof Uint8Array ? crop : new Uint8Array(crop), cw, ch,
       w - 2 * border, h - 2 * border, o.fit);
-    var idx = dither(art.rgb, art.w, art.h, o.palette);
+    var pixels = o.brightness || o.contrast ? adjust(art.rgb, o.brightness, o.contrast) : art.rgb;
+    var idx = (DITHERS[o.dither] || dither)(pixels, art.w, art.h, o.palette);
     var out = new Uint8Array(stride * h);
     var bg = gcolor8(frameBackground(o.frame));
     for (var i = 0; i < out.length; i++) {
@@ -488,6 +570,7 @@
     compose: compose,
     toScreenRGBA: toScreenRGBA,
     dither: dither,
+    adjust: adjust,
     framePixel: framePixel,
     frameBorder: frameBorder,
     fitArt: fitArt,

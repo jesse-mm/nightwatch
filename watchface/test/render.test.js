@@ -123,3 +123,39 @@ describe('toScreenRGBA', () => {
     assert.ok(b > r, `backlit white looks like ${r}, ${b}`);
   });
 });
+
+describe('colour adjustments', () => {
+  const opts = { w: 8, h: 8, stride: 8, round: false, fit: 'fill', frame: 'none', palette: 'defined' };
+  const grey = (v) => new Uint8Array(8 * 8 * 3).fill(v);
+  const distinct = (bytes) => new Set(bytes).size;
+
+  test('adjust leaves pixels alone at 0 brightness and contrast', () => {
+    assert.deepEqual(render.adjust(Uint8Array.of(10, 128, 250), 0, 0), Uint8Array.of(10, 128, 250));
+  });
+
+  test('brightness 100 lifts mid-grey to white', () => {
+    assert.equal(render.adjust(Uint8Array.of(128), 100, 0)[0], 255);
+  });
+
+  test('contrast -100 flattens everything to mid-grey', () => {
+    assert.deepEqual(Array.from(render.adjust(Uint8Array.of(0, 255), 0, -100)), [128, 128]);
+  });
+
+  test('"none" dithering gives a flat colour for a flat grey', () => {
+    assert.equal(distinct(render.compose(grey(100), 8, 8, { ...opts, dither: 'none' })), 1);
+  });
+
+  test('"checker" mixes two colours in a chessboard for an in-between grey', () => {
+    const out = render.compose(grey(128), 8, 8, { ...opts, dither: 'checker' });
+    assert.equal(distinct(out), 2);
+    assert.notEqual(out[0], out[1]);
+    assert.equal(out[0], out[9]);
+  });
+
+  test('unknown dithering falls back to Atkinson', () => {
+    assert.deepEqual(
+      render.compose(grey(100), 8, 8, { ...opts, dither: 'whatever' }),
+      render.compose(grey(100), 8, 8, opts)
+    );
+  });
+});

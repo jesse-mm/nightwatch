@@ -24,12 +24,16 @@ var DEFAULTS = {
   clockMode: 'auto',     // auto | 12 | 24
   hideAmPm: false,
   showDate: true,
-  dateFormat: 'dd-mm',   // dd-mm | mm-dd
+  dateFormat: 'dd-mm',   // dd-mm | mm-dd | dd
+  dateSep: '-',          // - | / | .
   hideUntilShake: false,
   revealMinutes: 1,      // how long a flick shows the time (1-60)
   boxMode: 'off',        // off | always
   fit: 'fill',           // fill | whole
   palette: 'defined',    // defined | sun | room | backlight
+  dither: 'atkinson',    // atkinson | checker | none (applied here, render.js)
+  brightness: 0,         // -100..100
+  contrast: 0,           // -100..100
   frame: 'none',         // none | gold | wood | gallery
   selection: 'featured', // featured (365 most-read) | random
   era: 'any',            // for random: any | pre1600 | 1600s | 1700s | 1800s | 1900s
@@ -101,7 +105,10 @@ function composeFor(art, settings) {
     round: !!watch.round,
     fit: settings.fit,
     frame: settings.frame,
-    palette: settings.palette
+    palette: settings.palette,
+    dither: settings.dither,
+    brightness: settings.brightness,
+    contrast: settings.contrast
   });
 }
 
@@ -156,7 +163,8 @@ function sendSettings(s) {
     ClockMode: s.clockMode === '12' ? 1 : (s.clockMode === '24' ? 2 : 0),
     HideAmPm: s.hideAmPm ? 1 : 0,
     ShowDate: s.showDate ? 1 : 0,
-    DateFormat: s.dateFormat === 'mm-dd' ? 1 : 0,
+    DateFormat: s.dateFormat === 'mm-dd' ? 1 : (s.dateFormat === 'dd' ? 2 : 0),
+    DateSep: Math.max(0, ['-', '/', '.'].indexOf(s.dateSep)),
     HideUntilShake: s.hideUntilShake ? 1 : 0,
     RevealMinutes: Math.min(60, Math.max(1, Math.round(Number(s.revealMinutes) || 1))),
     BoxMode: s.boxMode === 'always' ? 1 : 0

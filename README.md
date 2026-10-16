@@ -37,17 +37,19 @@ date that stay out of its way.
   ones get a smart crop that finds faces, detail and colour. Or choose "Whole painting".
 - Colours are dithered to Pebble's 64-colour palette with optional tuning for
   daylight, indoor or backlit viewing (based on pebble-color-optimizer).
-- Time on/off, 12/24h (follows the phone by default), hide AM/PM, date on/off,
-  DD-MM or MM-DD, all in LECO.
-- **Hide until flick:** the painting stays clean; flick your wrist to see the time
-  for 1 to 60 minutes (default 1).
+- **Date & time:** time on/off, 12/24h (follows the phone by default), hide AM/PM,
+  date on/off as DD, DD-MM or MM-DD with a `-`, `/` or `.` separator, all in LECO.
+- **Auto hide:** the painting stays clean; flick your wrist to see the time for
+  1 to 60 minutes (default 1).
 - **Frames:** none (default), gold, wood or a gallery mat, drawn into the bitmap in
   exact Pebble colours. The painting is cropped to fit the opening.
-- **Live preview:** frame, colour tuning, framing and "Hang a different painting"
-  update the preview on the settings page straight away; nothing reaches the
-  watch until you save. The preview shows how the painting looks on a Pebble
-  Time 2 screen indoors, in daylight or with the backlight (from measured
-  palettes, with the screen's pixel grid), or the exact pixels.
+- **Live preview:** crop, frame, colour settings and "Hang a different painting"
+  update the watch preview on the settings page straight away; nothing reaches
+  the watch until you save. The preview shows how the painting looks on a Pebble
+  Time 2 screen indoors or in daylight (from measured palettes, with the screen's
+  pixel grid), and a small copy stays pinned at the top while you scroll.
+- **Advanced colour settings:** dithering (Atkinson, 50:50 checkerboard or off),
+  brightness and contrast (-100 to 100), with a reset. Applied on the phone.
 - **Featured:** the 365 Rijksmuseum paintings most read about on Wikipedia (page
   views over the last year, all languages), one for each day of the year in a
   fixed order. Topped up with other paintings when fewer have an article. The
@@ -63,8 +65,8 @@ date that stay out of its way.
   minimap, streamed from the museum's IIIF image server.
 - **Support the Rijksmuseum:** the settings page links to the museum's donation page
   (Dutch for Dutch-language phones).
-- **Readability box:** off (default) or always. Without the box
-  the digits get a thin black outline.
+- **Improve readability:** a dark box behind the time and date (off by default;
+  without it the digits get a thin black outline).
 - The settings page shows today's painting, its artist, a link to the object on
   rijksmuseum.nl and to the full image, plus attribution.
 
