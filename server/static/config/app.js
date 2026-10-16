@@ -92,10 +92,24 @@ function savedPreviewLight() {
 
 let previewLight = savedPreviewLight();
 
+const miniScreen = $('mini-screen');
+miniScreen.classList.toggle('round', Boolean(watch.round));
+
+function savedMiniTime() {
+  try {
+    return localStorage.getItem('tt-mini-time') === '1';
+  } catch {
+    return false;
+  }
+}
+
+let miniTime = savedMiniTime();
+
 function applyPreviewLight() {
   // The time is drawn in white on the watch: show the white this screen can show.
   const [r, g, b] = window.TreasureRender.toScreenRGBA(Uint8Array.of(0xff), 1, 1, 1, previewLight);
   screenEl.style.setProperty('--screen-white', `rgb(${r} ${g} ${b})`);
+  miniScreen.style.setProperty('--screen-white', `rgb(${r} ${g} ${b})`);
   screenEl.classList.add('mip');
 }
 
@@ -174,7 +188,7 @@ async function showPainting(meta) {
   screenEl.classList.remove('loading');
 }
 
-// "Like my phone" follows the watch's clock setting, which the watch reports.
+// "Auto" follows the watch's clock setting, which the watch reports.
 // Older watch builds don't send it, so fall back to this browser's locale.
 function clockIs24h() {
   if (watch.is24h !== undefined) return Boolean(watch.is24h);
@@ -205,19 +219,27 @@ function renderPreview() {
   const mm = pad(now.getMonth() + 1);
   const sep = settings.dateSep;
   const dates = { dd, 'dd-mm': `${dd}${sep}${mm}`, 'mm-dd': `${mm}${sep}${dd}` };
-  $('ov-time').textContent = settings.showTime ? time : '';
-  $('ov-date').textContent = settings.showDate ? dates[settings.dateFormat] || dates['dd-mm'] : '';
-  $('ov-time').hidden = !settings.showTime;
-  $('ov-date').hidden = !settings.showDate;
+  const date = dates[settings.dateFormat] || dates['dd-mm'];
+  const anyText = settings.showTime || settings.showDate;
+  // The pinned preview shows the time on request, as it looks after a shake.
+  const overlays = [
+    [$('overlay'), !anyText || settings.hideUntilShake],
+    [$('mini-overlay'), !anyText || !miniTime],
+  ];
+  for (const [overlay, hidden] of overlays) {
+    const timeEl = overlay.querySelector('.ov-time');
+    const dateEl = overlay.querySelector('.ov-date');
+    timeEl.textContent = settings.showTime ? time : '';
+    dateEl.textContent = settings.showDate ? date : '';
+    timeEl.hidden = !settings.showTime;
+    dateEl.hidden = !settings.showDate;
+    overlay.classList.toggle('hidden', hidden);
+    overlay.classList.toggle('boxed', settings.boxMode === 'always');
+    overlay.classList.toggle('outline', settings.boxMode !== 'always');
+  }
   $('fmt-d').textContent = dates.dd;
   $('fmt-dm').textContent = dates['dd-mm'];
   $('fmt-md').textContent = dates['mm-dd'];
-
-  const overlay = $('overlay');
-  const anyText = settings.showTime || settings.showDate;
-  overlay.classList.toggle('hidden', !anyText || settings.hideUntilShake);
-  overlay.classList.toggle('boxed', settings.boxMode === 'always');
-  overlay.classList.toggle('outline', settings.boxMode !== 'always');
 }
 
 // ---------------- wall label ----------------
@@ -592,8 +614,28 @@ function hideLoader() {
 $('mini-size').addEventListener('click', (e) => {
   const large = $('mini').classList.toggle('large');
   e.currentTarget.setAttribute('aria-pressed', String(large));
-  e.currentTarget.textContent = large ? 'Smaller' : 'Larger';
+  e.currentTarget.querySelector('span').textContent = large ? 'Shrink' : 'Expand';
 });
+$('mini-time').addEventListener('click', () => {
+  miniTime = !miniTime;
+  try {
+    localStorage.setItem('tt-mini-time', miniTime ? '1' : '0');
+  } catch {
+    // Private mode: the choice just isn't remembered.
+  }
+  showMiniTime();
+});
+
+function showMiniTime() {
+  $('mini-time').setAttribute('aria-pressed', String(miniTime));
+  renderPreview();
+}
+
+// The overlay is sized in watch pixels, so follow the pinned preview's size.
+new ResizeObserver(() => {
+  const height = $('mini-art').clientHeight;
+  if (height) miniScreen.style.setProperty('--scale', String(height / watch.h));
+}).observe($('mini-art'));
 $('mini-shuffle').addEventListener('click', () => loadPreview('/api/art/random', { pick: true }));
 
 // Pin a small preview to the top once the big one has scrolled away.
@@ -607,6 +649,7 @@ function update() {
 }
 
 update();
+showMiniTime();
 setInterval(renderPreview, 30_000);
 
 // ---------------- save ----------------

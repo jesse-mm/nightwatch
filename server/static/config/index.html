@@ -53,12 +53,27 @@
 
   <!-- Pinned to the top once the big preview scrolls away. -->
   <div class="mini" id="mini">
-    <canvas id="mini-art" role="img" aria-label="Watch preview"></canvas>
+    <div class="mini-screen" id="mini-screen">
+      <canvas id="mini-art" role="img" aria-label="Watch preview"></canvas>
+      <div class="overlay hidden" id="mini-overlay" aria-hidden="true">
+        <span class="ov-date"></span>
+        <span class="ov-time"></span>
+      </div>
+    </div>
     <div class="mini-side">
       <p class="mini-title" id="mini-title"></p>
       <p class="mini-actions">
         <button type="button" class="text-button" id="mini-shuffle" data-show-if="notPinned">New painting</button>
-        <button type="button" class="text-button" id="mini-size" aria-pressed="false">Larger</button>
+        <button type="button" class="text-button icon-button" id="mini-time" aria-pressed="false">
+          <!-- Lucide "clock" (ISC license) -->
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span>Time</span>
+        </button>
+        <button type="button" class="text-button icon-button" id="mini-size" aria-pressed="false">
+          <!-- Lucide "expand" and "shrink" (ISC license) -->
+          <svg class="when-small" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 15 6 6"/><path d="m15 9 6-6"/><path d="M21 16v5h-5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="m3 21 6-6"/><path d="M3 8V3h5"/><path d="M9 9 3 3"/></svg>
+          <svg class="when-large" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 15 6 6m-6-6v4.8m0-4.8h4.8"/><path d="M9 19.8V15m0 0H4.2M9 15l-6 6"/><path d="M15 4.2V9m0 0h4.8M15 9l6-6"/><path d="M9 4.2V9m0 0H4.2M9 9 3 3"/></svg>
+          <span>Expand</span>
       </p>
     </div>
   </div>
@@ -163,7 +178,7 @@
       <div class="row stacked" data-show-if="showTime">
         <span class="row-text">Clock format</span>
         <div class="segmented" role="radiogroup" aria-label="Clock format" data-key="clockMode">
-          <label><input type="radio" name="clockMode" value="auto"><span>Like my phone</span></label>
+          <label><input type="radio" name="clockMode" value="auto"><span>Auto</span></label>
           <label><input type="radio" name="clockMode" value="12"><span>12-hour</span></label>
           <label><input type="radio" name="clockMode" value="24"><span>24-hour</span></label>
         </div>

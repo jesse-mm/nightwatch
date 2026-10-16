@@ -140,7 +140,7 @@ static void send_hello(int32_t reason) {
   dict_write_int32(it, MESSAGE_KEY_RowStride, s_stride);
   dict_write_int32(it, MESSAGE_KEY_IsRound, PBL_IF_ROUND_ELSE(1, 0));
   dict_write_int32(it, MESSAGE_KEY_ChunkSize, CHUNK_SIZE);
-  /* The watch's own clock style, so the settings page knows if "Like my phone" is 12h. */
+  /* The watch's own clock style, so the settings page knows if "Auto" is 12h. */
   dict_write_int32(it, MESSAGE_KEY_Is24h, clock_is_24h_style() ? 1 : 0);
   app_message_outbox_send();
 }

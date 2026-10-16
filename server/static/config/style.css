@@ -694,11 +694,22 @@ label, button, input, summary, a { -webkit-tap-highlight-color: transparent; }
 
 .mini.shown { transform: none; }
 
+.mini-screen {
+  position: relative;
+  flex: none;
+  border: 3px solid var(--gilt);
+  background: #000;
+  line-height: 0;
+}
+
+.mini-screen.round { border-radius: 50%; overflow: hidden; }
+
+.mini-screen .overlay { color: var(--screen-white, #fff); }
+
 .mini canvas {
   height: 96px;
   width: auto;
   image-rendering: pixelated;
-  border: 3px solid var(--gilt);
 }
 
 .mini-title {
@@ -798,3 +809,17 @@ label, button, input, summary, a { -webkit-tap-highlight-color: transparent; }
 .mini .mini-title { flex: none; }
 .mini.large .mini-side { flex: none; }
 .group.block .advanced.nested[open] summary { border-bottom: 0; }
+
+.icon-button { display: inline-flex; align-items: center; gap: 0.35rem; }
+.icon-button svg {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon-button .when-large, .mini.large .icon-button .when-small { display: none; }
+.mini.large .icon-button .when-large { display: block; }
+.mini .text-button[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); }
