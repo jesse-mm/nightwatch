@@ -22,14 +22,17 @@ date that stay out of its way.
 | `catalog/` | Generated metadata and the Featured list. Not in git: published as a `catalog.tar.gz` release asset (see `scripts/catalog.sh`). |
 | `server/static/config/` | The custom settings page (plain HTML/CSS/JS, no Clay). |
 | `docker-compose.yml` | Runs the server, optionally with a Tailscale Funnel sidecar for a public HTTPS URL. |
-| `docs/` | [Architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [deployment](docs/DEPLOY.md), [Rust for TypeScript developers](docs/RUST_FOR_TS_DEVS.md). |
+| `docs/` | [Supported watches](docs/DEVICES.md), [architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [deployment](docs/DEPLOY.md), [Rust for TypeScript developers](docs/RUST_FOR_TS_DEVS.md). |
 
 ## Features
 
 - A random painting each day (public domain / CC only), rendered for *your* watch's
   exact screen: 144×168, 180×180 round, 200×228 or 260×260 round. Colour watches
-  only for now (Pebble Time, Time Steel, Time Round, Time 2, Round 2).
-- Images arrive already sized from the museum's IIIF server, so no stretching.
+  only for now (Pebble Time, Time Steel, Time Round, Time 2, Round 2; see
+  [Supported watches](docs/DEVICES.md)).
+- Every crop is cut from a local master image at the screen's exact size, so no
+  stretching. Colour tuning and frames are applied on the phone, so changing them
+  is instant and needs no download.
 - Paintings that almost fit (≤ 20 px off) get a simple centre crop; very wide or tall
   ones get a smart crop that finds faces, detail and colour. Or choose "Whole painting".
 - Colours are dithered to Pebble's 64-colour palette with optional tuning for

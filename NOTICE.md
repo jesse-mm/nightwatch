@@ -9,6 +9,19 @@ https://data.rijksmuseum.nl/policy/ for the museum's terms.
 Treasure Trove is an independent project and is not affiliated with or endorsed
 by the Rijksmuseum.
 
+## Device photos
+`docs/images/devices/pebble-time.jpg`: "Pebble Time front" by Frmorrison,
+https://commons.wikimedia.org/wiki/File:Pebble_Time_front.jpg, CC BY-SA 3.0
+(https://creativecommons.org/licenses/by-sa/3.0/), resized.
+
+`docs/images/devices/pebble-time-2.jpg`: "Pebble Time 2 + Quartz watchface
+(close-up)" by Waldyrious,
+https://commons.wikimedia.org/wiki/File:Pebble_Time_2_%2B_Quartz_watchface_(close-up).jpg,
+CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), resized.
+
+The device mockups (`docs/images/devices/*.png`) are drawn by
+`scripts/device-mockups.py` and show a public-domain Rijksmuseum painting.
+
 ## Wikidata
 Links to Wikidata items and Wikipedia articles come from Wikidata
 (https://www.wikidata.org), whose data is available under CC0.
