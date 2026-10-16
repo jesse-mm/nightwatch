@@ -14,7 +14,10 @@ const DEFAULTS = {
   fit: 'fill',
   palette: 'defined',
   frame: 'none',
+  selection: 'featured',
   era: 'any',
+  rotation: 'daily',
+  pinned: '',
 };
 
 // Settings that change the rendered pixels, so the preview is re-rendered live.
@@ -37,6 +40,15 @@ const art = state.art || null;
 const watch = state.watch || { w: 144, h: 168, round: 0 };
 // A painting picked on this page; only hung on the watch when saved.
 let chosen = null;
+// The painting the label currently describes (for the viewer).
+let shown = art;
+
+// Featured day per rotation, computed by the phone (rotation.js). Older phone
+// code doesn't send it: fall back to today's day of the year.
+function dayOfYear(d) {
+  return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 1)) / 86400000);
+}
+const featuredDay = state.featuredDay || { daily: dayOfYear(new Date()), off: dayOfYear(new Date()) };
 
 const $ = (id) => document.getElementById(id);
 
@@ -137,9 +149,9 @@ function showLabel(meta) {
     license.removeAttribute('href');
   }
   $('art-web').href = meta.webUrl;
-  $('art-image').hidden = !meta.imageUrl;
-  if (meta.imageUrl) $('art-image').href = meta.imageUrl;
   showWikiLink(meta.wiki);
+  shown = meta;
+  $('explore').hidden = !iiifBaseOf(meta);
 }
 
 if (art) {
@@ -171,12 +183,12 @@ function setStatus(text) {
   $('status').textContent = text;
 }
 
-async function loadPreview(path, { pick = false } = {}) {
+async function loadPreview(path, { pick = false, extra = '' } = {}) {
   const id = ++requestId;
   screenEl.classList.add('loading');
   setStatus(pick ? 'Hanging a new painting…' : '');
   try {
-    const res = await fetch(`${path}?${screenQuery()}`);
+    const res = await fetch(`${path}?${screenQuery()}${extra}`);
     const meta = await res.json();
     if (!res.ok) throw new Error(meta.error || `HTTP ${res.status}`);
     if (id !== requestId) return;
@@ -185,10 +197,22 @@ async function loadPreview(path, { pick = false } = {}) {
     showLabel(meta);
     setStatus(chosen ? 'Preview: this painting is hung when you save.' : '');
     updateShuffle();
+    return meta;
   } catch (err) {
-    if (id !== requestId) return;
+    if (id !== requestId) return null;
     screenEl.classList.remove('loading');
     setStatus(`Couldn’t load a preview (${err.message}).`);
+    return null;
+  }
+}
+
+/** Preview what the chosen selection + rotation would hang right now. */
+function previewSelection() {
+  if (settings.selection === 'featured') {
+    const day = featuredDay[settings.rotation] ?? featuredDay.daily;
+    loadPreview('/api/art/featured', { pick: true, extra: `&day=${day}` });
+  } else {
+    loadPreview('/api/art/random', { pick: true });
   }
 }
 
@@ -213,6 +237,108 @@ $('keep').addEventListener('click', () => {
   refreshPreview();
 });
 
+// ---------------- pin a painting ----------------
+
+function showPinned(title) {
+  $('pinned-title').textContent = title || 'this painting';
+}
+
+$('pin-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const q = $('pin-input').value.trim();
+  if (!q) return;
+  $('pin-status').textContent = 'Looking it up…';
+  try {
+    const res = await fetch(`/api/art/resolve?q=${encodeURIComponent(q)}`);
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    const meta = await loadPreview(`/api/art/${encodeURIComponent(body.key)}`, { pick: true });
+    if (!meta) throw new Error('could not load it');
+    settings.pinned = meta.key;
+    showPinned(meta.title);
+    $('pin-status').textContent = `Pinned “${meta.title}”. Save to hang it.`;
+    update();
+  } catch (err) {
+    $('pin-status').textContent = err.message;
+  }
+});
+
+if (settings.pinned) {
+  showPinned(art && art.key === settings.pinned ? art.title : '');
+}
+
+$('unpin').addEventListener('click', () => {
+  settings.pinned = '';
+  $('pin-status').textContent = '';
+  setStatus('Unpinned: rotation continues after you save.');
+  update();
+});
+
+// ---------------- explore (deep zoom) ----------------
+// The Rijksmuseum's IIIF image server allows cross-origin requests, so
+// OpenSeadragon can stream the full-resolution tiles straight from it.
+
+const OSD = 'https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/';
+let osdLoading = null;
+let viewer = null;
+
+function iiifBaseOf(meta) {
+  if (!meta) return null;
+  if (meta.iiifBase) return meta.iiifBase;
+  // Older cached paintings only have the full-image URL.
+  const m = /^(https:\/\/[^?#]+?)\/full\//.exec(meta.imageUrl || '');
+  return m ? m[1] : null;
+}
+
+function loadOpenSeadragon() {
+  osdLoading ??= new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `${OSD}openseadragon.min.js`;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('could not load the viewer'));
+    document.head.append(script);
+  });
+  return osdLoading;
+}
+
+$('explore').addEventListener('click', async () => {
+  const base = iiifBaseOf(shown);
+  if (!base) return;
+  $('viewer-title').textContent = `${shown.title || 'Untitled'} · ${shown.artist || ''}`;
+  $('viewer-hint').textContent = 'Loading…';
+  $('viewer').showModal();
+  try {
+    await loadOpenSeadragon();
+    viewer?.destroy();
+    viewer = window.OpenSeadragon({
+      element: $('viewer-canvas'),
+      prefixUrl: `${OSD}images/`,
+      tileSources: `${base}/info.json`,
+      crossOriginPolicy: 'Anonymous',
+      showNavigationControl: false,
+      showNavigator: true,
+      navigatorPosition: 'BOTTOM_RIGHT',
+      navigatorAutoFade: false,
+      visibilityRatio: 1,
+      constrainDuringPan: true,
+      maxZoomPixelRatio: 2,
+      gestureSettingsTouch: { pinchRotate: false },
+    });
+    $('viewer-hint').textContent = 'Pinch or scroll to zoom, drag to move. The map in the corner shows where you are.';
+  } catch (err) {
+    $('viewer-hint').textContent = `Couldn’t open the viewer (${err.message}).`;
+  }
+});
+
+$('zoom-in').addEventListener('click', () => viewer?.viewport.zoomBy(1.6));
+$('zoom-out').addEventListener('click', () => viewer?.viewport.zoomBy(1 / 1.6));
+$('zoom-home').addEventListener('click', () => viewer?.viewport.goHome());
+$('viewer-close').addEventListener('click', () => $('viewer').close());
+$('viewer').addEventListener('close', () => {
+  viewer?.destroy();
+  viewer = null;
+});
+
 // ---------------- visit ----------------
 
 // Dutch visitors get the Dutch ticket page.
@@ -230,6 +356,9 @@ function conditions() {
     ampm: settings.showTime && (settings.clockMode === '12' || (settings.clockMode === 'auto' && !clockIs24h())),
     anyText: settings.showTime || settings.showDate,
     hideUntilShake: settings.hideUntilShake,
+    pinned: Boolean(settings.pinned),
+    notPinned: !settings.pinned,
+    randomSelection: !settings.pinned && settings.selection === 'random',
   };
 }
 
@@ -281,6 +410,10 @@ document.querySelectorAll('.segmented[data-key]').forEach((group) => {
         if (RENDER_KEYS.includes(key)) refreshPreview();
         // Choosing an era hangs a painting from it straight away (as a preview).
         if (key === 'era') loadPreview('/api/art/random', { pick: true });
+        // Show what the new selection/rotation would hang today.
+        if (key === 'selection' || (key === 'rotation' && settings.selection === 'featured')) {
+          previewSelection();
+        }
       }
     });
   });

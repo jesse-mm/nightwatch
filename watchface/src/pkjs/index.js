@@ -13,6 +13,7 @@
  */
 var CONFIG = require('./config');
 var base64 = require('./base64');
+var rotation = require('./rotation');
 
 var SETTINGS_KEY = 'tt-settings';
 var ART_KEY = 'tt-art';
@@ -29,7 +30,10 @@ var DEFAULTS = {
   fit: 'fill',           // fill | whole
   palette: 'defined',    // defined | sun | room | backlight
   frame: 'none',         // none | gold | wood | gallery
-  era: 'any'             // any | pre1600 | 1600s | 1700s | 1800s | 1900s
+  selection: 'featured', // featured (365 most-read) | random
+  era: 'any',            // for random: any | pre1600 | 1600s | 1700s | 1800s | 1900s
+  rotation: 'daily',     // daily | weekly | monthly | off
+  pinned: ''             // key of a painting chosen by id; set = no rotation
 };
 
 var watch = null;        // screen info from the watch's Hello
@@ -204,6 +208,8 @@ function ensureArt(hangKey) {
   var settings = loadSettings();
   var art = readJson(ART_KEY);
   var current = !!(art && art.raw && art.renderKey === renderKey(settings));
+  var now = new Date();
+  var period = rotation.period(settings.rotation, now);
 
   // A freshly started watchface is black until it gets a painting. Send the
   // cached one straight away (even yesterday's, or one made with other
@@ -219,17 +225,30 @@ function ensureArt(hangKey) {
     return;
   }
   if (hangKey) {
-    fetchArt('/api/art/' + encodeURIComponent(hangKey), settings);
+    fetchArt('/api/art/' + encodeURIComponent(hangKey), settings, period);
     return;
   }
-  if (art && art.date === today()) {
-    if (!current) {
-      // Same painting, different screen/framing/colours: re-render it.
-      fetchArt('/api/art/' + encodeURIComponent(art.meta.key), settings);
+  // A pinned painting stays until it's unpinned; rotation doesn't apply.
+  if (settings.pinned) {
+    if (!(current && art.meta.key === settings.pinned)) {
+      fetchArt('/api/art/' + encodeURIComponent(settings.pinned), settings, period);
     }
     return;
   }
-  fetchArt('/api/art/random', settings);
+  var due = !art || !art.meta || (settings.rotation !== 'off' && art.period !== period);
+  if (!due) {
+    if (!current) {
+      // Same painting, different screen/framing/colours: re-render it.
+      fetchArt('/api/art/' + encodeURIComponent(art.meta.key), settings, art.period);
+    }
+    return;
+  }
+  if (settings.selection === 'featured') {
+    fetchArt('/api/art/featured', settings, period,
+      '&day=' + rotation.featuredDay(settings.rotation, now));
+  } else {
+    fetchArt('/api/art/random', settings, period);
+  }
 }
 
 /** Try again later when the server or network is unavailable. */
@@ -246,7 +265,12 @@ function scheduleRetry() {
   }, minutes * 60000);
 }
 
-function fetchArt(path, settings) {
+/**
+ * Fetch a painting and send it to the watch.
+ * @param {string} period the rotation period it belongs to (see rotation.js)
+ * @param {string} [extraQuery] e.g. '&day=12'
+ */
+function fetchArt(path, settings, period, extraQuery) {
   fetching = true;
   var base = CONFIG.SERVER_URL;
   var done = function () {
@@ -265,7 +289,7 @@ function fetchArt(path, settings) {
     done();
   };
 
-  get(base + path + '?' + screenQuery(settings), function (text) {
+  get(base + path + '?' + screenQuery(settings) + (extraQuery || ''), function (text) {
     var meta;
     try {
       meta = JSON.parse(text);
@@ -281,6 +305,7 @@ function fetchArt(path, settings) {
       }
       var record = {
         date: today(),
+        period: period,
         renderKey: renderKey(settings),
         raw: raw,
         meta: {
@@ -291,6 +316,7 @@ function fetchArt(path, settings) {
           objectNumber: meta.objectNumber,
           webUrl: meta.webUrl,
           imageUrl: meta.imageUrl,
+          iiifBase: meta.iiifBase,
           license: meta.license,
           licenseUrl: meta.licenseUrl,
           wiki: meta.wiki || null,
@@ -339,10 +365,18 @@ Pebble.addEventListener('appmessage', function (e) {
 
 Pebble.addEventListener('showConfiguration', function () {
   var art = readJson(ART_KEY);
+  var now = new Date();
   var state = {
     settings: loadSettings(),
     art: art ? art.meta : null,
-    watch: watch
+    watch: watch,
+    // Featured day per rotation, so the page can preview the right painting.
+    featuredDay: {
+      daily: rotation.featuredDay('daily', now),
+      weekly: rotation.featuredDay('weekly', now),
+      monthly: rotation.featuredDay('monthly', now),
+      off: rotation.featuredDay('off', now)
+    }
   };
   Pebble.openURL(CONFIG.SERVER_URL + '/config/#' + encodeURIComponent(JSON.stringify(state)));
 });

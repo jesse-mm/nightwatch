@@ -43,10 +43,17 @@ date that stay out of its way.
 - **Live preview:** frame, colour tuning, framing and "Hang a different painting"
   re-render the preview on the settings page straight away; nothing reaches the
   watch until you save.
-- **Paintings from:** any time, before 1600, or the 1600s, 1700s, 1800s or 1900s
-  (the Search API's `creationDate` wildcards). Applies to the daily pick and to
-  "Hang a different painting". There's no 2000s option: the collection has almost
-  no 21st-century paintings, and those are still in copyright.
+- **Featured:** the 365 Rijksmuseum paintings most read about on Wikipedia (page
+  views over the last year, all languages), one for each day of the year in a
+  fixed order. Topped up with other paintings when fewer have an article.
+- **Rotation:** a new painting daily, weekly or monthly, or Off to keep the current
+  one. Show Featured or "Surprise me" (random, optionally from one century:
+  before 1600, or the 1600s, 1700s, 1800s or 1900s; there's no 2000s option,
+  the few 21st-century paintings are still in copyright).
+- **Pin a painting** (Advanced): enter an object number (`SK-C-5`), Rijksmuseum id
+  or a link to the painting. Pinning turns rotation off until you unpin.
+- **Explore:** zoom into the full-resolution painting in the settings page, with a
+  minimap, streamed from the museum's IIIF image server.
 - **Visit the Rijksmuseum:** the settings page links to the museum's ticket page
   (Dutch for Dutch-language phones).
 - **Readability box:** off (default) or always. Without the box

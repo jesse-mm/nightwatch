@@ -29,6 +29,20 @@ Two programs share one Rust library (`server/src/lib.rs`):
 6. At midnight the watch's tick handler sends Hello again with reason 2, and the
    date check on the phone fetches a new painting.
 
+### Rotation, Featured and pinning (phone, `rotation.js`)
+
+Each cached painting remembers its **period**: `daily:2026-10-16`,
+`weekly:2026-10-12` (the Monday), `monthly:2026-10-01`, or `off`. On every
+Hello the phone compares it with the current period and only fetches when it
+changed, so the midnight Hello does nothing on most days for weekly/monthly.
+
+- **Featured** asks for `/api/art/featured?day=N`, where *N* is the day of the
+  year of the period's first day: weekly shows that Monday's Featured
+  painting, monthly the 1st's, so all rotations walk the same year.
+- **Surprise me** asks for `/api/art/random`, optionally with an era.
+- **Pinned** (a key set via Advanced in the settings) always asks for that
+  painting; rotation doesn't apply until it's unpinned.
+
 ### Why raw bitmap bytes instead of PNG?
 
 Pebble apps have little RAM (64 KB on basalt). Decoding a PNG
@@ -141,6 +155,8 @@ the next generator run re-renders from the master images without fetching.
 |---|---|
 | `GET /healthz` | `{ ok, paintings, stats }` (catalog counts) |
 | `GET /api/art/random?<screen>[&era=…]` | painting metadata + render info + `wiki` + `rawUrl`, `previewUrl`, `cropUrl` |
+| `GET /api/art/featured?day=N&<screen>` | the Featured painting for day *N* of the year (0-based, wraps) |
+| `GET /api/art/resolve?q=…` | `{ key }` for an object number, key or Rijksmuseum link (only servable paintings) |
 | `GET /api/art/{key}?<screen>` | same, for a specific painting (used when framing changes) |
 | `GET /api/art/{key}/raw?<screen>[&format=b64]` | watch bitmap bytes |
 | `GET /api/art/{key}/preview.png?<screen>` | the stored indexed PNG (exactly those pixels) |

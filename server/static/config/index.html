@@ -54,12 +54,33 @@
       <p class="label-meta" id="art-meta"></p>
       <p class="label-credit">Rijksmuseum, Amsterdam · <a id="art-license" target="_blank" rel="noopener"></a></p>
       <p class="label-links">
+        <button type="button" class="link-button" id="explore" hidden>Explore the painting</button>
         <a id="art-web" target="_blank" rel="noopener">View on rijksmuseum.nl</a>
-        <a id="art-image" target="_blank" rel="noopener">Open full image</a>
         <a id="art-wiki" target="_blank" rel="noopener" hidden></a>
       </p>
-      <div class="era">
-        <span class="era-title" id="era-title">Paintings from</span>
+      <p class="label-actions" data-show-if="notPinned">
+        <button type="button" class="text-button" id="shuffle">Hang a different painting</button>
+        <button type="button" class="text-button" id="keep" hidden>Keep today’s painting</button>
+      </p>
+      <p class="label-status" id="status" role="status"></p>
+    </article>
+
+    <section class="group" aria-labelledby="g-rotation">
+      <h2 id="g-rotation">Rotation</h2>
+      <div class="pinned" id="pinned" data-show-if="pinned">
+        <p>Pinned: <strong id="pinned-title">this painting</strong>. It stays on your watch until you unpin it.</p>
+        <button type="button" class="text-button" id="unpin">Unpin</button>
+      </div>
+      <div class="row stacked" data-show-if="notPinned">
+        <span class="row-text">Show
+          <small id="selection-note">Featured: the 365 Rijksmuseum paintings most read about on Wikipedia, one for each day of the year.</small></span>
+        <div class="segmented" role="radiogroup" aria-label="Show" data-key="selection">
+          <label><input type="radio" name="selection" value="featured"><span>Featured</span></label>
+          <label><input type="radio" name="selection" value="random"><span>Surprise me</span></label>
+        </div>
+      </div>
+      <div class="row stacked" data-show-if="randomSelection">
+        <span class="row-text" id="era-title">Paintings from</span>
         <div class="segmented compact" role="radiogroup" aria-labelledby="era-title" data-key="era">
           <label><input type="radio" name="era" value="any"><span>Any</span></label>
           <label><input type="radio" name="era" value="pre1600"><span aria-label="Before 1600">&lt;1600</span></label>
@@ -69,12 +90,17 @@
           <label><input type="radio" name="era" value="1900s"><span>1900s</span></label>
         </div>
       </div>
-      <p class="label-actions">
-        <button type="button" class="text-button" id="shuffle">Hang a different painting</button>
-        <button type="button" class="text-button" id="keep" hidden>Keep today’s painting</button>
-      </p>
-      <p class="label-status" id="status" role="status"></p>
-    </article>
+      <div class="row stacked" data-show-if="notPinned">
+        <span class="row-text">New painting
+          <small>Off keeps the current painting until you hang another one.</small></span>
+        <div class="segmented" role="radiogroup" aria-label="New painting" data-key="rotation">
+          <label><input type="radio" name="rotation" value="daily"><span>Daily</span></label>
+          <label><input type="radio" name="rotation" value="weekly"><span>Weekly</span></label>
+          <label><input type="radio" name="rotation" value="monthly"><span>Monthly</span></label>
+          <label><input type="radio" name="rotation" value="off"><span>Off</span></label>
+        </div>
+      </div>
+    </section>
 
     <section class="group" aria-labelledby="g-art">
       <h2 id="g-art">Painting</h2>
@@ -149,6 +175,21 @@
       </div>
     </section>
 
+    <section class="group" aria-label="Advanced">
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <form class="row stacked pin-form" id="pin-form">
+          <label class="row-text" for="pin-input">Pin a specific painting
+            <small>Its object number (SK-C-5), Rijksmuseum id or a link to it. Pinning turns rotation off.</small></label>
+          <span class="pin-field">
+            <input type="text" id="pin-input" placeholder="SK-C-5" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+            <button type="submit" class="text-button">Pin</button>
+          </span>
+          <span class="label-status" id="pin-status" role="status"></span>
+        </form>
+      </details>
+    </section>
+
     <aside class="visit">
       <p class="visit-kicker">See them for real</p>
       <p class="visit-title">Visit the Rijksmuseum</p>
@@ -164,6 +205,20 @@
       <p>Treasure Trove is an independent project and is not affiliated with or endorsed by the Rijksmuseum.</p>
     </footer>
   </main>
+
+  <dialog class="viewer" id="viewer" aria-labelledby="viewer-title">
+    <header class="viewer-bar">
+      <p class="viewer-title" id="viewer-title"></p>
+      <div class="viewer-tools">
+        <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" id="zoom-home" aria-label="Show the whole painting">⤢</button>
+        <button type="button" id="viewer-close" aria-label="Close">✕</button>
+      </div>
+    </header>
+    <div class="viewer-canvas" id="viewer-canvas"></div>
+    <p class="viewer-hint" id="viewer-hint">Pinch or scroll to zoom, drag to move. The map in the corner shows where you are.</p>
+  </dialog>
 
   <div class="savebar">
     <button type="button" class="save" id="save">Save to watch</button>
