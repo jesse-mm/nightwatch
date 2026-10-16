@@ -91,6 +91,7 @@
           <svg class="when-small" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 15 6 6"/><path d="m15 9 6-6"/><path d="M21 16v5h-5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="m3 21 6-6"/><path d="M3 8V3h5"/><path d="M9 9 3 3"/></svg>
           <svg class="when-large" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 15 6 6m-6-6v4.8m0-4.8h4.8"/><path d="M9 19.8V15m0 0H4.2M9 15l-6 6"/><path d="M15 4.2V9m0 0h4.8M15 9l6-6"/><path d="M9 4.2V9m0 0H4.2M9 9 3 3"/></svg>
           <span>Expand</span>
+        </button>
       </p>
     </div>
   </div>
@@ -253,6 +254,17 @@
           <small>A dark box behind the time and date.</small></span>
         <input type="checkbox" class="switch" id="readability">
       </label>
+      <details class="advanced nested" data-show-if="showTime">
+        <summary>Advanced time options</summary>
+        <div class="row stacked">
+          <span class="row-text">Size</span>
+          <div class="segmented" role="radiogroup" aria-label="Time size" data-key="timeSize">
+            <label><input type="radio" name="timeSize" value="s"><span aria-label="Small">S</span></label>
+            <label><input type="radio" name="timeSize" value="m"><span aria-label="Medium">M</span></label>
+            <label><input type="radio" name="timeSize" value="l"><span aria-label="Large">L</span></label>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section class="group" aria-label="Advanced">

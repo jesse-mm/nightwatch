@@ -14,6 +14,7 @@ const DEFAULTS = {
   boxMode: 'off',
   textRow: 'bottom',
   textCol: 'auto',
+  timeSize: 'm',
   fit: 'fill',
   palette: 'defined',
   frame: 'none',
@@ -207,12 +208,17 @@ function renderPreview() {
   const now = new Date();
   const use24 = settings.clockMode === '24' || (settings.clockMode === 'auto' && clockIs24h());
   let time;
+  let ampm = '';
   if (use24) {
     time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
   } else {
-    const h = now.getHours() % 12 || 12;
-    time = `${h}:${pad(now.getMinutes())}${settings.hideAmPm ? '' : now.getHours() < 12 ? ' AM' : ' PM'}`;
+    time = `${now.getHours() % 12 || 12}:${pad(now.getMinutes())}`;
+    if (!settings.hideAmPm) ampm = now.getHours() < 12 ? 'AM' : 'PM';
   }
+  // Like the watch: only the M time font has AM/PM letters; S and L draw them
+  // separately in the smaller date font.
+  const ampmInline = settings.timeSize === 'm';
+  if (ampm && ampmInline) time += ` ${ampm}`;
   const dd = pad(now.getDate());
   const mm = pad(now.getMonth() + 1);
   const sep = settings.dateSep;
@@ -228,6 +234,14 @@ function renderPreview() {
     const timeEl = overlay.querySelector('.ov-time');
     const dateEl = overlay.querySelector('.ov-date');
     timeEl.textContent = settings.showTime ? time : '';
+    if (settings.showTime && ampm && !ampmInline) {
+      const suffix = document.createElement('span');
+      suffix.className = 'ov-ampm';
+      suffix.textContent = ampm;
+      timeEl.append(suffix);
+    }
+    overlay.classList.toggle('size-s', settings.timeSize === 's');
+    overlay.classList.toggle('size-l', settings.timeSize === 'l');
     dateEl.textContent = settings.showDate ? date : '';
     timeEl.hidden = !settings.showTime;
     dateEl.hidden = !settings.showDate;
@@ -246,7 +260,8 @@ function renderPreview() {
 function placeOverlay(overlay, px) {
   if (!px) return;
   const round = Boolean(watch.round);
-  const margin = round ? 10 : 4;
+  // With a painting frame, the text sits inside it, on the painting.
+  const margin = (round ? 10 : 4) + window.TreasureRender.frameBorder(settings.frame, watch.w, watch.h);
   const edge = margin + (round ? 8 : 0);
   const pad = settings.boxMode === 'always' ? 3 : 0;
   const blockW = overlay.offsetWidth / px - 2 * pad;

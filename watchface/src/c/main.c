@@ -25,10 +25,25 @@
 /* Text sits this far from the screen edge. Round screens need more. */
 #define MARGIN PBL_IF_ROUND_ELSE(10, 4)
 #define BOX_PAD 3
-/* System fonts draw with some empty space above the glyphs; these trim the box
- * so it hugs the digits. Tune in the emulator if a future font changes. */
-#define TIME_TOP_INSET 7
-#define DATE_TOP_INSET 6
+#define AMPM_GAP 2
+/* Time and date fonts per size (S, M, L). System fonts draw with some empty
+ * space above the glyphs; the insets trim it so the box hugs the digits. Tune
+ * in the emulator if a font changes. Only the M time font has AM/PM letters;
+ * the others draw AM/PM separately in the date font. */
+typedef struct {
+  const char *time_font;
+  const char *date_font;
+  int8_t time_inset;
+  int8_t date_inset;
+  bool time_has_ampm;
+} TextSize;
+
+static const TextSize TEXT_SIZES[] = {
+  { FONT_KEY_LECO_20_BOLD_NUMBERS, FONT_KEY_GOTHIC_14_BOLD, 6, 4, false },
+  { FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM, FONT_KEY_LECO_20_BOLD_NUMBERS, 7, 6, true },
+  { FONT_KEY_LECO_36_BOLD_NUMBERS, FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM, 10, 7, false },
+};
+#define SIZE_M 1
 
 typedef enum { ClockAuto = 0, Clock12 = 1, Clock24 = 2 } ClockMode;
 typedef enum { DateDayMonth = 0, DateMonthDay = 1, DateDay = 2 } DateFormat;
@@ -52,6 +67,9 @@ typedef struct {
   uint8_t reveal_minutes;
   uint8_t date_sep;
   uint8_t text_pos;
+  uint8_t time_size;
+  /* Width of the painting frame (if any), so the text sits on the painting. */
+  uint8_t text_inset;
 } Settings;
 
 static Settings s_settings;
@@ -74,6 +92,7 @@ static int s_hello_tries;
 static GFont s_time_font;
 static GFont s_date_font;
 static char s_time_text[12];
+static char s_ampm_text[4];
 static char s_date_text[8];
 
 /* ---------------------------------------------------------------- settings */
@@ -90,6 +109,7 @@ static void default_settings(void) {
     .reveal_minutes = 1,
     /* Bottom-right corner on rectangular screens, bottom-center on round ones. */
     .text_pos = RowBottom * 3 + PBL_IF_ROUND_ELSE(ColCenter, ColRight),
+    .time_size = SIZE_M,
   };
 }
 
@@ -98,6 +118,15 @@ static void load_settings(void) {
   if (persist_exists(SETTINGS_KEY)) {
     persist_read_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
   }
+}
+
+static const TextSize *text_size(void) {
+  return &TEXT_SIZES[s_settings.time_size < ARRAY_LENGTH(TEXT_SIZES) ? s_settings.time_size : SIZE_M];
+}
+
+static void load_fonts(void) {
+  s_time_font = fonts_get_system_font(text_size()->time_font);
+  s_date_font = fonts_get_system_font(text_size()->date_font);
 }
 
 static bool any_text_enabled(void) {
@@ -112,11 +141,15 @@ static void update_strings(void) {
 
   bool use24 = s_settings.clock_mode == Clock24 ||
                (s_settings.clock_mode == ClockAuto && clock_is_24h_style());
+  s_ampm_text[0] = '\0';
   if (use24) {
     strftime(s_time_text, sizeof(s_time_text), "%H:%M", t);
   } else {
-    strftime(s_time_text, sizeof(s_time_text),
-             s_settings.hide_ampm ? "%I:%M" : "%I:%M %p", t);
+    bool ampm_inline = !s_settings.hide_ampm && text_size()->time_has_ampm;
+    strftime(s_time_text, sizeof(s_time_text), ampm_inline ? "%I:%M %p" : "%I:%M", t);
+    if (!s_settings.hide_ampm && !ampm_inline) {
+      strftime(s_ampm_text, sizeof(s_ampm_text), "%p", t);
+    }
     if (s_time_text[0] == '0') {  /* "09:41" → "9:41" */
       memmove(s_time_text, s_time_text + 1, strlen(s_time_text));
     }
@@ -223,6 +256,11 @@ static void inbox_received(DictionaryIterator *iter, void *ctx) {
   if (read_int(iter, MESSAGE_KEY_HideUntilShake, &v)) { s_settings.hide_until_shake = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_BoxMode, &v)) { s_settings.box_mode = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_TextPos, &v) && v >= 0 && v < 6) { s_settings.text_pos = v; changed = true; }
+  if (read_int(iter, MESSAGE_KEY_TimeSize, &v) && v >= 0 && v < (int32_t)ARRAY_LENGTH(TEXT_SIZES)) {
+    s_settings.time_size = v;
+    changed = true;
+  }
+  if (read_int(iter, MESSAGE_KEY_TextInset, &v)) { s_settings.text_inset = v < 0 ? 0 : (v > 60 ? 60 : v); changed = true; }
   if (read_int(iter, MESSAGE_KEY_RevealMinutes, &v)) {
     s_settings.reveal_minutes = v < 1 ? 1 : (v > REVEAL_MAX_MIN ? REVEAL_MAX_MIN : v);
     changed = true;
@@ -230,6 +268,7 @@ static void inbox_received(DictionaryIterator *iter, void *ctx) {
 
   if (changed) {
     persist_write_data(SETTINGS_KEY, &s_settings, sizeof(s_settings));
+    load_fonts();
     update_strings();
     apply_tap_subscription();
     layer_mark_dirty(s_text_layer);
@@ -300,6 +339,17 @@ static void draw_outlined(GContext *ctx, const char *text, GFont font, GRect r,
   graphics_draw_text(ctx, text, font, r, GTextOverflowModeFill, align, NULL);
 }
 
+/* White text, on the box or with an outline. */
+static void draw_text(GContext *ctx, const char *text, GFont font, GRect r, GTextAlignment align,
+                      bool boxed) {
+  if (boxed) {
+    graphics_context_set_text_color(ctx, GColorWhite);
+    graphics_draw_text(ctx, text, font, r, GTextOverflowModeFill, align, NULL);
+  } else {
+    draw_outlined(ctx, text, font, r, align);
+  }
+}
+
 static GSize measure(const char *text, GFont font, int16_t max_w) {
   return graphics_text_layout_get_content_size(text, font, GRect(0, 0, max_w, 60),
                                                GTextOverflowModeFill, GTextAlignmentLeft);
@@ -321,27 +371,35 @@ static void text_update(Layer *layer, GContext *ctx) {
   GRect area = layer_get_bounds(layer);
 #endif
 
+  const TextSize *size = text_size();
   bool show_time = s_settings.show_time;
   bool show_date = s_settings.show_date;
+  bool show_ampm = show_time && s_ampm_text[0];
   GSize ts = show_time ? measure(s_time_text, s_time_font, area.size.w) : GSize(0, 0);
+  GSize as = show_ampm ? measure(s_ampm_text, s_date_font, area.size.w) : GSize(0, 0);
   GSize ds = show_date ? measure(s_date_text, s_date_font, area.size.w) : GSize(0, 0);
 
   /* Visible heights (without the font's built-in top space). */
-  int16_t time_h = show_time ? ts.h - TIME_TOP_INSET : 0;
-  int16_t date_h = show_date ? ds.h - DATE_TOP_INSET : 0;
+  int16_t time_h = show_time ? ts.h - size->time_inset : 0;
+  int16_t ampm_h = show_ampm ? as.h - size->date_inset : 0;
+  int16_t date_h = show_date ? ds.h - size->date_inset : 0;
   int16_t gap = (show_time && show_date) ? 2 : 0;
-  int16_t block_w = ts.w > ds.w ? ts.w : ds.w;
+  /* AM/PM (when drawn separately) sits after the digits, bottom-aligned. */
+  int16_t line_w = ts.w + (show_ampm ? AMPM_GAP + as.w : 0);
+  int16_t block_w = line_w > ds.w ? line_w : ds.w;
   int16_t block_h = time_h + date_h + gap;
 
   TextRow row = s_settings.text_pos / 3;
   /* Round screens only offer top or bottom, always centered. */
   TextCol col = PBL_IF_ROUND_ELSE(ColCenter, s_settings.text_pos % 3);
-  /* Round screens keep the text a little further in from the top and bottom. */
-  int16_t edge = MARGIN + PBL_IF_ROUND_ELSE(8, 0);
+  /* Round screens keep the text a little further in from the top and bottom.
+   * With a painting frame, the text sits inside it, on the painting. */
+  int16_t margin = MARGIN + s_settings.text_inset;
+  int16_t edge = margin + PBL_IF_ROUND_ELSE(8, 0);
   int16_t top = row == RowTop ? area.origin.y + edge
                               : area.origin.y + area.size.h - edge - block_h;
-  int16_t left = col == ColLeft    ? area.origin.x + MARGIN
-               : col == ColRight   ? area.origin.x + area.size.w - MARGIN - block_w
+  int16_t left = col == ColLeft    ? area.origin.x + margin
+               : col == ColRight   ? area.origin.x + area.size.w - margin - block_w
                                    : area.origin.x + (area.size.w - block_w) / 2;
   GTextAlignment align = col == ColLeft    ? GTextAlignmentLeft
                        : col == ColRight   ? GTextAlignmentRight
@@ -356,22 +414,22 @@ static void text_update(Layer *layer, GContext *ctx) {
 
   int16_t y = top;
   if (show_date) {
-    GRect r = GRect(left, y - DATE_TOP_INSET, block_w, ds.h);
-    if (boxed) {
-      graphics_context_set_text_color(ctx, GColorWhite);
-      graphics_draw_text(ctx, s_date_text, s_date_font, r, GTextOverflowModeFill, align, NULL);
-    } else {
-      draw_outlined(ctx, s_date_text, s_date_font, r, align);
-    }
+    draw_text(ctx, s_date_text, s_date_font, GRect(left, y - size->date_inset, block_w, ds.h),
+              align, boxed);
     y += date_h + gap;
   }
   if (show_time) {
-    GRect r = GRect(left, y - TIME_TOP_INSET, block_w, ts.h);
-    if (boxed) {
-      graphics_context_set_text_color(ctx, GColorWhite);
-      graphics_draw_text(ctx, s_time_text, s_time_font, r, GTextOverflowModeFill, align, NULL);
-    } else {
-      draw_outlined(ctx, s_time_text, s_time_font, r, align);
+    int16_t x = col == ColLeft    ? left
+              : col == ColRight   ? left + block_w - line_w
+                                  : left + (block_w - line_w) / 2;
+    /* Left-aligned in a slightly wider box so the measured text never wraps. */
+    draw_text(ctx, s_time_text, s_time_font, GRect(x, y - size->time_inset, ts.w + 4, ts.h),
+              GTextAlignmentLeft, boxed);
+    if (show_ampm) {
+      int16_t ampm_top = y + time_h - ampm_h;
+      draw_text(ctx, s_ampm_text, s_date_font,
+                GRect(x + ts.w + AMPM_GAP, ampm_top - size->date_inset, as.w + 4, as.h),
+                GTextAlignmentLeft, boxed);
     }
   }
 }
@@ -425,8 +483,7 @@ static void window_unload(Window *window) {
 
 static void init(void) {
   load_settings();
-  s_time_font = fonts_get_system_font(FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM);
-  s_date_font = fonts_get_system_font(FONT_KEY_LECO_20_BOLD_NUMBERS);
+  load_fonts();
 
   s_window = window_create();
   window_set_background_color(s_window, GColorBlack);

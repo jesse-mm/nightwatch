@@ -144,6 +144,13 @@ a { color: inherit; text-underline-offset: 0.18em; }
 
 .ov-time { font-size: calc(var(--scale, 2) * 19px); }
 .ov-date { font-size: calc(var(--scale, 2) * 14px); }
+.ov-ampm { margin-left: calc(var(--scale, 2) * 2px); font-size: calc(var(--scale, 2) * 14px); }
+.overlay.size-s .ov-time { font-size: calc(var(--scale, 2) * 14px); }
+.overlay.size-s .ov-date,
+.overlay.size-s .ov-ampm { font-size: calc(var(--scale, 2) * 10px); }
+.overlay.size-l .ov-time { font-size: calc(var(--scale, 2) * 27px); }
+.overlay.size-l .ov-date,
+.overlay.size-l .ov-ampm { font-size: calc(var(--scale, 2) * 19px); }
 
 .preview-note {
   margin: 0.6rem 0 0;

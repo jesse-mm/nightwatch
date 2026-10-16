@@ -31,6 +31,7 @@ var DEFAULTS = {
   boxMode: 'off',        // off | always
   textRow: 'bottom',     // top | bottom
   textCol: 'auto',       // left | center | right; auto = right (round screens: always center)
+  timeSize: 'm',         // s | m | l
   fit: 'fill',           // fill | whole
   palette: 'defined',    // defined | sun | room | backlight
   dither: 'atkinson',    // atkinson | checker | none (applied here, render.js)
@@ -170,7 +171,10 @@ function sendSettings(s) {
     HideUntilShake: s.hideUntilShake ? 1 : 0,
     RevealMinutes: Math.min(60, Math.max(1, Math.round(Number(s.revealMinutes) || 1))),
     BoxMode: s.boxMode === 'always' ? 1 : 0,
-    TextPos: textPos(s)
+    TextPos: textPos(s),
+    TimeSize: Math.max(0, ['s', 'm', 'l'].indexOf(s.timeSize)),
+    // The text sits inside a painting frame, on the painting.
+    TextInset: watch ? render.frameBorder(s.frame, watch.w, watch.h) : 0
   });
 }
 
