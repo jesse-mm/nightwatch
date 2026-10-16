@@ -407,14 +407,22 @@ Pebble.addEventListener('appmessage', function (e) {
   ensureArt(); // Hello 2 = new day; the date check picks a new painting.
 });
 
-Pebble.addEventListener('showConfiguration', function () {
+/** Open the settings page; `reopen` brings the page back after a plain Save. */
+function openConfig(reopen) {
   var art = readJson(ART_KEY);
   var state = {
     settings: loadSettings(),
     art: art ? art.meta : null,
     watch: watch
   };
+  if (reopen) {
+    state.reopen = reopen;
+  }
   Pebble.openURL(CONFIG.SERVER_URL + '/config/#' + encodeURIComponent(JSON.stringify(state)));
+}
+
+Pebble.addEventListener('showConfiguration', function () {
+  openConfig();
 });
 
 Pebble.addEventListener('webviewclosed', function (e) {
@@ -446,5 +454,9 @@ Pebble.addEventListener('webviewclosed', function (e) {
   // applied here, no download).
   if (!ensureArt(typeof result.artKey === 'string' ? result.artKey : undefined)) {
     showCached(readJson(ART_KEY), settings);
+  }
+  // Save (not Save & Exit): the page can only save by closing, so open it again.
+  if (result.reopen) {
+    openConfig(result.reopen);
   }
 });

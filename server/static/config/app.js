@@ -328,9 +328,13 @@ function refreshPreview() {
   if (key) loadPreview(`/api/art/${encodeURIComponent(key)}`);
 }
 
-// First paint: the phone passes the cached painting's crop URL. Older phone
-// code only had a preview image, so ask the server for the crop instead.
-if (art?.cropUrl) {
+// After a plain Save the phone reopens this page while it is still fetching
+// the painting just hung, so show that one; otherwise the phone passes the
+// cached painting's crop URL. Older phone code only had a preview image, so
+// ask the server for the crop instead.
+if (state.reopen?.artKey) {
+  loadPreview(`/api/art/${encodeURIComponent(state.reopen.artKey)}`);
+} else if (art?.cropUrl) {
   showPainting(art).catch((err) => {
     setStatus(`Couldn’t load a preview (${err.message}).`);
     hideLoader();
@@ -637,7 +641,29 @@ function returnTo() {
   return match ? decodeURIComponent(match[1]) : 'pebblejs://close#';
 }
 
-$('save').addEventListener('click', () => {
-  const result = { settings, artKey: chosen ? chosen.key : null };
+// The page can only hand settings to the phone by closing. For a plain Save
+// the phone opens it again right away, and `reopen` brings back where the
+// reader was.
+function save(exit) {
+  const artKey = chosen ? chosen.key : null;
+  const result = { settings, artKey };
+  if (!exit) {
+    result.reopen = {
+      artKey: artKey || state.reopen?.artKey || null,
+      scrollY: Math.round(window.scrollY),
+      large: $('mini').classList.contains('large'),
+    };
+  }
   document.location = returnTo() + encodeURIComponent(JSON.stringify(result));
-});
+}
+
+$('save').addEventListener('click', () => save(false));
+$('save-exit').addEventListener('click', () => save(true));
+
+if (state.reopen) {
+  $('save').textContent = 'Saved';
+  setTimeout(() => ($('save').textContent = 'Save'), 2000);
+  if (state.reopen.large) $('mini-size').click();
+  // Restore the scroll position once the page has its full height.
+  window.addEventListener('load', () => window.scrollTo(0, state.reopen.scrollY || 0));
+}
