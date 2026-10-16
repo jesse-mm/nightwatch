@@ -98,3 +98,28 @@ describe('compose', () => {
     assert.ok(ms < 2000, `took ${ms.toFixed(0)} ms`);
   });
 });
+
+describe('toScreenRGBA', () => {
+  const white = render.gcolor8([255, 255, 255]);
+  const black = render.gcolor8([0, 0, 0]);
+
+  test('shows exact colours for "pixels"', () => {
+    const bytes = Uint8Array.of(white, black);
+    assert.deepEqual(render.toScreenRGBA(bytes, 2, 1, 2, 'pixels'), render.toRGBA(bytes, 2, 1, 2));
+  });
+
+  test('keeps indoor whites below pure white, like paper', () => {
+    const [r, g, b] = render.toScreenRGBA(Uint8Array.of(white), 1, 1, 1, 'room');
+    assert.ok(Math.max(r, g, b) <= 232 && Math.min(r, g, b) > 150, `white looks like ${[r, g, b]}`);
+  });
+
+  test('keeps blacks above pure black', () => {
+    const [r, g, b] = render.toScreenRGBA(Uint8Array.of(black), 1, 1, 1, 'room');
+    assert.ok(Math.min(r, g, b) >= 18, `black looks like ${[r, g, b]}`);
+  });
+
+  test('tints the backlight blue', () => {
+    const [r, , b] = render.toScreenRGBA(Uint8Array.of(white), 1, 1, 1, 'backlight');
+    assert.ok(b > r, `backlit white looks like ${r}, ${b}`);
+  });
+});

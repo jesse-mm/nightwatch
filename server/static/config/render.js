@@ -423,14 +423,77 @@
     return out;
   }
 
+  // ------------------------------------------------------------ screen look
+
+  /** Darkest and lightest a reflective screen shows, so whites look like paper. */
+  var SCREEN_BLACK = 18;
+  var SCREEN_WHITE = 232;
+  var screenCache = {};
+
+  /**
+   * RGB for every watch byte as that colour looks on a Pebble Time 2 screen in
+   * some light ('room', 'sun', 'backlight'), from the measured palettes. They're
+   * scaled to a paper-like range so the phone's own brightness doesn't decide
+   * how light or dark the preview looks; the colour shifts are kept.
+   */
+  function screenTable(light) {
+    if (screenCache[light]) {
+      return screenCache[light];
+    }
+    var t = PALETTES[light];
+    var lo = 255;
+    var hi = 0;
+    for (var i = 0; i < 64; i++) {
+      for (var c = 0; c < 3; c++) {
+        lo = Math.min(lo, t[i][c]);
+        hi = Math.max(hi, t[i][c]);
+      }
+    }
+    var span = Math.max(hi - lo, 1);
+    var out = new Uint8Array(256 * 3);
+    for (var k = 0; k < 64; k++) {
+      for (var ch = 0; ch < 3; ch++) {
+        out[GCOLOR[k] * 3 + ch] = Math.round(SCREEN_BLACK + (t[k][ch] - lo) * (SCREEN_WHITE - SCREEN_BLACK) / span);
+      }
+    }
+    screenCache[light] = out;
+    return out;
+  }
+
+  /**
+   * RGBA pixels (for a canvas) showing watch bytes as they look on the screen
+   * in `light` ('room', 'sun' or 'backlight'); anything else shows the exact
+   * colours the watch is sent.
+   */
+  function toScreenRGBA(bytes, w, h, stride, light) {
+    if (light === 'defined' || !PALETTES[light]) {
+      return toRGBA(bytes, w, h, stride);
+    }
+    var table = screenTable(light);
+    var out = new Uint8ClampedArray(w * h * 4);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var b = bytes[y * (stride || w) + x] | 0xC0;
+        var o = (y * w + x) * 4;
+        out[o] = table[b * 3];
+        out[o + 1] = table[b * 3 + 1];
+        out[o + 2] = table[b * 3 + 2];
+        out[o + 3] = 255;
+      }
+    }
+    return out;
+  }
+
   return {
     compose: compose,
+    toScreenRGBA: toScreenRGBA,
     dither: dither,
     framePixel: framePixel,
     frameBorder: frameBorder,
     fitArt: fitArt,
     gcolor8: gcolor8,
     toRGBA: toRGBA,
-    GCOLOR: GCOLOR
+    GCOLOR: GCOLOR,
+    PALETTES: PALETTES
   };
 }));

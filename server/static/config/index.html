@@ -22,7 +22,13 @@
         </div>
       </div>
     </figure>
-    <p class="preview-note" id="preview-note">Exact pixels your watch shows</p>
+    <div class="preview-light" role="radiogroup" aria-label="Show the preview as">
+      <label><input type="radio" name="previewLight" value="room"><span>Indoors</span></label>
+      <label><input type="radio" name="previewLight" value="sun"><span>Daylight</span></label>
+      <label><input type="radio" name="previewLight" value="backlight"><span>Backlight</span></label>
+      <label><input type="radio" name="previewLight" value="pixels"><span>Pixels</span></label>
+    </div>
+    <p class="preview-note" id="preview-note"></p>
   </header>
 
   <main>

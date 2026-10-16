@@ -69,7 +69,54 @@ canvas.height = watch.h;
 // The crop on screen: full-colour RGB from the server, before tuning and frame.
 let crop = null;
 
-/** Draw the watch's exact pixels for the current crop, tuning and frame. */
+// ---------------- how the preview is shown ----------------
+// A page-only preference (not a watch setting): show the watch's pixels as they
+// look on a Pebble Time 2 screen in some light (measured palettes), or exactly.
+
+const PREVIEW_NOTES = {
+  room: 'As it looks on a Pebble Time 2 indoors',
+  sun: 'As it looks on a Pebble Time 2 in daylight',
+  backlight: 'As it looks on a Pebble Time 2 with the backlight on',
+  pixels: 'The exact pixels sent to your watch',
+};
+
+function savedPreviewLight() {
+  try {
+    const saved = localStorage.getItem('tt-preview-light');
+    return saved in PREVIEW_NOTES ? saved : 'room';
+  } catch {
+    return 'room';
+  }
+}
+
+let previewLight = savedPreviewLight();
+
+function applyPreviewLight() {
+  $('preview-note').textContent = PREVIEW_NOTES[previewLight];
+  // The time is drawn in white on the watch: show the white this screen can show.
+  const [r, g, b] = window.TreasureRender.toScreenRGBA(Uint8Array.of(0xff), 1, 1, 1, previewLight);
+  screenEl.style.setProperty('--screen-white', `rgb(${r} ${g} ${b})`);
+  // Reflective screens show a fine pixel grid; exact pixels don't.
+  screenEl.classList.toggle('mip', previewLight !== 'pixels');
+}
+
+document.querySelectorAll('input[name=previewLight]').forEach((radio) => {
+  radio.checked = radio.value === previewLight;
+  radio.addEventListener('change', () => {
+    if (!radio.checked) return;
+    previewLight = radio.value;
+    try {
+      localStorage.setItem('tt-preview-light', previewLight);
+    } catch {
+      // Private mode: the choice just isn't remembered.
+    }
+    applyPreviewLight();
+    draw();
+  });
+});
+applyPreviewLight();
+
+/** Draw the watch's pixels for the current crop, tuning and frame. */
 function draw() {
   if (!crop) return;
   const bytes = window.TreasureRender.compose(crop.rgb, crop.w, crop.h, {
@@ -81,7 +128,7 @@ function draw() {
     frame: settings.frame,
     palette: settings.palette,
   });
-  const rgba = window.TreasureRender.toRGBA(bytes, watch.w, watch.h);
+  const rgba = window.TreasureRender.toScreenRGBA(bytes, watch.w, watch.h, watch.w, previewLight);
   canvas.getContext('2d').putImageData(new ImageData(rgba, watch.w, watch.h), 0, 0);
   canvas.hidden = false;
   $('screen-empty').hidden = true;

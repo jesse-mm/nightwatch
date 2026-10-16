@@ -128,6 +128,12 @@ dark varnish into a single black) and +10 % saturation, baked into the crop.
    or as a ring on round watches.
 4. *Bytes:* `0b11RRGGBB` per pixel, rows padded to the stride the watch reported.
 
+**Preview on the settings page:** the page shows the watch's bytes either
+exactly or as they look on a Pebble Time 2 screen (`toScreenRGBA`): each of the
+64 colours is replaced by its measured appearance indoors, in daylight or with
+the backlight (the pebble-color-optimizer palettes), scaled to a paper-like
+18–232 range so the phone's brightness doesn't decide, with a faint pixel grid.
+
 `render.js` was ported from the generator's former Rust implementation and is
 tested against its exact output (`watchface/test/`, `npm test`): dithering is
 byte-identical for all four tunings, frames pixel-identical on all four screens.

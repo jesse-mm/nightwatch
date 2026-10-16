@@ -151,7 +151,7 @@ a { color: inherit; text-underline-offset: 0.18em; }
 .ov-date { font-size: calc(var(--scale, 2) * 14px); }
 
 .preview-note {
-  margin: 0.9rem 0 0;
+  margin: 0.6rem 0 0;
   color: #d5dcd8;
   font-size: var(--step--1);
 }
@@ -586,3 +586,53 @@ main {
   color: #aaa;
   background: #1b1b1b;
 }
+
+/* ---------------- preview as: indoors / daylight / backlight / pixels ---------------- */
+
+.preview-light {
+  display: inline-flex;
+  margin-top: 1rem;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.preview-light label { position: relative; }
+
+.preview-light input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.preview-light span {
+  display: block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  color: #d5dcd8;
+  font-size: var(--step--1);
+}
+
+.preview-light input:checked + span {
+  background: rgba(255, 255, 255, 0.9);
+  color: #1b211f;
+  font-weight: 600;
+}
+
+.preview-light input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+/* The fine grid of a memory-in-pixel screen, one cell per watch pixel. */
+.screen.mip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.16) 0.5px, transparent 0.5px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.16) 0.5px, transparent 0.5px);
+  background-size: calc(var(--scale, 2) * 1px) calc(var(--scale, 2) * 1px);
+}
+
+.screen.mip .overlay { color: var(--screen-white, #fff); }

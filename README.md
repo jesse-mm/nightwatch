@@ -44,8 +44,10 @@ date that stay out of its way.
 - **Frames:** none (default), gold, wood or a gallery mat, drawn into the bitmap in
   exact Pebble colours. The painting is cropped to fit the opening.
 - **Live preview:** frame, colour tuning, framing and "Hang a different painting"
-  re-render the preview on the settings page straight away; nothing reaches the
-  watch until you save.
+  update the preview on the settings page straight away; nothing reaches the
+  watch until you save. The preview shows how the painting looks on a Pebble
+  Time 2 screen indoors, in daylight or with the backlight (from measured
+  palettes, with the screen's pixel grid), or the exact pixels.
 - **Featured:** the 365 Rijksmuseum paintings most read about on Wikipedia (page
   views over the last year, all languages), one for each day of the year in a
   fixed order. Topped up with other paintings when fewer have an article. The
