@@ -32,7 +32,7 @@ OPTIONS (environment variable in brackets):
   -h, --help            this text
 
 Other settings: RIJKS_SEARCH_URL, POOL_MAX_PAGES (80), PD_FALLBACK_YEAR (1850),
-SAFE_CROP_PX (20), SOURCE_SIZE (1200), WEBP_QUALITY (90), USER_AGENT, RAYON_NUM_THREADS.
+SAFE_CROP_PX (20), SOURCE_SIZE (1200), USER_AGENT, RAYON_NUM_THREADS.
 ";
 
 fn var<T: std::str::FromStr>(key: &str, default: T) -> T {
@@ -61,7 +61,6 @@ fn parse_args() -> Result<Options> {
         pd_fallback_year: var("PD_FALLBACK_YEAR", 1850),
         safe_crop_px: var("SAFE_CROP_PX", 20),
         source_size: var("SOURCE_SIZE", 1200),
-        webp_quality: var("WEBP_QUALITY", 90.0),
         contact: std::env::var("CONTACT")
             .ok()
             .filter(|c| !c.trim().is_empty()),

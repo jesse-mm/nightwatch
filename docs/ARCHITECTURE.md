@@ -3,13 +3,15 @@
 Two programs share one Rust library (`server/src/lib.rs`):
 
 - **Generator** (`treasure-trove-generator`): fetches paintings from the
-  Rijksmuseum politely, renders every variant for every supported watch, and
+  Rijksmuseum politely, cuts and tones a crop of each painting for every
+  supported screen, and
   records it all in `data/catalog.sqlite`. Run it monthly; it only redoes what
   changed. See [GENERATOR.md](GENERATOR.md).
 - **Server** (`treasure-trove-server`): reads the published snapshot
   (`serve.sqlite`) into plain in-memory maps and serves the files the generator
   made; it reloads when a new snapshot appears. It never calls an outside service and never
-  renders; an unknown painting or variant is a 404.
+  renders; an unknown painting is a 404. Colour tuning and frames are applied
+  on the phone and in the settings page (`render.js`).
 
 ## The daily flow
 
@@ -20,10 +22,12 @@ Two programs share one Rust library (`server/src/lib.rs`):
 2. The phone JS checks `localStorage`: if today's painting is already cached for
    this exact screen + framing + colour tuning, it sends it straight away.
    Otherwise it calls `GET /api/art/random?w=…&h=…&color=1&stride=…&round=…&fit=…&palette=…&frame=…`.
-3. The server picks a random painting that has that exact variant (optionally
-   from one era) and replies with metadata plus a `rawUrl`.
-4. The phone downloads the raw bytes (base64), caches them, and streams them to
+3. The server picks a painting (Featured for the day, random, optionally from
+   one era, or a pinned one) and replies with metadata plus an `rgbUrl`.
+4. The phone downloads the crop (raw RGB as base64, gzipped), caches it, renders
+   it with the colour tuning and frame (`render.js`), and streams the bytes to
    the watch in chunks (`ImgBegin`, `ImgOffset`+`ImgChunk` × n, `ImgEnd`).
+   Changing tuning or frame later just re-renders the cached crop.
 5. The watch `memcpy`s each chunk into the bitmap and redraws, so the painting
    appears row by row.
 6. At midnight the watch's tick handler sends Hello again with reason 2, and the
@@ -75,15 +79,19 @@ to 4 KB per app. That's why the phone caches it.
 - Wikidata/Wikipedia links come from one SPARQL query (`wiki.rs`) matching
   Rijksmuseum inventory numbers.
 
-## Rendering (generator)
+## Rendering: crops on the server, pixels on the phone
 
 ```
-master image (1200 px, local) ──▶ plan crop ──▶ cut + resize to the frame opening ──▶ crop.webp
-                                                     └──▶ tone ──▶ dither (× 4 tunings) ──▶ frame ──▶ variant.png
+generator:  master image (1200 px, local) ──▶ plan crop ──▶ cut + resize (Lanczos3) ──▶ tone ──▶ crop.png
+phone/page: crop ──▶ fit into the frame opening ──▶ dither (colour tuning) ──▶ frame ──▶ watch bytes
 ```
 
-Per painting: 4 screens × 2 framings × 4 frames = **32 crops**, each × 4 colour
-tunings = **128 variants**. Only outdated ones are rebuilt (`variants.rs` hashes).
+The generator makes **8 crops** per painting: 4 screens × Fill/Whole, full
+colour, toned, lossless PNG. Colour tuning and frames are applied by
+`server/static/config/render.js`, which the phone (PebbleKit JS) and the
+settings page both run, so one crop covers all 16 tuning × frame combinations,
+changing them never downloads anything, and the settings preview is exactly
+what the phone sends to the watch.
 
 **Crop planning** (`imaging.rs::plan_crop`), measured in *screen* pixels:
 
@@ -92,7 +100,7 @@ tunings = **128 variants**. Only outdated ones are rebuilt (`variants.rs` hashes
 | Shapes match | No crop |
 | Filling the screen would trim ≤ `SAFE_CROP_PX` (20) | Centre crop ("safe crop") |
 | Trims more, framing = Fill | **Smart crop** |
-| Trims more, framing = Whole painting | Letterbox with black bars |
+| Trims more, framing = Whole painting | Letterbox: the crop is the whole painting, smaller than the screen |
 
 **Smart crop** (`saliency.rs`): there is no public points-of-interest dataset for
 this collection (some Wikimedia Commons files have "depicts" regions, but coverage
@@ -103,43 +111,44 @@ slide a window along a 1-D energy profile. The window weights its centre a littl
 more (strongly on round screens, whose corners are hidden), and there's a gentle
 pull toward the painting's centre and, for tall works, toward the top.
 
-**From the local master:** the planned crop is cut from the 1200 px master and
-resized (Lanczos3) to the frame's opening. Because nothing is fetched per
-variant, a new frame, tuning or pipeline change only costs CPU time.
-
-**Tone and colour** (`imaging.rs::tone`, `palette.rs`): auto-levels (ignoring the
+**Tone** (`imaging.rs::tone`, in the generator): auto-levels (ignoring the
 extreme 0.5 %), a shadow lift (gamma 0.8, because the reflective screen crushes
-dark varnish into a single black), +10 % saturation, then Atkinson dithering to
-the Pebble palette. With colour tuning other than *Accurate*, pixels are matched
-against how each Pebble colour actually looks on the screen in that light, and the
-true Pebble colour with the same index is written (pebble-color-optimizer's idea).
+dark varnish into a single black) and +10 % saturation, baked into the crop.
 
-**Output layout:** the watch gets `0b11RRGGBB` bytes, rows padded to the stride
-it reported; the server unpacks them from the stored indexed PNG. (`imaging.rs`
-can also render 1-bit black-and-white, but no black-and-white variants are
-generated: only colour watches are supported for now.)
+**On the phone** (`render.js`, ES5 so it runs in PebbleKit JS):
+
+1. *Fit:* with a frame, the opening is smaller than the screen. A Fill crop is
+   scaled (bilinear) to cover the opening and trimmed evenly; a Whole crop is
+   scaled to fit inside it.
+2. *Dither:* Atkinson error diffusion to the Pebble palette. With colour tuning
+   other than *Accurate*, pixels are matched against how each Pebble colour
+   actually looks on the screen in that light, and the true Pebble colour with
+   the same index is written (pebble-color-optimizer's idea).
+3. *Frame:* drawn in exact palette colours (no dithering) around the opening,
+   or as a ring on round watches.
+4. *Bytes:* `0b11RRGGBB` per pixel, rows padded to the stride the watch reported.
+
+`render.js` was ported from the generator's former Rust implementation and is
+tested against its exact output (`watchface/test/`, `npm test`): dithering is
+byte-identical for all four tunings, frames pixel-identical on all four screens.
 
 ## Storage
 
 ```
 data/                                   (not in git)
-  catalog.sqlite                        paintings, eras, wiki links, crops, variants + input hashes
+  catalog.sqlite                        paintings, eras, wiki links, crops + input hashes
+  serve.sqlite                          the server's snapshot
   art/<key>/source.jpg                  master image, longest side 1200 px
-  art/<key>/crops/<crop>.webp           32: <w>x<h>-<rect|round>-<fill|whole>-<frame>
-  art/<key>/v/<variant>.png             128: <w>x<h>-c-s<w>-<rect|round>-<fill|whole>-<palette>[-<frame>]
+  art/<key>/c/<crop>.png                8: <w>x<h>-<rect|round>-<fill|whole>, toned RGB
 catalog/paintings.jsonl                 one painting per line: metadata, eras, links, hashes
 catalog/featured.json                   the Featured list, rank order
                                         (catalog/ is a release artifact: scripts/catalog.sh)
 ```
 
-Variants are **indexed PNGs** (palettized, as Pebble recommends for colour
-watches): lossless for 64-colour images and about a third of the raw bytes. The
-server turns one into the watch's raw `GColor8` bytes with a table lookup per
-pixel. Crops are lossy WebP (q90); they're for viewing only, since variants are
-always rendered from the master image.
-
-Bump `PIPELINE_VERSION` in `variants.rs` after changing crop or render output:
-the next generator run re-renders from the master images without fetching.
+About 0.6 MB of crops plus a 0.17 MB master per painting (~3.6 GB for the
+collection). Bump `PIPELINE_VERSION` in `variants.rs` after changing crop or
+tone output: the next generator run re-renders from the master images without
+fetching (and removes folders from the older layout).
 
 ## Message keys
 
@@ -155,15 +164,16 @@ the next generator run re-renders from the master images without fetching.
 
 | Endpoint | Returns |
 |---|---|
-| `GET /healthz` | `{ ok, paintings, stats }` (catalog counts) |
-| `GET /api/art/random?<screen>[&era=…]` | painting metadata + render info + `wiki` + `rawUrl`, `previewUrl`, `cropUrl` |
-| `GET /api/art/featured?day=N&<screen>` | the Featured painting for day *N* of the year (0-based, wraps) |
+| `GET /healthz` | `{ ok, paintings, eligible, pool, featured }` |
+| `GET /api/art/random?<screen>[&era=…]` | painting metadata + `render` (crop plan, width, height) + `wiki` + `cropUrl`, `rgbUrl` |
+| `GET /api/art/featured?day=N&<screen>` | the Featured painting for day *N* of the year (0-based, wraps; all paintings in turn if there's no Featured list) |
 | `GET /api/art/resolve?q=…` | `{ key }` for an object number, key or Rijksmuseum link (only servable paintings) |
-| `GET /api/art/{key}?<screen>` | same, for a specific painting (used when framing changes) |
-| `GET /api/art/{key}/raw?<screen>[&format=b64]` | watch bitmap bytes |
-| `GET /api/art/{key}/preview.png?<screen>` | the stored indexed PNG (exactly those pixels) |
-| `GET /api/art/{key}/crop.webp?<screen>` | the full-colour crop before dithering |
-| `GET /config/` | settings page |
+| `GET /api/art/{key}?<screen>` | same as random, for a specific painting |
+| `GET /api/art/{key}/crop.png?<screen>` | the crop, toned full-colour PNG (settings page) |
+| `GET /api/art/{key}/rgb?<screen>[&format=b64]` | the same pixels as raw RGB, width × height × 3 (phone) |
+| `GET /config/` | settings page (incl. `render.js`) |
 
-`<screen>` = `w, h, color=1, stride, round (0/1), fit (fill/whole), palette (defined/sun/room/backlight), frame (none/gold/wood/gallery)`.
-`era` = `any, pre1600, 1600s, 1700s, 1800s, 1900s`. Supported screens: 144×168, 180×180 round, 200×228, 260×260 round.
+`<screen>` = `w, h, round (0/1), fit (fill/whole)`; other parameters are
+ignored (tuning and frame are applied on the phone). `era` = `any, pre1600,
+1600s, 1700s, 1800s, 1900s`. Supported screens: 144×168, 180×180 round,
+200×228, 260×260 round. JSON and base64 responses are gzip-compressed.

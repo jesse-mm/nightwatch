@@ -1,24 +1,22 @@
-//! Turning a painting into exactly the pixels a Pebble screen wants.
+//! Turning a painting into the crop a Pebble screen shows.
 //!
-//! Pipeline:  plan crop  →  cut it from the local master at the exact size  →  tone
-//! adjustments  →  dither to the Pebble palette  →  pack into the watch's raw
-//! bitmap layout (so the watch can `memcpy` it without decoding anything).
+//! Pipeline (generator):  plan crop  →  cut it from the local master at the
+//! screen's exact size  →  tone adjustments  →  lossless PNG. Colour tuning,
+//! dithering and frames happen on the phone and in the settings page
+//! (`server/static/config/render.js`), so one crop serves every combination.
 
 use image::{imageops::FilterType, Rgb, RgbImage};
 use serde::{Deserialize, Serialize};
 
-use crate::frame::Frame;
-use crate::palette::{
-    defined_index, defined_rgb, dither_color, dither_mono, gcolor8, MatchPalette, Reference,
-};
 use crate::saliency::best_window;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Fit {
     /// Fill the whole screen; crop smartly if the shapes differ.
+    #[default]
     Fill,
-    /// Show the whole painting, with black bars if needed.
+    /// Show the whole painting, with bars if needed.
     Whole,
 }
 
@@ -33,57 +31,13 @@ impl Fit {
     }
 }
 
-/// What the watch told us about its screen.
-#[derive(Clone, Copy, Debug)]
+/// A screen and how the painting fills it: what one crop is made for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Target {
     pub w: u32,
     pub h: u32,
-    pub color: bool,
-    /// Bytes per bitmap row on the watch (1-bit rows are padded).
-    pub stride: u32,
     pub round: bool,
     pub fit: Fit,
-    /// Which light the colours are tuned for (see palette.rs).
-    pub reference: Reference,
-    pub frame: Frame,
-}
-
-impl Target {
-    pub fn cache_name(&self) -> String {
-        // Unframed renders keep their original names so existing caches stay valid.
-        let frame = match self.frame {
-            Frame::None => String::new(),
-            f => format!("-{}", f.name()),
-        };
-        format!(
-            "{}x{}-{}-s{}-{}-{}-{}{}",
-            self.w,
-            self.h,
-            if self.color { "c" } else { "bw" },
-            self.stride,
-            if self.round { "round" } else { "rect" },
-            match self.fit {
-                Fit::Fill => "fill",
-                Fit::Whole => "whole",
-            },
-            self.reference.name(),
-            frame
-        )
-    }
-
-    /// The opening inside the frame: what the painting is cropped and sized for.
-    pub fn opening(&self) -> Target {
-        let b = self.frame.border(self.w, self.h);
-        Target {
-            w: self.w - 2 * b,
-            h: self.h - 2 * b,
-            ..*self
-        }
-    }
-
-    pub fn raw_len(&self) -> usize {
-        (self.stride * self.h) as usize
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -246,172 +200,75 @@ fn tone(img: &RgbImage) -> Vec<[f32; 3]> {
         .collect()
 }
 
-pub struct Rendered {
-    /// Bytes laid out exactly like the watch's `GBitmap` (rows of `stride` bytes).
-    pub raw: Vec<u8>,
-    /// What the watch will show, as a normal image (for the settings page).
-    pub preview: RgbImage,
-}
-
-/// Dither `art` (inner size), place it centred on a screen of t.w x t.h, and
-/// draw the frame around it.
-pub fn render(art: &RgbImage, t: &Target) -> Rendered {
-    let pal = &MatchPalette::new(t.reference);
-    let (aw, ah) = (art.width() as usize, art.height() as usize);
-    let ox = (t.w as usize - aw) / 2;
-    let oy = (t.h as usize - ah) / 2;
-    let toned = tone(art);
-
-    let mut raw = vec![0u8; t.raw_len()];
-    let bg = t.frame.background();
-    let mut preview = RgbImage::from_pixel(t.w, t.h, Rgb(bg));
-    let stride = t.stride as usize;
-
-    if t.color {
-        // Background bytes for any letterbox bars.
-        for b in &mut raw {
-            *b = gcolor8(defined_index(bg));
-        }
-        let mut buf: Vec<f32> = toned.iter().flatten().copied().collect();
-        let idx = dither_color(&mut buf, aw, ah, pal);
-        for y in 0..ah {
-            for x in 0..aw {
-                let i = idx[y * aw + x];
-                let (sx, sy) = (x + ox, y + oy);
-                raw[sy * stride + sx] = gcolor8(i);
-                preview.put_pixel(sx as u32, sy as u32, Rgb(defined_rgb(i)));
-            }
-        }
-        draw_frame(t, |x, y, c| {
-            raw[y * stride + x] = gcolor8(defined_index(c));
-            preview.put_pixel(x as u32, y as u32, Rgb(c));
-        });
-    } else {
-        if bg != [0, 0, 0] {
-            for y in 0..t.h as usize {
-                for x in 0..t.w as usize {
-                    raw[y * stride + x / 8] |= 1 << (x % 8);
-                }
-            }
-        }
-        let mut buf: Vec<f32> = toned
-            .iter()
-            .map(|c| 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2])
-            .collect();
-        let bits = dither_mono(&mut buf, aw, ah);
-        for y in 0..ah {
-            for x in 0..aw {
-                if bits[y * aw + x] {
-                    let (sx, sy) = (x + ox, y + oy);
-                    // Pebble 1-bit bitmaps: least-significant bit is the leftmost
-                    // pixel, 1 = white.
-                    raw[sy * stride + sx / 8] |= 1 << (sx % 8);
-                    preview.put_pixel(sx as u32, sy as u32, Rgb([255, 255, 255]));
-                } else if bg != [0, 0, 0] {
-                    let (sx, sy) = (x + ox, y + oy);
-                    raw[sy * stride + sx / 8] &= !(1 << (sx % 8));
-                    preview.put_pixel(sx as u32, sy as u32, Rgb([0, 0, 0]));
-                }
-            }
-        }
-        draw_frame(t, |x, y, c| {
-            // Ordered dither keeps the frame's shading as a fine, regular texture.
-            let l = 0.299 * c[0] as f32 + 0.587 * c[1] as f32 + 0.114 * c[2] as f32;
-            let white = l > BAYER4[y % 4][x % 4];
-            let bit = 1 << (x % 8);
-            if white {
-                raw[y * stride + x / 8] |= bit;
-            } else {
-                raw[y * stride + x / 8] &= !bit;
-            }
-            preview.put_pixel(
-                x as u32,
-                y as u32,
-                Rgb(if white { [255; 3] } else { [0; 3] }),
-            );
-        });
+/// Tone a crop for the screen (see `tone`), rounded back to 8-bit RGB.
+pub fn tone_image(img: &RgbImage) -> RgbImage {
+    let toned = tone(img);
+    let mut out = RgbImage::new(img.width(), img.height());
+    for (px, c) in out.pixels_mut().zip(toned) {
+        *px = Rgb(c.map(|v| v.round().clamp(0.0, 255.0) as u8));
     }
-    Rendered { raw, preview }
-}
-
-/// 4x4 Bayer thresholds scaled to 0..255.
-const BAYER4: [[f32; 4]; 4] = [
-    [8.0, 136.0, 40.0, 168.0],
-    [200.0, 72.0, 232.0, 104.0],
-    [56.0, 184.0, 24.0, 152.0],
-    [248.0, 120.0, 216.0, 88.0],
-];
-
-fn draw_frame(t: &Target, mut put: impl FnMut(usize, usize, [u8; 3])) {
-    if t.frame == Frame::None {
-        return;
-    }
-    for y in 0..t.h {
-        for x in 0..t.w {
-            if let Some(c) = t.frame.pixel(x, y, t.w, t.h, t.round) {
-                put(x as usize, y as usize, c);
-            }
-        }
-    }
+    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn target(w: u32, h: u32, color: bool) -> Target {
-        let stride = if color { w } else { w.div_ceil(32) * 4 };
+    fn target(w: u32, h: u32) -> Target {
         Target {
             w,
             h,
-            color,
-            stride,
             round: false,
             fit: Fit::Fill,
-            reference: Reference::Defined,
-            frame: Frame::None,
         }
     }
 
     #[test]
-    fn almost_fitting_image_gets_safe_crop() {
-        // 144x168 screen; 150x168 image overflows by 6px → safe.
+    fn plan_crop_trims_an_almost_fitting_image_evenly() {
+        // 144x168 screen; 150x168 image overflows by 6px → safe crop.
         let img = RgbImage::from_pixel(150, 168, Rgb([100, 50, 20]));
-        let plan = plan_crop(&img, &target(144, 168, true), 20);
-        assert_eq!(plan.mode, CropMode::Safe);
+        assert_eq!(plan_crop(&img, &target(144, 168), 20).mode, CropMode::Safe);
     }
 
     #[test]
-    fn very_wide_image_gets_smart_crop() {
+    fn plan_crop_picks_a_region_of_a_very_wide_image() {
         let img = RgbImage::from_pixel(1200, 400, Rgb([100, 50, 20]));
-        let plan = plan_crop(&img, &target(144, 168, true), 20);
-        assert_eq!(plan.mode, CropMode::Smart);
-        assert!((plan.h - 1.0).abs() < 1e-9);
+        assert_eq!(plan_crop(&img, &target(144, 168), 20).mode, CropMode::Smart);
     }
 
     #[test]
-    fn raw_sizes_match_watch_layout() {
-        let art = RgbImage::from_pixel(144, 168, Rgb([200, 200, 200]));
-        let c = render(&art, &target(144, 168, true));
-        assert_eq!(c.raw.len(), 144 * 168);
-        let bw = render(&art, &target(144, 168, false));
-        assert_eq!(bw.raw.len(), 20 * 168);
-    }
-
-    #[test]
-    fn framed_render_keeps_size_and_draws_frame() {
+    fn plan_crop_letterboxes_when_showing_the_whole_painting() {
+        let img = RgbImage::from_pixel(1200, 400, Rgb([100, 50, 20]));
         let t = Target {
-            frame: Frame::Gold,
-            ..target(144, 168, true)
+            fit: Fit::Whole,
+            ..target(144, 168)
         };
-        let o = t.opening();
-        let b = Frame::Gold.border(144, 168);
-        assert_eq!((o.w, o.h), (144 - 2 * b, 168 - 2 * b));
-        let art = RgbImage::from_pixel(o.w, o.h, Rgb([0, 0, 255]));
-        let r = render(&art, &t);
-        assert_eq!(r.raw.len(), 144 * 168);
-        assert_ne!(r.preview.get_pixel(1, 84).0, r.preview.get_pixel(72, 84).0);
-        assert!(t.cache_name().ends_with("-gold"));
-        assert!(!target(144, 168, true).cache_name().contains("none"));
+        assert_eq!(plan_crop(&img, &t, 20).mode, CropMode::Letterbox);
+    }
+
+    #[test]
+    fn crop_locally_makes_the_planned_size() {
+        let img = RgbImage::from_pixel(1200, 400, Rgb([100, 50, 20]));
+        let plan = plan_crop(&img, &target(144, 168), 20);
+        assert_eq!(crop_locally(&img, &plan).dimensions(), (144, 168));
+    }
+
+    #[test]
+    fn tone_image_keeps_the_size() {
+        let img = RgbImage::from_fn(30, 20, |x, y| Rgb([(x * 8) as u8, (y * 12) as u8, 90]));
+        assert_eq!(tone_image(&img).dimensions(), (30, 20));
+    }
+
+    #[test]
+    fn tone_image_stretches_a_dull_image_to_full_range() {
+        let img = RgbImage::from_fn(64, 1, |x, _| {
+            // 60..186: a span the 2.5x gain cap can stretch to the full range.
+            let v = 60 + 2 * x as u8;
+            Rgb([v, v, v])
+        });
+        let toned = tone_image(&img);
+        let lo = toned.pixels().map(|p| p.0[0]).min().unwrap();
+        let hi = toned.pixels().map(|p| p.0[0]).max().unwrap();
+        assert!(lo < 20 && hi > 235, "range {lo}..{hi}");
     }
 }

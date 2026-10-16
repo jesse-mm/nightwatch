@@ -1,18 +1,21 @@
 //! HTTP layer (axum). TS analogy: an Express router where each handler receives
 //! already-parsed query params (`Query<T>`) and shared state (`State<T>`).
 //!
-//! Everything is answered from the in-memory snapshot and the generator's files:
+//! Everything is answered from the in-memory snapshot and the generator's files.
+//! The server hands out full-colour crops; the phone and the settings page apply
+//! the colour tuning and frame themselves (`static/config/render.js`).
 //!
-//! GET /healthz                                          → catalog counts
-//! GET /api/art/random?w&h&color&stride&round&fit&palette&frame[&era] → random painting, JSON
+//! `<screen>` = `w, h, round (0/1), fit (fill/whole)`
+//!
+//! GET /healthz                                  → catalog counts
+//! GET /api/art/random?<screen>[&era=…]          → random painting, JSON
 //!     era: any | pre1600 | 1600s | 1700s | 1800s | 1900s
-//! GET /api/art/featured?day=N&…same…                     → the Featured painting for day N (0-based)
-//! GET /api/art/resolve?q=SK-C-5                          → { key } for an object number, key or link
-//! GET /api/art/{key}?…same…                             → one painting, JSON
-//! GET /api/art/{key}/raw?…same…[&format=b64]            → watch bitmap bytes
-//! GET /api/art/{key}/preview.png?…same…                 → the stored indexed PNG
-//! GET /api/art/{key}/crop.webp?…same…                   → full-colour crop before dithering
-//! GET /config/                                          → settings page (static files)
+//! GET /api/art/featured?day=N&<screen>          → the Featured painting for day N (0-based)
+//! GET /api/art/resolve?q=SK-C-5                 → { key } for an object number, key or link
+//! GET /api/art/{key}?<screen>                   → one painting, JSON
+//! GET /api/art/{key}/crop.png?<screen>          → the crop: toned full-colour PNG
+//! GET /api/art/{key}/rgb?<screen>[&format=b64]  → the same pixels as raw RGB (for the phone)
+//! GET /config/                                  → settings page (static files)
 
 use std::sync::{Arc, PoisonError, RwLock};
 
@@ -28,10 +31,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use treasure_trove::{
     era::Era,
-    frame::Frame,
     imaging::{CropPlan, Fit, Target},
-    palette::Reference,
-    png8,
     rijks::ArtMeta,
     snapshot::Snapshot,
     variants,
@@ -72,9 +72,8 @@ pub fn router(state: Shared) -> Router {
         .route("/api/art/featured", get(featured))
         .route("/api/art/resolve", get(resolve))
         .route("/api/art/{key}", get(by_key))
-        .route("/api/art/{key}/raw", get(raw))
-        .route("/api/art/{key}/preview.png", get(preview))
-        .route("/api/art/{key}/crop.webp", get(crop))
+        .route("/api/art/{key}/crop.png", get(crop_png))
+        .route("/api/art/{key}/rgb", get(crop_rgb))
         .with_state(state)
 }
 
@@ -102,72 +101,43 @@ fn bad_request(msg: impl Into<String>) -> AppError {
 fn not_generated() -> AppError {
     AppError(
         StatusCode::NOT_FOUND,
-        "this painting or variant has not been generated".into(),
+        "this painting has not been generated".into(),
     )
 }
 
 // ---------- query parsing ----------
 
+/// The screen and fit a crop is for. Other parameters (colour tuning, frame,
+/// stride) are ignored: the phone applies those itself.
 #[derive(Deserialize)]
 pub struct TargetQuery {
     w: u32,
     h: u32,
-    color: Option<u8>,
-    stride: Option<u32>,
     round: Option<u8>,
     fit: Option<Fit>,
-    palette: Option<String>,
-    frame: Option<Frame>,
     format: Option<String>,
 }
 
 impl TargetQuery {
-    /// The generated variant to look up. Variants are stored with stride = w;
-    /// `stride()` gives the row stride to unpack the bytes to.
-    fn target(&self, default_ref: Reference) -> Result<Target, AppError> {
-        if self.color.unwrap_or(1) != 1 {
-            return Err(bad_request("only colour watches are supported"));
-        }
-        let t = Target {
-            w: self.w,
-            h: self.h,
-            color: true,
-            stride: self.w,
-            round: self.round.unwrap_or(0) == 1,
-            fit: self.fit.unwrap_or(Fit::Fill),
-            reference: match &self.palette {
-                Some(p) => p.parse().map_err(bad_request)?,
-                None => default_ref,
-            },
-            frame: self.frame.unwrap_or_default(),
-        };
+    fn target(&self) -> Result<Target, AppError> {
+        let t = variants::target(
+            (self.w, self.h, self.round.unwrap_or(0) == 1),
+            self.fit.unwrap_or_default(),
+        );
         if !variants::SCREENS.contains(&(t.w, t.h, t.round)) {
             return Err(bad_request(format!("unsupported screen {}x{}", t.w, t.h)));
         }
         Ok(t)
     }
-
-    fn stride(&self) -> Result<u32, AppError> {
-        let s = self.stride.unwrap_or(self.w);
-        if s < self.w || s > 1024 {
-            return Err(bad_request(format!(
-                "stride must be between {} and 1024",
-                self.w
-            )));
-        }
-        Ok(s)
-    }
 }
 
-fn query_string(t: &Target, stride: u32) -> String {
+fn query_string(t: &Target) -> String {
     format!(
-        "w={}&h={}&color=1&stride={stride}&round={}&fit={}&palette={}&frame={}",
+        "w={}&h={}&round={}&fit={}",
         t.w,
         t.h,
-        t.round as u8,
-        t.fit.name(),
-        t.reference.name(),
-        t.frame.name()
+        u8::from(t.round),
+        t.fit.name()
     )
 }
 
@@ -176,13 +146,15 @@ pub struct EraQuery {
     era: Option<Era>,
 }
 
-// ---------- handlers ----------
+// ---------- painting JSON ----------
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RenderInfo {
     crop: CropPlan,
-    raw_len: usize,
+    /// Size of the crop image (the screen for "fill", smaller for "whole").
+    width: u32,
+    height: u32,
 }
 
 #[derive(Serialize)]
@@ -194,26 +166,25 @@ struct ArtResponse<'a> {
     /// Wikidata item and Wikipedia articles, when Wikidata knows the painting.
     #[serde(skip_serializing_if = "Option::is_none")]
     wiki: Option<&'a WikiLinks>,
-    raw_url: String,
-    preview_url: String,
     crop_url: String,
+    rgb_url: String,
     attribution: &'static str,
 }
 
 const ATTRIBUTION: &str =
     "Artwork data and images: Rijksmuseum, Amsterdam, via the Rijksmuseum data services (https://data.rijksmuseum.nl/about/). Treasure Trove is not affiliated with the Rijksmuseum.";
 
-fn respond(snap: &Snapshot, key: &str, t: &Target, stride: u32) -> Result<Response, AppError> {
+fn respond(snap: &Snapshot, key: &str, t: &Target) -> Result<Response, AppError> {
     let s = snap.served(key, t).ok_or_else(not_generated)?;
-    let qs = query_string(t, stride);
+    let qs = query_string(t);
     let key = &s.painting.meta.key;
     let body = ArtResponse {
-        raw_url: format!("/api/art/{key}/raw?{qs}"),
-        preview_url: format!("/api/art/{key}/preview.png?{qs}"),
-        crop_url: format!("/api/art/{key}/crop.webp?{qs}"),
+        crop_url: format!("/api/art/{key}/crop.png?{qs}"),
+        rgb_url: format!("/api/art/{key}/rgb?{qs}"),
         render: RenderInfo {
             crop: *s.plan,
-            raw_len: (stride * t.h) as usize,
+            width: s.plan.inner_w,
+            height: s.plan.inner_h,
         },
         wiki: s.painting.wiki.as_ref(),
         meta: &s.painting.meta,
@@ -244,8 +215,7 @@ async fn featured(
     Query(q): Query<TargetQuery>,
     Query(f): Query<FeaturedQuery>,
 ) -> Result<Response, AppError> {
-    let t = q.target(state.cfg.reference)?;
-    let stride = q.stride()?;
+    let t = q.target()?;
     let snap = state.snapshot();
     let key = snap.featured(f.day).ok_or_else(|| {
         AppError(
@@ -253,7 +223,7 @@ async fn featured(
             "no featured paintings generated yet".into(),
         )
     })?;
-    respond(&snap, key, &t, stride)
+    respond(&snap, key, &t)
 }
 
 #[derive(Deserialize)]
@@ -284,8 +254,7 @@ async fn random(
     Query(q): Query<TargetQuery>,
     Query(e): Query<EraQuery>,
 ) -> Result<Response, AppError> {
-    let t = q.target(state.cfg.reference)?;
-    let stride = q.stride()?;
+    let t = q.target()?;
     let era = e.era.unwrap_or_default();
     let snap = state.snapshot();
     let key = snap.random(era).ok_or_else(|| {
@@ -295,7 +264,7 @@ async fn random(
         };
         AppError(StatusCode::NOT_FOUND, msg)
     })?;
-    respond(&snap, key, &t, stride)
+    respond(&snap, key, &t)
 }
 
 async fn by_key(
@@ -303,44 +272,57 @@ async fn by_key(
     Path(key): Path<String>,
     Query(q): Query<TargetQuery>,
 ) -> Result<Response, AppError> {
-    let t = q.target(state.cfg.reference)?;
-    let stride = q.stride()?;
-    respond(&state.snapshot(), &key, &t, stride)
+    respond(&state.snapshot(), &key, &q.target()?)
 }
 
-/// Path of a variant (or its crop) for this request, if generated.
-fn file_path(
-    state: &AppState,
-    key: &str,
-    t: &Target,
-    crop: bool,
-) -> Result<std::path::PathBuf, AppError> {
-    let snap = state.snapshot();
-    let s = snap.served(key, t).ok_or_else(not_generated)?;
-    Ok(if crop { s.crop_path } else { s.variant_path })
-}
+// ---------- crop files ----------
 
 const IMMUTABLE: &str = "public, max-age=31536000, immutable";
 
-async fn read_file(path: std::path::PathBuf) -> Result<Vec<u8>, AppError> {
+async fn read_crop(state: &AppState, key: &str, t: &Target) -> Result<Vec<u8>, AppError> {
+    let path = {
+        let snap = state.snapshot();
+        snap.served(key, t).ok_or_else(not_generated)?.crop_path
+    };
     tokio::fs::read(&path).await.map_err(|e| {
         tracing::warn!(path = %path.display(), error = %e, "file in catalog is missing");
         not_generated()
     })
 }
 
-async fn raw(
+async fn crop_png(
     State(state): State<Shared>,
     Path(key): Path<String>,
     Query(q): Query<TargetQuery>,
 ) -> Result<Response, AppError> {
-    let t = q.target(state.cfg.reference)?;
-    let stride = q.stride()?;
-    let png = read_file(file_path(&state, &key, &t, false)?).await?;
-    let (_, _, bytes) = png8::decode_to_raw(&png, stride)?;
+    let png = read_crop(&state, &key, &q.target()?).await?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/png"),
+            (header::CACHE_CONTROL, IMMUTABLE),
+        ],
+        png,
+    )
+        .into_response())
+}
+
+/// The crop as raw RGB (width × height × 3 bytes, from the JSON's `render`).
+/// PebbleKit JS can't decode PNG, and can't always read binary responses, so
+/// `format=b64` sends it as base64 text (gzip-compressed on the way).
+async fn crop_rgb(
+    State(state): State<Shared>,
+    Path(key): Path<String>,
+    Query(q): Query<TargetQuery>,
+) -> Result<Response, AppError> {
+    let png = read_crop(&state, &key, &q.target()?).await?;
+    let rgb = tokio::task::spawn_blocking(move || {
+        image::load_from_memory(&png).map(|img| img.to_rgb8().into_raw())
+    })
+    .await
+    .map_err(|e| AppError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| anyhow::anyhow!("decoding crop: {e}"))?;
     if q.format.as_deref() == Some("b64") {
-        // PebbleKit JS can't always read binary XHR responses; text is universal.
-        let text = base64::engine::general_purpose::STANDARD.encode(bytes);
+        let text = base64::engine::general_purpose::STANDARD.encode(rgb);
         return Ok((
             [
                 (header::CONTENT_TYPE, "text/plain"),
@@ -355,41 +337,7 @@ async fn raw(
             (header::CONTENT_TYPE, "application/octet-stream"),
             (header::CACHE_CONTROL, IMMUTABLE),
         ],
-        bytes,
-    )
-        .into_response())
-}
-
-async fn preview(
-    State(state): State<Shared>,
-    Path(key): Path<String>,
-    Query(q): Query<TargetQuery>,
-) -> Result<Response, AppError> {
-    let t = q.target(state.cfg.reference)?;
-    let png = read_file(file_path(&state, &key, &t, false)?).await?;
-    Ok((
-        [
-            (header::CONTENT_TYPE, "image/png"),
-            (header::CACHE_CONTROL, IMMUTABLE),
-        ],
-        png,
-    )
-        .into_response())
-}
-
-async fn crop(
-    State(state): State<Shared>,
-    Path(key): Path<String>,
-    Query(q): Query<TargetQuery>,
-) -> Result<Response, AppError> {
-    let t = q.target(state.cfg.reference)?;
-    let webp = read_file(file_path(&state, &key, &t, true)?).await?;
-    Ok((
-        [
-            (header::CONTENT_TYPE, "image/webp"),
-            (header::CACHE_CONTROL, IMMUTABLE),
-        ],
-        webp,
+        rgb,
     )
         .into_response())
 }

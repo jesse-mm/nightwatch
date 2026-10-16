@@ -30,11 +30,10 @@ pub struct Painting {
     pub wiki: Option<WikiLinks>,
 }
 
-/// Everything needed to answer for one painting + variant.
+/// Everything needed to answer for one painting + crop.
 pub struct Served<'a> {
     pub painting: &'a Painting,
     pub plan: &'a CropPlan,
-    pub variant_path: PathBuf,
     pub crop_path: PathBuf,
 }
 
@@ -141,14 +140,19 @@ impl Snapshot {
     }
 
     /// Featured painting for a day of the year (0-based); wraps around, so day
-    /// 365 of a leap year and partial lists still get a painting.
+    /// 365 of a leap year and partial lists still get a painting. Without a
+    /// Featured list (no `featured.json` yet), every ready painting takes a
+    /// turn in key order, so the phone's default never comes back empty.
     pub fn featured(&self, day: usize) -> Option<&str> {
-        if self.featured.is_empty() {
+        let list = if self.featured.is_empty() {
+            &self.any
+        } else {
+            &self.featured
+        };
+        if list.is_empty() {
             return None;
         }
-        self.featured
-            .get(day % self.featured.len())
-            .map(String::as_str)
+        list.get(day % list.len()).map(String::as_str)
     }
 
     pub fn featured_len(&self) -> usize {
@@ -186,19 +190,20 @@ impl Snapshot {
         keys?.choose(&mut rand::rng()).map(String::as_str)
     }
 
-    /// File names follow from the variant (see variants.rs).
-    pub fn served(&self, key: &str, variant: &Target) -> Option<Served<'_>> {
+    /// The crop for a screen + fit; its file name follows from it (variants.rs).
+    pub fn served(&self, key: &str, target: &Target) -> Option<Served<'_>> {
         let painting = self.paintings.get(key)?;
-        let crop = variants::crop_name(variant);
+        let crop = variants::crop_name(target);
         let plan = painting.plans.get(&crop)?;
-        let dir = self.root.join("art").join(&painting.meta.key);
         Some(Served {
             painting,
             plan,
-            variant_path: dir
-                .join("v")
-                .join(format!("{}.png", variants::variant_name(variant))),
-            crop_path: dir.join("crops").join(format!("{crop}.webp")),
+            crop_path: self
+                .root
+                .join("art")
+                .join(&painting.meta.key)
+                .join("c")
+                .join(format!("{crop}.png")),
         })
     }
 }
@@ -207,23 +212,16 @@ impl Snapshot {
 mod tests {
     use super::*;
     use crate::{
-        catalog::testing::{published, TempDir, CROP, VARIANT},
-        frame::Frame,
+        catalog::testing::{published, TempDir, CROP},
         imaging::Fit,
-        palette::Reference,
     };
 
     fn variant() -> Target {
-        variants::target(
-            (144, 168, false),
-            Fit::Fill,
-            Frame::None,
-            Reference::Defined,
-        )
+        variants::target((144, 168, false), Fit::Fill)
     }
 
     #[test]
-    fn random_skips_paintings_still_missing_variants() {
+    fn random_skips_paintings_still_missing_crops() {
         let dir = TempDir::new("snap-incomplete");
         published(&dir, 2);
 
@@ -261,23 +259,6 @@ mod tests {
     }
 
     #[test]
-    fn served_derives_the_variant_path_from_its_name() {
-        let dir = TempDir::new("snap-variant-path");
-        published(&dir, 1);
-        let snap = Snapshot::load(dir.path()).unwrap();
-
-        let served = snap.served("1", &variant()).unwrap();
-
-        assert!(
-            served
-                .variant_path
-                .ends_with(format!("art/1/v/{VARIANT}.png")),
-            "{:?}",
-            served.variant_path
-        );
-    }
-
-    #[test]
     fn served_derives_the_crop_path_from_its_name() {
         let dir = TempDir::new("snap-crop-path");
         published(&dir, 1);
@@ -286,9 +267,7 @@ mod tests {
         let served = snap.served("1", &variant()).unwrap();
 
         assert!(
-            served
-                .crop_path
-                .ends_with(format!("art/1/crops/{CROP}.webp")),
+            served.crop_path.ends_with(format!("art/1/c/{CROP}.png")),
             "{:?}",
             served.crop_path
         );
@@ -326,11 +305,11 @@ mod tests {
     }
 
     #[test]
-    fn featured_is_none_when_nothing_is_featured() {
+    fn featured_falls_back_to_all_paintings_without_a_list() {
         let dir = TempDir::new("snap-featured-none");
         published(&dir, 1);
 
-        assert_eq!(Snapshot::load(dir.path()).unwrap().featured(0), None);
+        assert_eq!(Snapshot::load(dir.path()).unwrap().featured(0), Some("1"));
     }
 
     #[test]

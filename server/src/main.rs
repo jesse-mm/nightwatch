@@ -13,7 +13,9 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
+use tower_http::{
+    compression::CompressionLayer, cors::CorsLayer, services::ServeDir, trace::TraceLayer,
+};
 use tracing_subscriber::EnvFilter;
 use treasure_trove::{catalog::Catalog, snapshot::Snapshot};
 
@@ -53,6 +55,8 @@ async fn main() -> anyhow::Result<()> {
 
     let app = routes::router(state)
         .fallback_service(ServeDir::new(&cfg.static_dir))
+        // Mostly for the base64 crops the phone downloads.
+        .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
 

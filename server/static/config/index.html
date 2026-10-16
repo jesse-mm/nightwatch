@@ -14,7 +14,7 @@
   <header class="wall">
     <figure class="frame" id="frame">
       <div class="screen" id="screen">
-        <img id="art" alt="" hidden>
+        <canvas id="art" role="img" aria-label="" hidden></canvas>
         <p class="screen-empty" id="screen-empty">Today’s painting appears here once your watch has loaded it.</p>
         <div class="overlay" id="overlay" aria-hidden="true">
           <span class="ov-date" id="ov-date"></span>
@@ -224,6 +224,7 @@
     <button type="button" class="save" id="save">Save to watch</button>
   </div>
 
+  <script src="render.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

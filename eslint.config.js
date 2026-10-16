@@ -23,6 +23,30 @@ export default defineConfig([
         console: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        Float32Array: 'readonly',
+        Uint8Array: 'readonly',
+        Uint8ClampedArray: 'readonly',
+      },
+    },
+    rules: {
+      'no-var': 'off',
+      eqeqeq: 'error',
+    },
+  },
+
+  // The shared renderer runs in PebbleKit JS too, so it's held to ES5 (with the
+  // typed arrays every runtime has). Loaded as CommonJS or a plain <script>.
+  {
+    files: ['server/static/config/render.js'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 5,
+      sourceType: 'script',
+      globals: {
+        module: 'readonly',
+        Float32Array: 'readonly',
+        Uint8Array: 'readonly',
+        Uint8ClampedArray: 'readonly',
       },
     },
     rules: {
@@ -34,6 +58,7 @@ export default defineConfig([
   // Settings page: a modern phone webview.
   {
     files: ['server/static/**/*.js'],
+    ignores: ['server/static/config/render.js'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,
@@ -44,6 +69,13 @@ export default defineConfig([
       eqeqeq: 'error',
       'prefer-const': 'error',
     },
+  },
+
+  // Node tests (npm test).
+  {
+    files: ['watchface/test/**/*.js'],
+    extends: [js.configs.recommended],
+    languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: globals.node },
   },
 
   // This config file itself.

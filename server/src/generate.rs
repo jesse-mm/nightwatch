@@ -30,15 +30,14 @@ use image::RgbImage;
 use rayon::prelude::*;
 
 use crate::{
-    catalog::{key_of, Catalog, Table},
+    catalog::{key_of, Catalog},
     era::{self, Era},
     featured,
-    imaging::{self, CropPlan},
-    png8, popularity,
+    imaging::{self, CropPlan, Target},
+    popularity,
     rijks::Rijks,
     throttle::Throttle,
-    variants::{self, CropSet},
-    wiki,
+    variants, wiki,
 };
 
 #[derive(Clone, Debug)]
@@ -63,7 +62,6 @@ pub struct Options {
     pub safe_crop_px: u32,
     /// Longest side of the master image downloaded per painting.
     pub source_size: u32,
-    pub webp_quality: f32,
     pub user_agent: String,
     /// Email or URL in the User-Agent; Wikimedia requires it for pageviews.
     pub contact: Option<String>,
@@ -374,7 +372,6 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 struct Rendered {
     key: String,
     crops: Vec<(String, String, CropPlan, String, usize)>,
-    variants: Vec<(String, String, String, String, usize)>,
 }
 
 fn render_all(catalog: &mut Catalog, opts: &Options, featured_days: &[String]) -> Result<()> {
@@ -385,8 +382,8 @@ fn render_all(catalog: &mut Catalog, opts: &Options, featured_days: &[String]) -
     if let Some(n) = opts.limit {
         work.truncate(n);
     }
-    let matrix = variants::all();
-    let variant_count: usize = matrix.iter().map(|c| c.variants.len()).sum();
+    let targets = variants::all();
+    let names: Vec<String> = targets.iter().map(variants::crop_name).collect();
     let total = work.len();
     tracing::info!(
         paintings = total,
@@ -394,32 +391,19 @@ fn render_all(catalog: &mut Catalog, opts: &Options, featured_days: &[String]) -
         "rendering"
     );
     let started = Instant::now();
-    let (mut crops_done, mut variants_done, mut failed) = (0, 0, 0);
+    let (mut crops_done, mut failed) = (0, 0);
 
     // Chunks keep memory flat and give regular progress + commits.
     for (n, chunk) in work.chunks(16).enumerate() {
-        let existing: Vec<(HashMap<String, String>, HashMap<String, String>)> = chunk
+        let existing: Vec<HashMap<String, String>> = chunk
             .iter()
-            .map(|(k, _)| {
-                Ok((
-                    catalog.hashes(Table::Crops, k)?,
-                    catalog.hashes(Table::Variants, k)?,
-                ))
-            })
+            .map(|(k, _)| catalog.crop_hashes(k))
             .collect::<Result<_>>()?;
         let results: Vec<Result<Rendered>> = chunk
             .par_iter()
             .zip(existing.par_iter())
-            .map(|((key, sha), (have_crops, have_variants))| {
-                render_painting(
-                    &opts.data_dir,
-                    key,
-                    sha,
-                    have_crops,
-                    have_variants,
-                    &matrix,
-                    opts,
-                )
+            .map(|((key, sha), have)| {
+                render_painting(&opts.data_dir, key, sha, have, &targets, opts)
             })
             .collect();
         catalog.transaction(|c| {
@@ -429,12 +413,8 @@ fn render_all(catalog: &mut Catalog, opts: &Options, featured_days: &[String]) -
                         for (name, hash, plan, path, bytes) in &r.crops {
                             c.put_crop(&r.key, name, hash, plan, path, *bytes)?;
                         }
-                        for (name, crop, hash, path, bytes) in &r.variants {
-                            c.put_variant(&r.key, name, crop, hash, path, *bytes)?;
-                        }
-                        c.finish_painting(&r.key, variant_count)?;
+                        c.finish_painting(&r.key, &names)?;
                         crops_done += r.crops.len();
-                        variants_done += r.variants.len();
                     }
                     Err(e) => {
                         failed += 1;
@@ -454,7 +434,6 @@ fn render_all(catalog: &mut Catalog, opts: &Options, featured_days: &[String]) -
             done,
             total,
             crops_done,
-            variants_done,
             failed,
             eta_min = (per * (total - done) as f64 / 60.0).round(),
             "render progress"
@@ -463,78 +442,63 @@ fn render_all(catalog: &mut Catalog, opts: &Options, featured_days: &[String]) -
     Ok(())
 }
 
+/// Folders from the old layout (pre-dithered variants and WebP crops), removed
+/// the first time a painting is rendered with the current one.
+const OLD_LAYOUT: [&str; 2] = ["v", "crops"];
+
 fn render_painting(
     root: &Path,
     key: &str,
     source_sha: &str,
-    have_crops: &HashMap<String, String>,
-    have_variants: &HashMap<String, String>,
-    matrix: &[CropSet],
+    have: &HashMap<String, String>,
+    targets: &[Target],
     opts: &Options,
 ) -> Result<Rendered> {
     let mut out = Rendered {
         key: key.to_string(),
         crops: Vec::new(),
-        variants: Vec::new(),
     };
-    let dir = root.join("art").join(key);
+    for old in OLD_LAYOUT {
+        let dir = root.join("art").join(key).join(old);
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir)?;
+        }
+    }
     let mut src: Option<RgbImage> = None; // decoded only if something is outdated
-
-    for set in matrix {
-        let crop_name = variants::crop_name(&set.crop);
-        let crop_hash = variants::crop_hash(source_sha, &set.crop, opts.safe_crop_px);
-        let crop_rel = format!("art/{key}/crops/{crop_name}.webp");
-        let crop_ok =
-            have_crops.get(&crop_name) == Some(&crop_hash) && root.join(&crop_rel).exists();
-
-        let todo: Vec<_> = set
-            .variants
-            .iter()
-            .filter(|t| {
-                let name = variants::variant_name(t);
-                let rel = format!("art/{key}/v/{name}.png");
-                have_variants.get(&name) != Some(&variants::variant_hash(&crop_hash, t))
-                    || !root.join(rel).exists()
-            })
-            .collect();
-        if crop_ok && todo.is_empty() {
+    for t in targets {
+        let name = variants::crop_name(t);
+        let hash = variants::crop_hash(source_sha, t, opts.safe_crop_px);
+        let rel = format!("art/{key}/c/{name}.png");
+        if have.get(&name) == Some(&hash) && root.join(&rel).exists() {
             continue;
         }
-
         let src = match &src {
             Some(img) => img,
             None => src.insert(load_source(root, key)?),
         };
-        // Always crop from the master image, never from a stored (lossy) crop.
-        let plan = imaging::plan_crop(src, &set.crop.opening(), opts.safe_crop_px);
-        let art = imaging::crop_locally(src, &plan);
-
-        if !crop_ok {
-            let webp = webp::Encoder::from_rgb(art.as_raw(), art.width(), art.height())
-                .encode(opts.webp_quality);
-            write_atomic(&root.join(&crop_rel), &webp)?;
-            out.crops.push((
-                crop_name.clone(),
-                crop_hash.clone(),
-                plan,
-                crop_rel,
-                webp.len(),
-            ));
-        }
-        for t in todo {
-            let name = variants::variant_name(t);
-            let rendered = imaging::render(&art, t);
-            let png = png8::encode(&rendered.raw, t.w, t.h, t.stride)?;
-            let rel = format!("art/{key}/v/{name}.png");
-            write_atomic(&dir.join("v").join(format!("{name}.png")), &png)?;
-            out.variants.push((
-                name,
-                crop_name.clone(),
-                variants::variant_hash(&crop_hash, t),
-                rel,
-                png.len(),
-            ));
-        }
+        // Always from the master image, never from a stored crop.
+        let plan = imaging::plan_crop(src, t, opts.safe_crop_px);
+        let art = imaging::tone_image(&imaging::crop_locally(src, &plan));
+        let png = encode_png(&art)?;
+        write_atomic(&root.join(&rel), &png)?;
+        out.crops.push((name, hash, plan, rel, png.len()));
     }
+    Ok(out)
+}
+
+/// Lossless PNG with the strongest compression (crops are written once).
+fn encode_png(img: &RgbImage) -> Result<Vec<u8>> {
+    use image::{
+        codecs::png::{CompressionType, FilterType, PngEncoder},
+        ImageEncoder,
+    };
+    let mut out = Vec::new();
+    PngEncoder::new_with_quality(&mut out, CompressionType::Best, FilterType::Adaptive)
+        .write_image(
+            img.as_raw(),
+            img.width(),
+            img.height(),
+            image::ExtendedColorType::Rgb8,
+        )?;
     Ok(out)
 }

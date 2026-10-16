@@ -20,8 +20,10 @@ const DEFAULTS = {
   pinned: '',
 };
 
-// Settings that change the rendered pixels, so the preview is re-rendered live.
-const RENDER_KEYS = ['fit', 'palette', 'frame'];
+// Settings the preview reacts to: a new fit needs another crop from the server;
+// tuning and frame are applied right here (render.js, the same code as the phone).
+const CROP_KEYS = ['fit'];
+const LOCAL_KEYS = ['palette', 'frame'];
 
 function readState() {
   try {
@@ -61,20 +63,60 @@ screenEl.style.setProperty('--sh', `${watch.h * scale}px`);
 screenEl.style.setProperty('--scale', String(scale));
 screenEl.classList.toggle('round', Boolean(watch.round));
 
-const img = $('art');
+const canvas = $('art');
+canvas.width = watch.w;
+canvas.height = watch.h;
+// The crop on screen: full-colour RGB from the server, before tuning and frame.
+let crop = null;
 
-function showImage(src, meta) {
-  img.src = src;
-  img.alt = `${meta.title} by ${meta.artist}, as shown on the watch`;
-  img.hidden = false;
+/** Draw the watch's exact pixels for the current crop, tuning and frame. */
+function draw() {
+  if (!crop) return;
+  const bytes = window.TreasureRender.compose(crop.rgb, crop.w, crop.h, {
+    w: watch.w,
+    h: watch.h,
+    stride: watch.w,
+    round: Boolean(watch.round),
+    fit: settings.fit,
+    frame: settings.frame,
+    palette: settings.palette,
+  });
+  const rgba = window.TreasureRender.toRGBA(bytes, watch.w, watch.h);
+  canvas.getContext('2d').putImageData(new ImageData(rgba, watch.w, watch.h), 0, 0);
+  canvas.hidden = false;
   $('screen-empty').hidden = true;
 }
 
-img.addEventListener('load', () => screenEl.classList.remove('loading'));
-img.addEventListener('error', () => screenEl.classList.remove('loading'));
+/** Load a crop image and read its pixels. */
+function loadCrop(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      const rgba = ctx.getImageData(0, 0, c.width, c.height).data;
+      const rgb = new Uint8Array(c.width * c.height * 3);
+      for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+        rgb[j] = rgba[i];
+        rgb[j + 1] = rgba[i + 1];
+        rgb[j + 2] = rgba[i + 2];
+      }
+      resolve({ rgb, w: c.width, h: c.height });
+    };
+    img.onerror = () => reject(new Error('could not load the painting'));
+    img.src = url;
+  });
+}
 
-if (art && art.previewUrl) {
-  showImage(art.previewUrl, art);
+/** Show a painting: fetch its crop, then draw it with the current settings. */
+async function showPainting(meta) {
+  crop = await loadCrop(meta.cropUrl);
+  canvas.setAttribute('aria-label', `${meta.title} by ${meta.artist}, as shown on the watch`);
+  draw();
+  screenEl.classList.remove('loading');
 }
 
 // "Like my phone" follows the watch's clock setting, which the watch reports.
@@ -163,16 +205,11 @@ if (art) {
 // directly. Nothing reaches the watch until Save.
 
 function screenQuery() {
-  const stride = watch.stride || watch.w;
   return new URLSearchParams({
     w: watch.w,
     h: watch.h,
-    color: 1,
-    stride,
     round: watch.round ? 1 : 0,
     fit: settings.fit,
-    palette: settings.palette,
-    frame: settings.frame,
     era: settings.era,
   }).toString();
 }
@@ -193,7 +230,8 @@ async function loadPreview(path, { pick = false, extra = '' } = {}) {
     if (!res.ok) throw new Error(meta.error || `HTTP ${res.status}`);
     if (id !== requestId) return;
     if (pick) chosen = meta;
-    showImage(meta.previewUrl, meta);
+    await showPainting(meta);
+    if (id !== requestId) return null;
     showLabel(meta);
     setStatus(chosen ? 'Preview: this painting is hung when you save.' : '');
     updateShuffle();
@@ -223,6 +261,14 @@ function currentKey() {
 function refreshPreview() {
   const key = currentKey();
   if (key) loadPreview(`/api/art/${encodeURIComponent(key)}`);
+}
+
+// First paint: the phone passes the cached painting's crop URL. Older phone
+// code only had a preview image, so ask the server for the crop instead.
+if (art?.cropUrl) {
+  showPainting(art).catch((err) => setStatus(`Couldn’t load a preview (${err.message}).`));
+} else if (art?.key) {
+  refreshPreview();
 }
 
 function updateShuffle() {
@@ -407,7 +453,8 @@ document.querySelectorAll('.segmented[data-key]').forEach((group) => {
       if (radio.checked) {
         settings[key] = radio.value;
         update();
-        if (RENDER_KEYS.includes(key)) refreshPreview();
+        if (CROP_KEYS.includes(key)) refreshPreview();
+        if (LOCAL_KEYS.includes(key)) draw();
         // Choosing an era hangs a painting from it straight away (as a preview).
         if (key === 'era') loadPreview('/api/art/random', { pick: true });
         // Show what the new selection/rotation would hang today.

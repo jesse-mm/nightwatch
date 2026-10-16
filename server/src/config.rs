@@ -5,8 +5,6 @@
 
 use std::{env, path::PathBuf, str::FromStr};
 
-use treasure_trove::palette::Reference;
-
 #[derive(Clone, Debug)]
 pub struct Config {
     /// Address the HTTP server listens on.
@@ -15,8 +13,6 @@ pub struct Config {
     pub data_dir: PathBuf,
     /// Folder that holds the settings page (`static/config/index.html`).
     pub static_dir: PathBuf,
-    /// Default colour tuning when a request doesn't pass `palette=`.
-    pub reference: Reference,
 }
 
 pub fn var<T: FromStr>(key: &str, default: T) -> T {
@@ -32,7 +28,6 @@ impl Config {
             bind: var("BIND_ADDR", "0.0.0.0:8080".to_string()),
             data_dir: var("DATA_DIR", PathBuf::from("./data")),
             static_dir: var("STATIC_DIR", PathBuf::from("./static")),
-            reference: var("PALETTE_REFERENCE", Reference::Defined),
         }
     }
 }

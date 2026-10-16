@@ -14,6 +14,7 @@
 var CONFIG = require('./config');
 var base64 = require('./base64');
 var rotation = require('./rotation');
+var render = require('./render');
 
 var SETTINGS_KEY = 'tt-settings';
 var ART_KEY = 'tt-art';
@@ -77,16 +78,41 @@ function today() {
   return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 }
 
-/** Identifies one rendering of a painting for this watch + settings. */
-function renderKey(settings) {
-  return [watch.w, watch.h, watch.stride, watch.round, settings.fit, settings.palette,
-    settings.frame].join(':');
+/**
+ * Identifies the crop a painting needs for this watch: the server only cuts
+ * per screen and fit. Colour tuning and frame are applied here (render.js),
+ * so changing them never needs a download.
+ */
+function cropKey(settings) {
+  return [watch.w, watch.h, watch.round, settings.fit].join(':');
 }
 
 function screenQuery(settings) {
-  return 'w=' + watch.w + '&h=' + watch.h + '&color=1&stride=' + watch.stride +
-    '&round=' + watch.round + '&fit=' + settings.fit + '&palette=' + settings.palette +
-    '&frame=' + settings.frame + '&era=' + settings.era;
+  return 'w=' + watch.w + '&h=' + watch.h + '&round=' + watch.round +
+    '&fit=' + settings.fit + '&era=' + settings.era;
+}
+
+/** The watch's bytes for a cached crop with the current tuning and frame. */
+function composeFor(art, settings) {
+  return render.compose(base64.decode(art.crop), art.cropW, art.cropH, {
+    w: watch.w,
+    h: watch.h,
+    stride: watch.stride,
+    round: !!watch.round,
+    fit: settings.fit,
+    frame: settings.frame,
+    palette: settings.palette
+  });
+}
+
+/** Send the cached painting (render it first if it's a crop). */
+function showCached(art, settings) {
+  if (art && art.crop) {
+    sendImage(composeFor(art, settings));
+  } else if (art && art.raw) {
+    // Cached by an older version: already the watch's bytes.
+    sendImage(base64.decode(art.raw));
+  }
 }
 
 // ---------------------------------------------------------------- messaging
@@ -149,7 +175,11 @@ function sendImage(bytes) {
   });
   enqueue({ ImgBegin: bytes.length });
   for (var offset = 0; offset < bytes.length; offset += watch.chunk) {
-    enqueue({ ImgOffset: offset, ImgChunk: bytes.slice(offset, offset + watch.chunk) });
+    // A plain Array: what Pebble.sendAppMessage expects for byte arrays.
+    enqueue({
+      ImgOffset: offset,
+      ImgChunk: Array.prototype.slice.call(bytes, offset, offset + watch.chunk)
+    });
   }
   enqueue({ ImgEnd: 1 });
   watchEmpty = false;
@@ -200,14 +230,15 @@ function get(url, onSuccess, onError) {
 /**
  * Make sure the watch shows today's painting.
  * @param {string} [hangKey] hang this painting (picked on the settings page) instead
+ * @returns {boolean} whether a download started (false = nothing new needed)
  */
 function ensureArt(hangKey) {
   if (!watch) {
-    return;
+    return false;
   }
   var settings = loadSettings();
   var art = readJson(ART_KEY);
-  var current = !!(art && art.raw && art.renderKey === renderKey(settings));
+  var current = !!(art && art.crop && art.cropKey === cropKey(settings));
   var now = new Date();
   var period = rotation.period(settings.rotation, now);
 
@@ -215,33 +246,35 @@ function ensureArt(hangKey) {
   // cached one straight away (even yesterday's, or one made with other
   // settings), then fetch anything newer in the background. Never leave the
   // watch waiting on the network.
-  if (watchEmpty && art && art.raw) {
-    sendImage(base64.decode(art.raw));
+  if (watchEmpty) {
+    showCached(art, settings);
   }
   if (fetching) {
     if (hangKey) {
       pendingHang = hangKey;
     }
-    return;
+    return true;
   }
   if (hangKey) {
     fetchArt('/api/art/' + encodeURIComponent(hangKey), settings, period);
-    return;
+    return true;
   }
   // A pinned painting stays until it's unpinned; rotation doesn't apply.
   if (settings.pinned) {
     if (!(current && art.meta.key === settings.pinned)) {
       fetchArt('/api/art/' + encodeURIComponent(settings.pinned), settings, period);
+      return true;
     }
-    return;
+    return false;
   }
   var due = !art || !art.meta || (settings.rotation !== 'off' && art.period !== period);
   if (!due) {
     if (!current) {
-      // Same painting, different screen/framing/colours: re-render it.
+      // Same painting, different screen or fit: fetch its other crop.
       fetchArt('/api/art/' + encodeURIComponent(art.meta.key), settings, art.period);
+      return true;
     }
-    return;
+    return false;
   }
   if (settings.selection === 'featured') {
     fetchArt('/api/art/featured', settings, period,
@@ -249,6 +282,7 @@ function ensureArt(hangKey) {
   } else {
     fetchArt('/api/art/random', settings, period);
   }
+  return true;
 }
 
 /** Try again later when the server or network is unavailable. */
@@ -297,7 +331,7 @@ function fetchArt(path, settings, period, extraQuery) {
       fail('bad JSON from server: ' + e);
       return;
     }
-    get(base + meta.rawUrl + '&format=b64', function (raw) {
+    get(base + meta.rgbUrl + '&format=b64', function (crop) {
       retryCount = 0;
       if (retryTimer) {
         clearTimeout(retryTimer);
@@ -306,8 +340,10 @@ function fetchArt(path, settings, period, extraQuery) {
       var record = {
         date: today(),
         period: period,
-        renderKey: renderKey(settings),
-        raw: raw,
+        cropKey: cropKey(settings),
+        crop: crop,
+        cropW: meta.render.width,
+        cropH: meta.render.height,
         meta: {
           key: meta.key,
           title: meta.title,
@@ -320,8 +356,8 @@ function fetchArt(path, settings, period, extraQuery) {
           license: meta.license,
           licenseUrl: meta.licenseUrl,
           wiki: meta.wiki || null,
-          crop: meta.render && meta.render.crop ? meta.render.crop.mode : null,
-          previewUrl: base + meta.previewUrl
+          cropMode: meta.render && meta.render.crop ? meta.render.crop.mode : null,
+          cropUrl: base + meta.cropUrl
         }
       };
       try {
@@ -329,7 +365,7 @@ function fetchArt(path, settings, period, extraQuery) {
       } catch (e) {
         console.log('Could not cache painting: ' + e);
       }
-      sendImage(base64.decode(raw));
+      sendImage(composeFor(record, loadSettings()));
       done();
     }, fail);
   }, fail);
@@ -405,7 +441,10 @@ Pebble.addEventListener('webviewclosed', function (e) {
   }
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   sendSettings(settings);
-  // The painting previewed on the settings page; otherwise re-render only if
-  // framing, frame or colours changed.
-  ensureArt(typeof result.artKey === 'string' ? result.artKey : undefined);
+  // The painting previewed on the settings page, or another crop if the fit
+  // changed; otherwise just re-render the cached crop (tuning and frame are
+  // applied here, no download).
+  if (!ensureArt(typeof result.artKey === 'string' ? result.artKey : undefined)) {
+    showCached(readJson(ART_KEY), settings);
+  }
 });

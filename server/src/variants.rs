@@ -1,28 +1,24 @@
-//! The full set of renders the generator produces, their names, and the input
-//! hashes that decide whether a file is still up to date.
+//! The crops the generator produces, their names, and the input hashes that
+//! decide whether a file is still up to date.
 //!
-//! Per painting:
-//! - 4 screens × 2 fits × 4 frames = 32 **crops**: the painting cut to the frame's
-//!   opening, full colour, before dithering (WebP). Colour tuning doesn't change them.
-//! - each crop × 4 colour tunings = 128 **variants**: the dithered 64-colour image
-//!   the watch shows, stored as an indexed PNG (lossless, ≈ ⅓ of the raw bytes).
+//! Per painting: 4 screens × 2 fits = 8 **crops**, the painting cut to the
+//! screen's exact size and toned, stored as lossless PNG. Everything else, the
+//! colour tuning (dithering) and the frame, is applied on the phone and in the
+//! settings page (`server/static/config/render.js`), so one crop serves all
+//! 16 combinations of frame and tuning.
 //!
-//! Everything is rendered from the painting's local source image, so adding a
-//! frame or tuning, or changing the pipeline, never touches the network.
+//! Everything is rendered from the painting's local master image, so a pipeline
+//! change never touches the network.
 
 use sha2::{Digest, Sha256};
 
-use crate::{
-    frame::Frame,
-    imaging::{Fit, Target},
-    palette::Reference,
-};
+use crate::imaging::{Fit, Target};
 
-/// Bump when the crop or render code changes output: every crop and variant
-/// whose hash includes it is then rebuilt from the local sources.
-pub const PIPELINE_VERSION: &str = "2026-10-16.1";
+/// Bump when the crop or tone code changes output: every crop whose hash
+/// includes it is then rebuilt from the local master images.
+pub const PIPELINE_VERSION: &str = "2026-10-16.2-crops";
 
-/// The colour screens we support: (width, height, round).
+/// The colour screens we support: (width, height, round). See docs/DEVICES.md.
 pub const SCREENS: [(u32, u32, bool); 4] = [
     (144, 168, false), // basalt: Pebble Time, Time Steel
     (180, 180, true),  // chalk: Pebble Time Round
@@ -30,60 +26,28 @@ pub const SCREENS: [(u32, u32, bool); 4] = [
     (260, 260, true),  // gabbro: Pebble Round 2
 ];
 
-pub fn target(screen: (u32, u32, bool), fit: Fit, frame: Frame, reference: Reference) -> Target {
+pub fn target(screen: (u32, u32, bool), fit: Fit) -> Target {
     let (w, h, round) = screen;
-    Target {
-        w,
-        h,
-        color: true,
-        stride: w,
-        round,
-        fit,
-        reference,
-        frame,
-    }
+    Target { w, h, round, fit }
 }
 
-/// One crop and the four variants rendered from it.
-pub struct CropSet {
-    pub crop: Target,
-    pub variants: Vec<Target>,
+/// Every crop a painting gets.
+pub fn all() -> Vec<Target> {
+    SCREENS
+        .iter()
+        .flat_map(|&s| Fit::ALL.iter().map(move |&fit| target(s, fit)))
+        .collect()
 }
 
-pub fn all() -> Vec<CropSet> {
-    let mut out = Vec::new();
-    for screen in SCREENS {
-        for fit in Fit::ALL {
-            for frame in Frame::ALL {
-                out.push(CropSet {
-                    crop: target(screen, fit, frame, Reference::Defined),
-                    variants: Reference::ALL
-                        .iter()
-                        .map(|&r| target(screen, fit, frame, r))
-                        .collect(),
-                });
-            }
-        }
-    }
-    out
-}
-
-/// Name of the crop a variant is rendered from (everything but the colour tuning).
+/// e.g. `200x228-rect-fill`; the file is `art/<key>/c/<name>.png`.
 pub fn crop_name(t: &Target) -> String {
     format!(
-        "{}x{}-{}-{}-{}",
+        "{}x{}-{}-{}",
         t.w,
         t.h,
         if t.round { "round" } else { "rect" },
-        t.fit.name(),
-        t.frame.name()
+        t.fit.name()
     )
-}
-
-/// Variant names reuse `Target::cache_name`, which the HTTP API also derives
-/// from the request, e.g. `200x228-c-s200-rect-fill-sun-gold`.
-pub fn variant_name(t: &Target) -> String {
-    t.cache_name()
 }
 
 /// SHA-256 over the parts, separated so ("ab","c") ≠ ("a","bc").
@@ -111,7 +75,7 @@ fn hex(bytes: &[u8]) -> String {
         })
 }
 
-/// A crop is up to date when the source image, the pipeline and the crop
+/// A crop is up to date when the master image, the pipeline and the crop
 /// settings (including the safe-crop threshold) are unchanged.
 pub fn crop_hash(source_sha: &str, crop: &Target, safe_crop_px: u32) -> String {
     hash(&[
@@ -122,49 +86,28 @@ pub fn crop_hash(source_sha: &str, crop: &Target, safe_crop_px: u32) -> String {
     ])
 }
 
-pub fn variant_hash(crop_hash: &str, variant: &Target) -> String {
-    hash(&[PIPELINE_VERSION, crop_hash, variant.reference.name()])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn plain() -> Target {
+        target((144, 168, false), Fit::Fill)
+    }
+
     #[test]
-    fn matrix_is_32_crops_and_128_variants() {
-        let all = all();
-        assert_eq!(all.len(), 32);
-        assert_eq!(all.iter().map(|c| c.variants.len()).sum::<usize>(), 128);
-        let mut names: Vec<String> = all
-            .iter()
-            .flat_map(|c| c.variants.iter().map(variant_name))
-            .collect();
+    fn all_is_8_distinct_crops() {
+        let mut names: Vec<String> = all().iter().map(crop_name).collect();
         names.sort();
         names.dedup();
-        assert_eq!(names.len(), 128);
+        assert_eq!(names.len(), 8);
     }
 
     #[test]
-    fn variant_names_match_the_api() {
-        let t = target((200, 228, false), Fit::Fill, Frame::Gold, Reference::Sun);
-        assert_eq!(variant_name(&t), "200x228-c-s200-rect-fill-sun-gold");
-        assert_eq!(crop_name(&t), "200x228-rect-fill-gold");
-        let plain = target(
-            (144, 168, false),
-            Fit::Fill,
-            Frame::None,
-            Reference::Defined,
+    fn crop_name_describes_screen_and_fit() {
+        assert_eq!(
+            crop_name(&target((260, 260, true), Fit::Whole)),
+            "260x260-round-whole"
         );
-        assert_eq!(variant_name(&plain), "144x168-c-s144-rect-fill-defined");
-    }
-
-    fn plain() -> Target {
-        target(
-            (144, 168, false),
-            Fit::Fill,
-            Frame::None,
-            Reference::Defined,
-        )
     }
 
     #[test]
@@ -189,13 +132,6 @@ mod tests {
             crop_hash("abc", &plain(), 20),
             crop_hash("abc", &plain(), 21)
         );
-    }
-
-    #[test]
-    fn variant_hash_changes_with_the_colour_tuning() {
-        let crop = crop_hash("abc", &plain(), 20);
-        let sun = target((144, 168, false), Fit::Fill, Frame::None, Reference::Sun);
-        assert_ne!(variant_hash(&crop, &plain()), variant_hash(&crop, &sun));
     }
 
     #[test]

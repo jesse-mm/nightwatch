@@ -9,17 +9,14 @@
 //!   calls an outside service.
 //!
 //! New to Rust? Start with `docs/RUST_FOR_TS_DEVS.md`, then read: generate →
-//! catalog → variants → imaging → frame → palette → png8 → routes.
+//! catalog → variants → imaging → snapshot → routes. Dithering and frames live
+//! in `server/static/config/render.js` (shared with the phone).
 
 pub mod catalog;
 pub mod era;
 pub mod featured;
-pub mod frame;
 pub mod generate;
 pub mod imaging;
-pub mod palette;
-pub mod palette_data;
-pub mod png8;
 pub mod popularity;
 pub mod rijks;
 pub mod saliency;

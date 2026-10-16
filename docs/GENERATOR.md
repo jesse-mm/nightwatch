@@ -1,8 +1,10 @@
 # The generator
 
 `treasure-trove-generator` builds everything the server serves: metadata for
-every painting, a master image per painting, and every crop and variant for
-every supported watch. The server only reads its output.
+every painting, a master image per painting, and a crop of each painting for
+every supported screen. The server only reads its output; colour tuning and
+frames are applied on the phone and in the settings page
+(`server/static/config/render.js`).
 
 ## Running it
 
@@ -41,8 +43,8 @@ recorded with its hash, and the next run continues where it left off.
    for the last 12 full months (~20 minutes). The top 365 eligible paintings,
    topped up with others when fewer have an article, are saved to
    `catalog/featured.json` in rank order. Otherwise the file is just read.
-6. **Render** (local, all CPU cores): 32 crops and 128 variants per painting,
-   only those whose inputs changed.
+6. **Render** (local, all CPU cores): 8 crops per painting (4 screens ×
+   Fill/Whole), toned, lossless PNG; only those whose inputs changed.
 7. **Export**: `catalog/paintings.jsonl`.
 
 ## Being polite
@@ -67,11 +69,11 @@ headers, so we stay well below anything that could matter.
 | Metadata | older than `REFRESH_DAYS`; marked *changed* only if its hash differs |
 | Master image | its IIIF URL changed, or the file is missing |
 | Crop | master image hash, crop settings or `PIPELINE_VERSION` changed |
-| Variant | its crop's hash or colour tuning changed |
 
-Adding a frame or colour tuning, or changing the render code (bump
-`PIPELINE_VERSION` in `server/src/variants.rs`), makes the next run render the
-new or changed files **from the local master images**, with no network:
+Frames and colour tunings live in `render.js`, so adding or changing one needs
+no generator run at all. Changing the crop or tone code (bump
+`PIPELINE_VERSION` in `server/src/variants.rs`) makes the next run re-render
+the crops **from the local master images**, with no network:
 
 ```sh
 docker compose run --rm generator --skip-fetch
@@ -82,8 +84,7 @@ docker compose run --rm generator --skip-fetch
 ```
 data/catalog.sqlite                 the catalog (server loads it into memory)
 data/art/<key>/source.jpg           master image
-data/art/<key>/crops/*.webp         32 full-colour crops (lossy WebP q90, for viewing)
-data/art/<key>/v/*.png              128 variants (indexed PNG, lossless)
+data/art/<key>/c/*.png              8 crops: <w>x<h>-<rect|round>-<fill|whole>.png, toned RGB
 catalog/paintings.jsonl             metadata: one painting per line, sorted
 catalog/featured.json               the Featured list (see below)
 ```
@@ -126,10 +127,10 @@ instead of rebuilding it.
 ## How the server picks up new output
 
 The generator works in `catalog.sqlite`, which holds a row and hash for every
-file (~100 MB when complete). The server doesn't read that. Instead the
+crop. The server doesn't read that. Instead the
 generator **publishes** `serve.sqlite`: a copy of only what the server needs
 (paintings, eras, Wikipedia links, crop plans, and a *ready* flag set once all
-128 variants of a painting exist).
+8 crops of a painting exist).
 
 1. It writes the copy to `serve.sqlite.tmp`.
 2. It renames the temp file to `serve.sqlite`. A rename is atomic: anyone
@@ -144,7 +145,7 @@ resumable bookkeeping, and you can inspect it with the `sqlite3` CLI.
 
 It publishes after fetching, every 800 paintings while rendering, and at the
 end, so during a long first run the server offers paintings as they finish.
-File paths aren't stored: they follow from the painting key and variant name.
+File paths aren't stored: they follow from the painting key and crop name.
 
 ## Expected size and time
 
@@ -154,10 +155,9 @@ Measured on test runs (Apple silicon, 12 cores, 1 request/s):
 |---|---|---|
 | Fetch (first run: metadata + master image) | 5–7 s (5–7 requests) | **7–10 hours** |
 | Fetch (monthly: metadata only) | 3–5 s | 4–7 hours |
-| Render (all 128 variants, 12 cores) | ~0.25 s | **~20 minutes** |
-| Disk: 128 variants (indexed PNG) | 1.6 MB | ~7.5 GB |
-| Disk: 32 crops (WebP q90) | 0.3 MB | ~1.4 GB |
+| Render (8 crops, 12 cores) | ~0.02 s | **~2 minutes** |
+| Disk: 8 crops (lossless PNG) | 0.59 MB | ~2.8 GB |
 | Disk: master image | 0.17 MB | ~0.8 GB |
-| `catalog.sqlite` / `serve.sqlite` | | ~100 MB / ~25 MB |
+| `catalog.sqlite` / `serve.sqlite` | | a few MB / ~25 MB |
 
 `--rps 2` roughly halves the fetch time; the default stays gentle on purpose.

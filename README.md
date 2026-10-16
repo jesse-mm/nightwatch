@@ -18,7 +18,7 @@ date that stay out of its way.
 | Path | What it is |
 |---|---|
 | `watchface/` | The Pebble project: C watchface (`src/c/main.c`) and phone-side JS (`src/pkjs/`). |
-| `server/` | Rust: the **generator** (fetches paintings politely, smart-crops, dithers every variant) and the **server** (serves the pre-rendered files + settings page). |
+| `server/` | Rust: the **generator** (fetches paintings politely, smart-crops and tones a crop per screen) and the **server** (serves the pre-rendered files + settings page). |
 | `catalog/` | Generated metadata and the Featured list. Not in git: published as a `catalog.tar.gz` release asset (see `scripts/catalog.sh`). |
 | `server/static/config/` | The custom settings page (plain HTML/CSS/JS, no Clay). |
 | `docker-compose.yml` | Runs the server, optionally with a Tailscale Funnel sidecar for a public HTTPS URL. |
@@ -120,7 +120,8 @@ Checked against the live services and the SDK 4.17 emulators (basalt, chalk, eme
 Still to check on a real watch:
 
 - **Colour tuning.** "Daylight / Indoors / Backlight" stretch the simulated palettes;
-  compare them on a real screen and pick a default with `PALETTE_REFERENCE`.
+  compare them on a real screen and pick a default (`palette` in the phone's
+  defaults, `watchface/src/pkjs/index.js`).
 
 ## Credits
 

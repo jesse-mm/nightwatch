@@ -91,7 +91,7 @@ a { color: inherit; text-underline-offset: 0.18em; }
 
 .screen.round { border-radius: 50%; }
 
-.screen img {
+.screen canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -346,8 +346,8 @@ main {
 
 /* ---------------- live preview ---------------- */
 
-.screen img { transition: opacity 160ms ease; }
-.screen.loading img { opacity: 0.45; }
+.screen canvas { transition: opacity 160ms ease; }
+.screen.loading canvas { opacity: 0.45; }
 
 .label-actions {
   display: flex;

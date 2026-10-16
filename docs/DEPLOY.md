@@ -87,7 +87,6 @@ rsync -a --delete data/ proxmox-host:/path/to/treasure-trove/data/
 | Variable | Default | Meaning |
 |---|---|---|
 | `DATA_DIR` | ./data | Generator output, served read-only by the server |
-| `PALETTE_REFERENCE` | defined | Server: default colour tuning (defined, sun, room, backlight) |
 | `REQUESTS_PER_SECOND` | 1 | Generator: pace of all outside requests |
 | `REFRESH_DAYS` | 25 | Generator: re-check metadata/pools older than this |
 | `CONTACT` | (empty) | Generator: your email or URL for the User-Agent; needed for Wikipedia pageviews |
@@ -97,5 +96,4 @@ rsync -a --delete data/ proxmox-host:/path/to/treasure-trove/data/
 | `POOL_MAX_PAGES` | 80 | Search pages crawled per pool |
 | `RIJKS_SEARCH_URL` | paintings with images | Change to widen/narrow the collection |
 | `SOURCE_SIZE` | 1200 | Longest side of the master image |
-| `WEBP_QUALITY` | 90 | Quality of the full-colour crops |
 | `RUST_LOG` | info | Log level (`debug` for more) |

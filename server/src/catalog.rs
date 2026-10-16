@@ -3,7 +3,7 @@
 //! - `catalog.sqlite` is the generator's working database: what we know about
 //!   each painting (metadata, licence, era, links) and every file on disk with
 //!   the input hash it was made from, so a re-run only redoes work whose inputs
-//!   changed. ~600k variant rows when complete (~100 MB), so it stays on disk.
+//!   changed. ~40k crop rows when complete, so it stays on disk.
 //! - `serve.sqlite` is a small snapshot for the server (paintings, eras, links,
 //!   crop plans, "fully rendered" flag; a few MB). The generator publishes it
 //!   with an atomic rename, so the server never sees a half-written file. The
@@ -13,8 +13,7 @@
 //! <data>/catalog.sqlite
 //! <data>/serve.sqlite
 //! <data>/art/<key>/source.jpg              master image (longest side ≈ 1200 px)
-//! <data>/art/<key>/crops/<crop>.webp       32 per painting, full colour
-//! <data>/art/<key>/v/<variant>.png         128 per painting, indexed PNG
+//! <data>/art/<key>/c/<crop>.png            8 per painting, toned RGB (lossless)
 //! ```
 
 use std::{
@@ -57,7 +56,7 @@ CREATE TABLE IF NOT EXISTS paintings (
   fetched_at    INTEGER NOT NULL,     -- last time the metadata was checked
   changed_at    INTEGER NOT NULL,     -- last time the metadata actually changed
   plans         TEXT,                 -- {crop name: CropPlan} once rendered
-  ready         INTEGER NOT NULL DEFAULT 0  -- all variants exist on disk
+  ready         INTEGER NOT NULL DEFAULT 0  -- all crops exist on disk
 );
 CREATE TABLE IF NOT EXISTS crops (
   key        TEXT NOT NULL,
@@ -68,16 +67,9 @@ CREATE TABLE IF NOT EXISTS crops (
   bytes      INTEGER NOT NULL,
   PRIMARY KEY (key, name)
 );
-CREATE TABLE IF NOT EXISTS variants (
-  key        TEXT NOT NULL,
-  name       TEXT NOT NULL,
-  crop       TEXT NOT NULL,
-  input_hash TEXT NOT NULL,
-  path       TEXT NOT NULL,
-  bytes      INTEGER NOT NULL,
-  PRIMARY KEY (key, name)
-);
-CREATE INDEX IF NOT EXISTS variants_name ON variants (name);
+-- Variants (dithered per tuning/frame) are made on the phone now; drop the
+-- table older catalogs have.
+DROP TABLE IF EXISTS variants;
 CREATE TABLE IF NOT EXISTS wiki (
   object_number TEXT PRIMARY KEY,
   links         TEXT NOT NULL          -- WikiLinks as JSON
@@ -96,11 +88,10 @@ pub struct Stats {
     pub paintings: i64,
     pub eligible: i64,
     pub with_source: i64,
-    /// Eligible paintings with every variant rendered (what the server offers).
+    /// Eligible paintings with every crop rendered (what the server offers).
     pub ready: i64,
     pub crops: i64,
-    pub variants: i64,
-    pub variant_bytes: i64,
+    pub crop_bytes: i64,
 }
 
 /// One painting's stored state, as the generator sees it.
@@ -286,15 +277,13 @@ impl Catalog {
         Ok(rows)
     }
 
-    // ---------------- crops + variants ----------------
+    // ---------------- crops ----------------
 
-    /// name → input hash for a painting's existing crops or variants.
-    pub fn hashes(&self, table: Table, key: &str) -> Result<HashMap<String, String>> {
-        let sql = format!(
-            "SELECT name, input_hash FROM {} WHERE key = ?1",
-            table.name()
-        );
-        let mut stmt = self.conn.prepare(&sql)?;
+    /// name → input hash for a painting's existing crops.
+    pub fn crop_hashes(&self, key: &str) -> Result<HashMap<String, String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT name, input_hash FROM crops WHERE key = ?1")?;
         let rows = stmt
             .query_map([key], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<Result<_, _>>()?;
@@ -317,31 +306,21 @@ impl Catalog {
         Ok(())
     }
 
-    pub fn put_variant(
-        &self,
-        key: &str,
-        name: &str,
-        crop: &str,
-        input_hash: &str,
-        path: &str,
-        bytes: usize,
-    ) -> Result<()> {
+    /// After rendering a painting: forget crops that aren't in the current set
+    /// (`names`, e.g. after a layout change), collect the crop plans, and mark it
+    /// ready when every crop exists.
+    pub fn finish_painting(&self, key: &str, names: &[String]) -> Result<()> {
+        let keep = serde_json::to_string(names)?;
         self.conn.execute(
-            "INSERT OR REPLACE INTO variants (key, name, crop, input_hash, path, bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![key, name, crop, input_hash, path, bytes as i64],
+            "DELETE FROM crops WHERE key = ?1 AND name NOT IN (SELECT value FROM json_each(?2))",
+            params![key, keep],
         )?;
-        Ok(())
-    }
-
-    /// After rendering a painting: collect its crop plans and mark it ready
-    /// when every variant exists.
-    pub fn finish_painting(&self, key: &str, variant_count: usize) -> Result<()> {
         self.conn.execute(
             "UPDATE paintings SET
                plans = (SELECT json_group_object(name, json(plan)) FROM crops WHERE key = ?1),
-               ready = ((SELECT count(*) FROM variants WHERE key = ?1) >= ?2)
+               ready = ((SELECT count(*) FROM crops WHERE key = ?1) >= ?2)
              WHERE key = ?1",
-            params![key, variant_count as i64],
+            params![key, names.len() as i64],
         )?;
         Ok(())
     }
@@ -414,8 +393,7 @@ impl Catalog {
             with_source: n("SELECT count(*) FROM paintings WHERE source_sha256 IS NOT NULL")?,
             ready: n("SELECT count(*) FROM paintings WHERE ready = 1 AND eligible = 1")?,
             crops: n("SELECT count(*) FROM crops")?,
-            variants: n("SELECT count(*) FROM variants")?,
-            variant_bytes: n("SELECT coalesce(sum(bytes), 0) FROM variants")?,
+            crop_bytes: n("SELECT coalesce(sum(bytes), 0) FROM crops")?,
         })
     }
 
@@ -464,21 +442,6 @@ impl Catalog {
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum Table {
-    Crops,
-    Variants,
-}
-
-impl Table {
-    fn name(self) -> &'static str {
-        match self {
-            Table::Crops => "crops",
-            Table::Variants => "variants",
-        }
-    }
-}
-
 /// `https://id.rijksmuseum.nl/200107928` → `200107928`
 pub fn key_of(id: &str) -> &str {
     id.rsplit('/').next().unwrap_or(id)
@@ -517,8 +480,7 @@ pub(crate) mod testing {
         }
     }
 
-    pub const VARIANT: &str = "144x168-c-s144-rect-fill-defined";
-    pub const CROP: &str = "144x168-rect-fill-none";
+    pub const CROP: &str = "144x168-rect-fill";
 
     pub fn meta(key: &str, title: &str) -> ArtMeta {
         ArtMeta {
@@ -549,9 +511,9 @@ pub(crate) mod testing {
         c
     }
 
-    /// Like `fetched`, plus one crop and one variant on record, finished with
-    /// `variant_count` variants expected (1 = complete) and published.
-    pub fn published(dir: &TempDir, variant_count: usize) -> Catalog {
+    /// Like `fetched`, plus one crop on record, finished with `expected` crops
+    /// (1 = complete) and published.
+    pub fn published(dir: &TempDir, expected: usize) -> Catalog {
         let c = fetched(dir);
         let plan = CropPlan {
             mode: CropMode::None,
@@ -562,11 +524,13 @@ pub(crate) mod testing {
             inner_w: 144,
             inner_h: 168,
         };
-        c.put_crop("1", CROP, "h1", &plan, "art/1/crops/a.webp", 10)
+        c.put_crop("1", CROP, "h1", &plan, "art/1/c/a.png", 10)
             .unwrap();
-        c.put_variant("1", VARIANT, CROP, "h2", "art/1/v/a.png", 20)
-            .unwrap();
-        c.finish_painting("1", variant_count).unwrap();
+        // Crop names to keep: the fixture's crop plus placeholders up to `expected`.
+        let names: Vec<String> = std::iter::once(CROP.to_string())
+            .chain((1..expected).map(|i| format!("missing-{i}")))
+            .collect();
+        c.finish_painting("1", &names).unwrap();
         c.publish(&[]).unwrap();
         c
     }
@@ -639,21 +603,28 @@ mod tests {
     }
 
     #[test]
-    fn hashes_returns_the_stored_input_hash_per_variant() {
+    fn crop_hashes_returns_the_stored_input_hash_per_crop() {
         let dir = TempDir::new("hashes");
         let c = published(&dir, 1);
 
         assert_eq!(
-            c.hashes(Table::Variants, "1")
-                .unwrap()
-                .get(VARIANT)
-                .map(String::as_str),
-            Some("h2")
+            c.crop_hashes("1").unwrap().get(CROP).map(String::as_str),
+            Some("h1")
         );
     }
 
     #[test]
-    fn stats_counts_a_painting_with_all_variants_as_ready() {
+    fn finish_painting_forgets_crops_outside_the_current_set() {
+        let dir = TempDir::new("prune");
+        let c = published(&dir, 1);
+
+        c.finish_painting("1", &["other".to_string()]).unwrap();
+
+        assert!(c.crop_hashes("1").unwrap().is_empty());
+    }
+
+    #[test]
+    fn stats_counts_a_painting_with_all_crops_as_ready() {
         let dir = TempDir::new("stats-ready");
         let c = published(&dir, 1);
 
