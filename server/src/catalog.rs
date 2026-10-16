@@ -26,7 +26,7 @@ use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 
-use crate::{era::Era, featured::Candidate, imaging::CropPlan, rijks::ArtMeta, wiki::WikiLinks};
+use crate::{era::Era, featured::Candidate, imaging::CropPlan, rijks::ArtMeta};
 
 const SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS kv (
@@ -70,10 +70,9 @@ CREATE TABLE IF NOT EXISTS crops (
 -- Variants (dithered per tuning/frame) are made on the phone now; drop the
 -- table older catalogs have.
 DROP TABLE IF EXISTS variants;
-CREATE TABLE IF NOT EXISTS wiki (
-  object_number TEXT PRIMARY KEY,
-  links         TEXT NOT NULL          -- WikiLinks as JSON
-);
+-- Wikidata is only used to pick the Featured paintings now; drop the per-painting
+-- links older catalogs have.
+DROP TABLE IF EXISTS wiki;
 ";
 
 pub struct Catalog {
@@ -137,12 +136,10 @@ impl Catalog {
                 "CREATE TABLE snap.pool AS SELECT * FROM main.pool;
              CREATE TABLE snap.painting_eras AS SELECT * FROM main.painting_eras;
              CREATE TABLE snap.paintings AS SELECT * FROM main.paintings;
-             CREATE TABLE snap.wiki AS SELECT * FROM main.wiki;
              CREATE UNIQUE INDEX snap.pool_key ON pool (key);
              CREATE INDEX snap.painting_eras_era ON painting_eras (era, key);
              CREATE UNIQUE INDEX snap.paintings_key ON paintings (key);
              CREATE INDEX snap.paintings_ready ON paintings (ready, eligible);
-             CREATE UNIQUE INDEX snap.wiki_num ON wiki (object_number);
              CREATE TABLE snap.featured (day INTEGER PRIMARY KEY, key TEXT NOT NULL);",
             )
             .and_then(|()| {
@@ -339,21 +336,6 @@ impl Catalog {
         }
     }
 
-    // ---------------- wiki ----------------
-
-    pub fn set_wiki(&mut self, links: &HashMap<String, WikiLinks>) -> Result<()> {
-        let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM wiki", [])?;
-        {
-            let mut add = tx.prepare("INSERT INTO wiki (object_number, links) VALUES (?1, ?2)")?;
-            for (num, l) in links {
-                add.execute(params![num, serde_json::to_string(l)?])?;
-            }
-        }
-        tx.commit()?;
-        Ok(())
-    }
-
     // ---------------- featured ----------------
 
     /// Paintings that may be Featured: eligible, in the pool, with an object
@@ -400,14 +382,13 @@ impl Catalog {
     // ---------------- export for git ----------------
 
     /// One JSON object per line, sorted by key: small, readable diffs in git.
-    /// Contains metadata, eras, links and content hashes, no file paths.
+    /// Contains metadata, eras and content hashes, no file paths.
     pub fn export_jsonl(&self, path: &Path) -> Result<usize> {
         let mut stmt = self.conn.prepare(
             "SELECT p.key, p.meta, p.meta_hash, p.source_sha256,
                     (SELECT group_concat(era, ',') FROM (SELECT era FROM painting_eras e WHERE e.key = p.key ORDER BY era)),
-                    w.links, pool.key IS NOT NULL
+                    pool.key IS NOT NULL
              FROM paintings p
-             LEFT JOIN wiki w ON w.object_number = p.object_number
              LEFT JOIN pool ON pool.key = p.key
              ORDER BY p.key",
         )?;
@@ -421,13 +402,11 @@ impl Catalog {
         while let Some(r) = rows.next()? {
             let meta: serde_json::Value = serde_json::from_str(&r.get::<_, String>(1)?)?;
             let eras: Option<String> = r.get(4)?;
-            let wiki: Option<String> = r.get(5)?;
             let line = serde_json::json!({
                 "key": r.get::<_, String>(0)?,
-                "inPool": r.get::<_, bool>(6)?,
+                "inPool": r.get::<_, bool>(5)?,
                 "eras": eras.map(|e| e.split(',').map(str::to_string).collect::<Vec<_>>()).unwrap_or_default(),
                 "meta": meta,
-                "wiki": wiki.and_then(|w| serde_json::from_str::<serde_json::Value>(&w).ok()),
                 "metaSha256": r.get::<_, String>(2)?,
                 "sourceSha256": r.get::<_, Option<String>>(3)?,
             });

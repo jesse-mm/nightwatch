@@ -76,8 +76,8 @@ to 4 KB per app. That's why the phone caches it.
     (1850 by default; set to 0 to require an explicit license).
 - Every resolved record is stored, including rejected ones, so a painting is
   only re-checked after `REFRESH_DAYS`.
-- Wikidata/Wikipedia links come from one SPARQL query (`wiki.rs`) matching
-  Rijksmuseum inventory numbers.
+- Wikidata is only used to pick the Featured paintings (`popularity.rs`); the
+  catalog stores no per-painting Wikidata or Wikipedia links.
 
 ## Rendering: crops on the server, pixels on the phone
 

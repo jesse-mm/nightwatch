@@ -382,7 +382,6 @@ function fetchArt(path, settings, period, extraQuery) {
           iiifBase: meta.iiifBase,
           license: meta.license,
           licenseUrl: meta.licenseUrl,
-          wiki: meta.wiki || null,
           cropMode: meta.render && meta.render.crop ? meta.render.crop.mode : null,
           cropUrl: base + meta.cropUrl
         }

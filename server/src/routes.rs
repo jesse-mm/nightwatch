@@ -35,7 +35,6 @@ use treasure_trove::{
     rijks::ArtMeta,
     snapshot::Snapshot,
     variants,
-    wiki::WikiLinks,
 };
 
 use crate::config::Config;
@@ -163,9 +162,6 @@ struct ArtResponse<'a> {
     #[serde(flatten)]
     meta: &'a ArtMeta,
     render: RenderInfo,
-    /// Wikidata item and Wikipedia articles, when Wikidata knows the painting.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    wiki: Option<&'a WikiLinks>,
     crop_url: String,
     rgb_url: String,
     attribution: &'static str,
@@ -186,7 +182,6 @@ fn respond(snap: &Snapshot, key: &str, t: &Target) -> Result<Response, AppError>
             width: s.plan.inner_w,
             height: s.plan.inner_h,
         },
-        wiki: s.painting.wiki.as_ref(),
         meta: &s.painting.meta,
         attribution: ATTRIBUTION,
     };

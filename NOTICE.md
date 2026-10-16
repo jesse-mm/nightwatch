@@ -22,9 +22,9 @@ CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), resized.
 The device mockups (`docs/images/devices/*.png`) are drawn by
 `scripts/device-mockups.py` and show a public-domain Rijksmuseum painting.
 
-## Wikidata
-Links to Wikidata items and Wikipedia articles come from Wikidata
-(https://www.wikidata.org), whose data is available under CC0.
+## Wikidata and Wikimedia
+The Featured list is ranked using Wikidata (https://www.wikidata.org, CC0) and
+Wikipedia pageview statistics from the Wikimedia REST API.
 
 ## pebble-color-optimizer (MIT)
 `server/static/config/render.js` contains color tables extracted from the

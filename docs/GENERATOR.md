@@ -29,23 +29,22 @@ recorded with its hash, and the next run continues where it left off.
 
 ## What it does
 
-1. **Wikidata links**: one SPARQL query for all Rijksmuseum paintings.
-2. **Pools**: crawls the Search API for paintings with an image, and again per
+1. **Pools**: crawls the Search API for paintings with an image, and again per
    century for the "Paintings from" filter (~90 requests).
-3. **Metadata**: resolves each painting (3–5 requests). Rejected paintings are
+2. **Metadata**: resolves each painting (3–5 requests). Rejected paintings are
    stored too, so they aren't re-checked until `REFRESH_DAYS` have passed.
-4. **Master image**: downloads the 1200 px image once. It's only fetched again
+3. **Master image**: downloads the 1200 px image once. It's only fetched again
    if the painting's IIIF URL changes (IIIF images are immutable).
-5. **Featured** (only when `catalog/featured.json` is missing, or with
+4. **Featured** (only when `catalog/featured.json` is missing, or with
    `--refresh-featured`, e.g. once a year): one SPARQL query lists the
    Wikipedia articles about Rijksmuseum paintings (~415 paintings, ~1,200
    articles, all languages), then one Wikimedia pageviews request per article
    for the last 12 full months (~20 minutes). The top 365 eligible paintings,
    topped up with others when fewer have an article, are saved to
    `catalog/featured.json` in rank order. Otherwise the file is just read.
-6. **Render** (local, all CPU cores): 8 crops per painting (4 screens ×
+5. **Render** (local, all CPU cores): 8 crops per painting (4 screens ×
    Fill/Whole), toned, lossless PNG; only those whose inputs changed.
-7. **Export**: `catalog/paintings.jsonl`.
+6. **Export**: `catalog/paintings.jsonl`.
 
 ## Being polite
 
@@ -64,7 +63,7 @@ headers, so we stay well below anything that could matter.
 
 | What | Redone when |
 |---|---|
-| Pools, Wikidata | older than `REFRESH_DAYS` (25) |
+| Pools | older than `REFRESH_DAYS` (25) |
 | Featured list (`catalog/featured.json`) | only when missing or with `--refresh-featured` |
 | Metadata | older than `REFRESH_DAYS`; marked *changed* only if its hash differs |
 | Master image | its IIIF URL changed, or the file is missing |
@@ -129,7 +128,7 @@ instead of rebuilding it.
 The generator works in `catalog.sqlite`, which holds a row and hash for every
 crop. The server doesn't read that. Instead the
 generator **publishes** `serve.sqlite`: a copy of only what the server needs
-(paintings, eras, Wikipedia links, crop plans, and a *ready* flag set once all
+(paintings, eras, crop plans, and a *ready* flag set once all
 8 crops of a painting exist).
 
 1. It writes the copy to `serve.sqlite.tmp`.

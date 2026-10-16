@@ -37,7 +37,7 @@ use crate::{
     popularity,
     rijks::Rijks,
     throttle::Throttle,
-    variants, wiki,
+    variants,
 };
 
 #[derive(Clone, Debug)]
@@ -81,7 +81,6 @@ pub async fn run(opts: Options) -> Result<()> {
     if !opts.skip_fetch {
         let throttle = Arc::new(Throttle::per_second(opts.requests_per_second));
         let rijks = Rijks::new(&opts.user_agent, throttle)?;
-        refresh_wiki(&mut catalog, &rijks, &opts).await?;
         refresh_pools(&mut catalog, &rijks, &opts).await?;
         fetch_paintings(&catalog, &rijks, &opts).await?;
         if featured_keys.is_empty() || opts.refresh_featured {
@@ -121,22 +120,6 @@ fn is_stale(catalog: &Catalog, kv_key: &str, opts: &Options) -> Result<bool> {
 }
 
 // ---------------------------------------------------------------- fetch
-
-async fn refresh_wiki(catalog: &mut Catalog, rijks: &Rijks, opts: &Options) -> Result<()> {
-    if !is_stale(catalog, "wiki_built_at", opts)? {
-        return Ok(());
-    }
-    match wiki::fetch(rijks).await {
-        Ok(links) if !links.is_empty() => {
-            catalog.set_wiki(&links)?;
-            catalog.set_kv("wiki_built_at", &now_secs().to_string())?;
-            tracing::info!(paintings = links.len(), "wikidata links updated");
-        }
-        Ok(_) => tracing::warn!("wikidata returned nothing; keeping old links"),
-        Err(e) => tracing::warn!(error = %e, "wikidata failed; keeping old links"),
-    }
-    Ok(())
-}
 
 /// Build the Featured list: rank eligible paintings by Wikipedia readership
 /// (one SPARQL query, then one pageviews request per article, ~20 minutes for

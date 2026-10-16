@@ -279,17 +279,6 @@ function placeOverlay(overlay, px) {
 
 const dutch = (navigator.language || '').toLowerCase().startsWith('nl');
 
-// Wikipedia in the reader's language when it exists, else the other one, else
-// the Wikidata item (every painting Wikidata knows has one).
-function showWikiLink(wiki) {
-  const link = $('art-wiki');
-  const article = wiki && (dutch ? wiki.wikipediaNl || wiki.wikipediaEn : wiki.wikipediaEn || wiki.wikipediaNl);
-  link.hidden = !wiki;
-  if (!wiki) return;
-  link.href = article || wiki.wikidata;
-  link.querySelector('span').textContent = article ? 'Wikipedia' : 'Wikidata';
-}
-
 function showLabel(meta) {
   $('label').hidden = false;
   $('art-title').textContent = meta.title || 'Untitled';
@@ -305,7 +294,6 @@ function showLabel(meta) {
     license.removeAttribute('href');
   }
   $('art-web').href = meta.webUrl;
-  showWikiLink(meta.wiki);
   shown = meta;
   $('explore').hidden = !iiifBaseOf(meta);
 }

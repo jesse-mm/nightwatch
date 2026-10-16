@@ -23,4 +23,3 @@ pub mod saliency;
 pub mod snapshot;
 pub mod throttle;
 pub mod variants;
-pub mod wiki;

@@ -20,14 +20,12 @@ use crate::{
     imaging::{CropPlan, Target},
     rijks::ArtMeta,
     variants,
-    wiki::WikiLinks,
 };
 
 pub struct Painting {
     pub meta: ArtMeta,
     /// Crop name → plan, for the 32 crops.
     pub plans: HashMap<String, CropPlan>,
-    pub wiki: Option<WikiLinks>,
 }
 
 /// Everything needed to answer for one painting + crop.
@@ -83,15 +81,6 @@ impl Snapshot {
             ..Default::default()
         };
 
-        let mut wiki: HashMap<String, WikiLinks> = HashMap::new();
-        let mut stmt = db.prepare("SELECT object_number, links FROM wiki")?;
-        for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
-            let (num, links) = row?;
-            if let Ok(l) = serde_json::from_str(&links) {
-                wiki.insert(num, l);
-            }
-        }
-
         let mut stmt = db.prepare(
             "SELECT p.meta, p.plans FROM paintings p JOIN pool ON pool.key = p.key
              WHERE p.eligible = 1 AND p.ready = 1 AND p.plans IS NOT NULL ORDER BY p.key",
@@ -100,20 +89,13 @@ impl Snapshot {
             let (meta, plans) = row?;
             let meta: ArtMeta = serde_json::from_str(&meta)?;
             let plans: HashMap<String, CropPlan> = serde_json::from_str(&plans)?;
-            let links = meta.object_number.as_ref().and_then(|n| wiki.remove(n));
             if let Some(num) = &meta.object_number {
                 snap.by_object_number
                     .insert(num.to_lowercase(), meta.key.clone());
             }
             snap.any.push(meta.key.clone());
-            snap.paintings.insert(
-                meta.key.clone(),
-                Painting {
-                    meta,
-                    plans,
-                    wiki: links,
-                },
-            );
+            snap.paintings
+                .insert(meta.key.clone(), Painting { meta, plans });
         }
 
         let mut stmt = db.prepare("SELECT key, era FROM painting_eras ORDER BY era, key")?;
