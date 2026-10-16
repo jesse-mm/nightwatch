@@ -51,13 +51,6 @@ let chosen = null;
 // The painting the label currently describes (for the viewer).
 let shown = art;
 
-// Featured day per rotation, computed by the phone (rotation.js). Older phone
-// code doesn't send it: fall back to today's day of the year.
-function dayOfYear(d) {
-  return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 1)) / 86400000);
-}
-const featuredDay = state.featuredDay || { daily: dayOfYear(new Date()), off: dayOfYear(new Date()) };
-
 const $ = (id) => document.getElementById(id);
 
 // ---------------- preview ----------------
@@ -326,16 +319,6 @@ async function loadPreview(path, { pick = false, extra = '' } = {}) {
   }
 }
 
-/** Preview what the chosen selection + rotation would hang right now. */
-function previewSelection() {
-  if (settings.selection === 'featured') {
-    const day = featuredDay[settings.rotation] ?? featuredDay.daily;
-    loadPreview('/api/art/featured', { pick: true, extra: `&day=${day}` });
-  } else {
-    loadPreview('/api/art/random', { pick: true });
-  }
-}
-
 function currentKey() {
   return (chosen || art)?.key;
 }
@@ -547,12 +530,7 @@ document.querySelectorAll('.segmented[data-key]').forEach((group) => {
         update();
         if (CROP_KEYS.includes(key)) refreshPreview();
         if (LOCAL_KEYS.includes(key)) draw();
-        // Choosing an era hangs a painting from it straight away (as a preview).
-        if (key === 'era') loadPreview('/api/art/random', { pick: true });
-        // Show what the new selection/rotation would hang today.
-        if (key === 'selection' || (key === 'rotation' && settings.selection === 'featured')) {
-          previewSelection();
-        }
+        // Collection, era and rotation only change the painting on the next swap.
       }
     });
   });

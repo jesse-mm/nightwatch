@@ -409,18 +409,10 @@ Pebble.addEventListener('appmessage', function (e) {
 
 Pebble.addEventListener('showConfiguration', function () {
   var art = readJson(ART_KEY);
-  var now = new Date();
   var state = {
     settings: loadSettings(),
     art: art ? art.meta : null,
-    watch: watch,
-    // Featured day per rotation, so the page can preview the right painting.
-    featuredDay: {
-      daily: rotation.featuredDay('daily', now),
-      weekly: rotation.featuredDay('weekly', now),
-      monthly: rotation.featuredDay('monthly', now),
-      off: rotation.featuredDay('off', now)
-    }
+    watch: watch
   };
   Pebble.openURL(CONFIG.SERVER_URL + '/config/#' + encodeURIComponent(JSON.stringify(state)));
 });
