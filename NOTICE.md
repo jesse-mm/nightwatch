@@ -27,7 +27,7 @@ Links to Wikidata items and Wikipedia articles come from Wikidata
 (https://www.wikidata.org), whose data is available under CC0.
 
 ## pebble-color-optimizer (MIT)
-`server/static/config/render.js` contains colour tables extracted from the
+`server/static/config/render.js` contains color tables extracted from the
 palette swatches of https://github.com/czmanix/pebble-color-optimizer and ports
 its matching + Atkinson dithering approach.
 

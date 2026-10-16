@@ -2,8 +2,8 @@
 //! already-parsed query params (`Query<T>`) and shared state (`State<T>`).
 //!
 //! Everything is answered from the in-memory snapshot and the generator's files.
-//! The server hands out full-colour crops; the phone and the settings page apply
-//! the colour tuning and frame themselves (`static/config/render.js`).
+//! The server hands out full-color crops; the phone and the settings page apply
+//! the color tuning and frame themselves (`static/config/render.js`).
 //!
 //! `<screen>` = `w, h, round (0/1), fit (fill/whole)`
 //!
@@ -13,7 +13,7 @@
 //! GET /api/art/featured?day=N&<screen>          → the Featured painting for day N (0-based)
 //! GET /api/art/resolve?q=SK-C-5                 → { key } for an object number, key or link
 //! GET /api/art/{key}?<screen>                   → one painting, JSON
-//! GET /api/art/{key}/crop.png?<screen>          → the crop: toned full-colour PNG
+//! GET /api/art/{key}/crop.png?<screen>          → the crop: toned full-color PNG
 //! GET /api/art/{key}/rgb?<screen>[&format=b64]  → the same pixels as raw RGB (for the phone)
 //! GET /config/                                  → settings page (static files)
 
@@ -107,7 +107,7 @@ fn not_generated() -> AppError {
 
 // ---------- query parsing ----------
 
-/// The screen and fit a crop is for. Other parameters (colour tuning, frame,
+/// The screen and fit a crop is for. Other parameters (color tuning, frame,
 /// stride) are ignored: the phone applies those itself.
 #[derive(Deserialize)]
 pub struct TargetQuery {

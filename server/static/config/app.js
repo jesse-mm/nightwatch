@@ -28,8 +28,8 @@ const DEFAULTS = {
 // tuning and frame are applied right here (render.js, the same code as the phone).
 const CROP_KEYS = ['fit'];
 const LOCAL_KEYS = ['palette', 'frame', 'dither', 'brightness', 'contrast'];
-// What "Reset to defaults" restores under Advanced colour settings.
-const COLOUR_KEYS = ['palette', 'dither', 'brightness', 'contrast'];
+// What "Reset to defaults" restores under Advanced color settings.
+const COLOR_KEYS = ['palette', 'dither', 'brightness', 'contrast'];
 
 function readState() {
   try {
@@ -72,7 +72,7 @@ screenEl.classList.toggle('round', Boolean(watch.round));
 const canvas = $('art');
 canvas.width = watch.w;
 canvas.height = watch.h;
-// The crop on screen: full-colour RGB from the server, before tuning and frame.
+// The crop on screen: full-color RGB from the server, before tuning and frame.
 let crop = null;
 
 // ---------------- how the preview is shown ----------------
@@ -241,7 +241,7 @@ function showLabel(meta) {
   $('mini-title').textContent = meta.title || '';
   $('art-artist').textContent = meta.artist || 'Unknown artist';
   $('art-meta').textContent = [meta.date, meta.objectNumber].filter(Boolean).join(', ');
-  // Credit line: source + licence, linked to the licence when we know it.
+  // Credit line: source + license, linked to the license when we know it.
   const license = $('art-license');
   license.textContent = meta.license || 'Public domain';
   if (meta.licenseUrl) {
@@ -562,8 +562,8 @@ document.querySelectorAll('input.range[data-key]').forEach((input) => {
   });
 });
 
-$('colour-reset').addEventListener('click', () => {
-  for (const key of COLOUR_KEYS) settings[key] = DEFAULTS[key];
+$('color-reset').addEventListener('click', () => {
+  for (const key of COLOR_KEYS) settings[key] = DEFAULTS[key];
   document.querySelectorAll('input[name=palette], input[name=dither]').forEach((r) => {
     r.checked = r.value === settings[r.name];
   });
@@ -586,6 +586,15 @@ function hideLoader() {
   loaderTimer = null;
   $('loader').classList.add('done');
 }
+
+// The pinned preview can be made larger (about half the screen) for tuning;
+// it also always offers a new painting.
+$('mini-size').addEventListener('click', (e) => {
+  const large = $('mini').classList.toggle('large');
+  e.currentTarget.setAttribute('aria-pressed', String(large));
+  e.currentTarget.textContent = large ? 'Smaller' : 'Larger';
+});
+$('mini-shuffle').addEventListener('click', () => loadPreview('/api/art/random', { pick: true }));
 
 // Pin a small preview to the top once the big one has scrolled away.
 new IntersectionObserver(([entry]) => {

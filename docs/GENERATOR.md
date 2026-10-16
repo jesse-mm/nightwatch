@@ -2,7 +2,7 @@
 
 `treasure-trove-generator` builds everything the server serves: metadata for
 every painting, a master image per painting, and a crop of each painting for
-every supported screen. The server only reads its output; colour tuning and
+every supported screen. The server only reads its output; color tuning and
 frames are applied on the phone and in the settings page
 (`server/static/config/render.js`).
 
@@ -56,7 +56,7 @@ generator falls back to ranking Featured by the number of Wikipedia articles.
 
 All outside requests (Rijksmuseum, its IIIF image server, Wikidata) go through
 one pacer: `REQUESTS_PER_SECOND` (default 1). A "429 Too Many Requests" or a
-server error pauses *all* requests (honouring `Retry-After`, otherwise 30 s,
+server error pauses *all* requests (honoring `Retry-After`, otherwise 30 s,
 60 s, …) before retrying, up to five times. The Rijksmuseum sends no rate-limit
 headers, so we stay well below anything that could matter.
 
@@ -70,7 +70,7 @@ headers, so we stay well below anything that could matter.
 | Master image | its IIIF URL changed, or the file is missing |
 | Crop | master image hash, crop settings or `PIPELINE_VERSION` changed |
 
-Frames and colour tunings live in `render.js`, so adding or changing one needs
+Frames and color tunings live in `render.js`, so adding or changing one needs
 no generator run at all. Changing the crop or tone code (bump
 `PIPELINE_VERSION` in `server/src/variants.rs`) makes the next run re-render
 the crops **from the local master images**, with no network:

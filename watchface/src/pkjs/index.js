@@ -2,7 +2,7 @@
  * Treasure Trove — phone side.
  *
  * Responsibilities:
- *  1. Learn the watch's screen (size, colour, row stride, shape) from its Hello.
+ *  1. Learn the watch's screen (size, color, row stride, shape) from its Hello.
  *  2. Once per day, ask the server for a random painting rendered for that
  *     screen, and keep it in localStorage so relaunching the face is instant
  *     and works offline.
@@ -84,7 +84,7 @@ function today() {
 
 /**
  * Identifies the crop a painting needs for this watch: the server only cuts
- * per screen and fit. Colour tuning and frame are applied here (render.js),
+ * per screen and fit. Color tuning and frame are applied here (render.js),
  * so changing them never needs a download.
  */
 function cropKey(settings) {

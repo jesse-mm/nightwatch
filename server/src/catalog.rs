@@ -1,7 +1,7 @@
 //! The catalog: SQLite, written by the generator, read by the server.
 //!
 //! - `catalog.sqlite` is the generator's working database: what we know about
-//!   each painting (metadata, licence, era, links) and every file on disk with
+//!   each painting (metadata, license, era, links) and every file on disk with
 //!   the input hash it was made from, so a re-run only redoes work whose inputs
 //!   changed. ~40k crop rows when complete, so it stays on disk.
 //! - `serve.sqlite` is a small snapshot for the server (paintings, eras, links,

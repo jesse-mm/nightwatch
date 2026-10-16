@@ -91,8 +91,8 @@ rsync -a --delete data/ proxmox-host:/path/to/treasure-trove/data/
 | `REFRESH_DAYS` | 25 | Generator: re-check metadata/pools older than this |
 | `CONTACT` | (empty) | Generator: your email or URL for the User-Agent; needed for Wikipedia pageviews |
 | `FEATURED_PATH` | ./catalog/featured.json | Generator: the Featured list (compose passes `/catalog/featured.json`) |
-| `SAFE_CROP_PX` | 20 | Max pixels trimmed by a plain centre crop before smart crop takes over |
-| `PD_FALLBACK_YEAR` | 1850 | Accept records without licence info only if made by this year; 0 = never |
+| `SAFE_CROP_PX` | 20 | Max pixels trimmed by a plain center crop before smart crop takes over |
+| `PD_FALLBACK_YEAR` | 1850 | Accept records without license info only if made by this year; 0 = never |
 | `POOL_MAX_PAGES` | 80 | Search pages crawled per pool |
 | `RIJKS_SEARCH_URL` | paintings with images | Change to widen/narrow the collection |
 | `SOURCE_SIZE` | 1200 | Longest side of the master image |

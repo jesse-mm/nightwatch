@@ -69,18 +69,18 @@ describe('fitArt', () => {
 
 describe('compose', () => {
   const opts = { w: 144, h: 168, stride: 144, round: false, fit: 'fill', frame: 'none', palette: 'defined' };
-  const grey = new Uint8Array(144 * 168 * 3).fill(128);
+  const gray = new Uint8Array(144 * 168 * 3).fill(128);
 
   test('returns stride × height watch bytes', () => {
-    assert.equal(render.compose(grey, 144, 168, opts).length, 144 * 168);
+    assert.equal(render.compose(gray, 144, 168, opts).length, 144 * 168);
   });
 
   test('pads rows to a wider stride', () => {
-    assert.equal(render.compose(grey, 144, 168, { ...opts, stride: 160 }).length, 160 * 168);
+    assert.equal(render.compose(gray, 144, 168, { ...opts, stride: 160 }).length, 160 * 168);
   });
 
   test('draws the frame on the screen edge', () => {
-    const out = render.compose(grey, 144, 168, { ...opts, frame: 'gallery' });
+    const out = render.compose(gray, 144, 168, { ...opts, frame: 'gallery' });
     assert.equal(out[0], render.gcolor8(render.framePixel('gallery', 0, 0, 144, 168, false)));
   });
 
@@ -103,7 +103,7 @@ describe('toScreenRGBA', () => {
   const white = render.gcolor8([255, 255, 255]);
   const black = render.gcolor8([0, 0, 0]);
 
-  test('shows exact colours for "pixels"', () => {
+  test('shows exact colors for "pixels"', () => {
     const bytes = Uint8Array.of(white, black);
     assert.deepEqual(render.toScreenRGBA(bytes, 2, 1, 2, 'pixels'), render.toRGBA(bytes, 2, 1, 2));
   });
@@ -124,29 +124,29 @@ describe('toScreenRGBA', () => {
   });
 });
 
-describe('colour adjustments', () => {
+describe('color adjustments', () => {
   const opts = { w: 8, h: 8, stride: 8, round: false, fit: 'fill', frame: 'none', palette: 'defined' };
-  const grey = (v) => new Uint8Array(8 * 8 * 3).fill(v);
+  const gray = (v) => new Uint8Array(8 * 8 * 3).fill(v);
   const distinct = (bytes) => new Set(bytes).size;
 
   test('adjust leaves pixels alone at 0 brightness and contrast', () => {
     assert.deepEqual(render.adjust(Uint8Array.of(10, 128, 250), 0, 0), Uint8Array.of(10, 128, 250));
   });
 
-  test('brightness 100 lifts mid-grey to white', () => {
+  test('brightness 100 lifts mid-gray to white', () => {
     assert.equal(render.adjust(Uint8Array.of(128), 100, 0)[0], 255);
   });
 
-  test('contrast -100 flattens everything to mid-grey', () => {
+  test('contrast -100 flattens everything to mid-gray', () => {
     assert.deepEqual(Array.from(render.adjust(Uint8Array.of(0, 255), 0, -100)), [128, 128]);
   });
 
-  test('"none" dithering gives a flat colour for a flat grey', () => {
-    assert.equal(distinct(render.compose(grey(100), 8, 8, { ...opts, dither: 'none' })), 1);
+  test('"none" dithering gives a flat color for a flat gray', () => {
+    assert.equal(distinct(render.compose(gray(100), 8, 8, { ...opts, dither: 'none' })), 1);
   });
 
-  test('"checker" mixes two colours in a chessboard for an in-between grey', () => {
-    const out = render.compose(grey(128), 8, 8, { ...opts, dither: 'checker' });
+  test('"checker" mixes two colors in a chessboard for an in-between gray', () => {
+    const out = render.compose(gray(128), 8, 8, { ...opts, dither: 'checker' });
     assert.equal(distinct(out), 2);
     assert.notEqual(out[0], out[1]);
     assert.equal(out[0], out[9]);
@@ -154,8 +154,8 @@ describe('colour adjustments', () => {
 
   test('unknown dithering falls back to Atkinson', () => {
     assert.deepEqual(
-      render.compose(grey(100), 8, 8, { ...opts, dither: 'whatever' }),
-      render.compose(grey(100), 8, 8, opts)
+      render.compose(gray(100), 8, 8, { ...opts, dither: 'whatever' }),
+      render.compose(gray(100), 8, 8, opts)
     );
   });
 });

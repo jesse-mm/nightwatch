@@ -70,9 +70,9 @@ because a background task writes it while requests read it.
 | I want to… | File |
 |---|---|
 | Change the "almost fits" threshold | `.env` → `SAFE_CROP_PX` |
-| Make crops favour faces more/less | `saliency.rs`, weights in `energy_map` (`edge`, `sat`, `skin`) |
+| Make crops favor faces more/less | `saliency.rs`, weights in `energy_map` (`edge`, `sat`, `skin`) |
 | Change brightness/contrast/saturation | `imaging.rs`, `tone()` and `SHADOW_GAMMA` |
-| Change which licences are allowed | `rijks.rs`, `judge_licence()` (and its tests) |
+| Change which licenses are allowed | `rijks.rs`, `judge_license()` (and its tests) |
 | Add a new endpoint | `routes.rs`, add a `.route(...)` and a handler function |
 | Change the settings page | `static/config/` (plain HTML/CSS/JS, no build step) |
 

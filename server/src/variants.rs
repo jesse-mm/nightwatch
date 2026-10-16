@@ -3,7 +3,7 @@
 //!
 //! Per painting: 4 screens × 2 fits = 8 **crops**, the painting cut to the
 //! screen's exact size and toned, stored as lossless PNG. Everything else, the
-//! colour tuning (dithering) and the frame, is applied on the phone and in the
+//! color tuning (dithering) and the frame, is applied on the phone and in the
 //! settings page (`server/static/config/render.js`), so one crop serves all
 //! 16 combinations of frame and tuning.
 //!
@@ -18,7 +18,7 @@ use crate::imaging::{Fit, Target};
 /// includes it is then rebuilt from the local master images.
 pub const PIPELINE_VERSION: &str = "2026-10-16.2-crops";
 
-/// The colour screens we support: (width, height, round). See docs/DEVICES.md.
+/// The color screens we support: (width, height, round). See docs/DEVICES.md.
 pub const SCREENS: [(u32, u32, bool); 4] = [
     (144, 168, false), // basalt: Pebble Time, Time Steel
     (180, 180, true),  // chalk: Pebble Time Round

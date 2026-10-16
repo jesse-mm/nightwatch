@@ -1,7 +1,7 @@
 //! Turning a painting into the crop a Pebble screen shows.
 //!
 //! Pipeline (generator):  plan crop  →  cut it from the local master at the
-//! screen's exact size  →  tone adjustments  →  lossless PNG. Colour tuning,
+//! screen's exact size  →  tone adjustments  →  lossless PNG. Color tuning,
 //! dithering and frames happen on the phone and in the settings page
 //! (`server/static/config/render.js`), so one crop serves every combination.
 
@@ -158,7 +158,7 @@ pub fn crop_locally(src: &RgbImage, plan: &CropPlan) -> RgbImage {
 const SHADOW_GAMMA: f32 = 0.8;
 
 /// Old master paintings are dark and brown under varnish, and the Pebble screen
-/// is dim. Stretch the tones (ignoring the extreme 0.5%) and add a touch of colour.
+/// is dim. Stretch the tones (ignoring the extreme 0.5%) and add a touch of color.
 fn tone(img: &RgbImage) -> Vec<[f32; 3]> {
     let mut hist = [0u32; 256];
     for p in img.pixels() {

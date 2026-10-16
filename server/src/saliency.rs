@@ -5,7 +5,7 @@
 //!
 //! * **Detail** – local contrast (edges). Faces, hands, text and objects are
 //!   busy; skies, walls and dark varnished backgrounds are calm.
-//! * **Colour** – saturated areas usually carry the subject in old paintings.
+//! * **Color** – saturated areas usually carry the subject in old paintings.
 //! * **Skin** – a skin-tone detector, because portraits are a big part of the
 //!   collection and a crop that cuts off a face is the worst outcome.
 //!
@@ -63,8 +63,8 @@ fn energy_map(img: &RgbImage) -> EnergyMap {
             // varnish is not "colourful".
             let sat = if max > 0.0 { (max - min) / max } else { 0.0 } * light.min(0.6) / 0.6;
 
-            // smartcrop.js skin heuristic: distance to a reference skin colour in
-            // normalised RGB space, only for mid-tones.
+            // smartcrop.js skin heuristic: distance to a reference skin color in
+            // normalized RGB space, only for mid-tones.
             let mag = (rf * rf + gf * gf + bf * bf).sqrt().max(1.0);
             let (nr, ng, nb) = (rf / mag - 0.78, gf / mag - 0.57, bf / mag - 0.44);
             let skin_d = (nr * nr + ng * ng + nb * nb).sqrt();
@@ -81,7 +81,7 @@ fn energy_map(img: &RgbImage) -> EnergyMap {
 }
 
 /// Weight of a sample at relative position `t` (0..1) inside the window. A round
-/// screen hides its corners, so the window's centre matters more there.
+/// screen hides its corners, so the window's center matters more there.
 /// Even on a rectangular screen a subject reads best away from the edges, so
 /// the middle of the window counts a little more than its borders.
 fn window_weight(t: f32, round: bool) -> f32 {
@@ -124,10 +124,10 @@ pub fn best_window(img: &RgbImage, crop_w: u32, crop_h: u32, round: bool) -> (u3
             s += profile[start + k] * window_weight(k as f32 / win as f32, round);
         }
         let mut score = s / total;
-        // Gentle pull toward the centre: painters compose for the middle, and it
+        // Gentle pull toward the center: painters compose for the middle, and it
         // breaks ties between equally busy areas.
-        let centre_offset = ((start as f32 + win as f32 / 2.0) / n as f32 - 0.5).abs();
-        score -= centre_offset * 0.08;
+        let center_offset = ((start as f32 + win as f32 / 2.0) / n as f32 - 0.5).abs();
+        score -= center_offset * 0.08;
         // Tall paintings: slight preference for the upper part (heads, faces).
         if !horizontal {
             score -= (start as f32 / n as f32) * 0.03;
@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn finds_busy_region_in_wide_image() {
-        // Flat grey wide image with a checkerboard on the right third.
+        // Flat gray wide image with a checkerboard on the right third.
         let mut img = RgbImage::from_pixel(900, 300, Rgb([90, 90, 90]));
         for y in 0..300 {
             for x in 650..850 {

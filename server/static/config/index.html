@@ -52,20 +52,25 @@
   </header>
 
   <!-- Pinned to the top once the big preview scrolls away. -->
-  <div class="mini" id="mini" aria-hidden="true">
-    <canvas id="mini-art"></canvas>
-    <p class="mini-title" id="mini-title"></p>
+  <div class="mini" id="mini">
+    <canvas id="mini-art" role="img" aria-label="Watch preview"></canvas>
+    <div class="mini-side">
+      <p class="mini-title" id="mini-title"></p>
+      <p class="mini-actions">
+        <button type="button" class="text-button" id="mini-shuffle" data-show-if="notPinned">New painting</button>
+        <button type="button" class="text-button" id="mini-size" aria-pressed="false">Larger</button>
+      </p>
+    </div>
   </div>
 
   <main>
-    <section class="group look" aria-labelledby="g-look">
+    <section class="group look block" aria-labelledby="g-look">
       <h2 id="g-look">Painting</h2>
       <div class="row stacked">
-        <span class="row-text">Crop
-          <small>“Fill the screen” crops wide or tall paintings to their most interesting part.</small></span>
+        <span class="row-text">Crop</span>
         <div class="segmented" role="radiogroup" aria-label="Crop" data-key="fit">
-          <label><input type="radio" name="fit" value="fill"><span>Fill the screen</span></label>
-          <label><input type="radio" name="fit" value="whole"><span>Whole painting</span></label>
+          <label><input type="radio" name="fit" value="fill"><span>Cover</span></label>
+          <label><input type="radio" name="fit" value="whole"><span>Contain</span></label>
         </div>
       </div>
       <div class="row stacked">
@@ -78,9 +83,9 @@
         </div>
       </div>
       <div class="row stacked">
-        <span class="row-text">Colour tuning
-          <small>Adjusts colours for how the watch screen looks in that light.</small></span>
-        <div class="segmented" role="radiogroup" aria-label="Colour tuning" data-key="palette">
+        <span class="row-text">Color tuning
+          <small>Adjusts colors for how the watch screen looks in that light.</small></span>
+        <div class="segmented" role="radiogroup" aria-label="Color tuning" data-key="palette">
           <label><input type="radio" name="palette" value="defined"><span>Accurate</span></label>
           <label><input type="radio" name="palette" value="sun"><span>Daylight</span></label>
           <label><input type="radio" name="palette" value="room"><span>Indoors</span></label>
@@ -88,10 +93,10 @@
         </div>
       </div>
       <details class="advanced nested">
-        <summary>Advanced colour settings</summary>
+        <summary>Advanced color settings</summary>
         <div class="row stacked">
           <span class="row-text">Dithering
-            <small>How the 64 watch colours are mixed to show the painting’s shades.</small></span>
+            <small>How the 64 watch colors are mixed to show the painting’s shades.</small></span>
           <div class="segmented" role="radiogroup" aria-label="Dithering" data-key="dither">
             <label><input type="radio" name="dither" value="atkinson"><span>Atkinson</span></label>
             <label><input type="radio" name="dither" value="checker"><span>50:50</span></label>
@@ -107,21 +112,21 @@
           <input type="range" class="range" data-key="contrast" min="-100" max="100" step="5">
         </label>
         <p class="reset-row">
-          <button type="button" class="text-button" id="colour-reset">Reset to defaults</button>
+          <button type="button" class="text-button" id="color-reset">Reset to defaults</button>
         </p>
       </details>
     </section>
 
     <section class="group" aria-labelledby="g-rotation">
-      <h2 id="g-rotation">Painting rotation</h2>
+      <h2 id="g-rotation">Swap painting</h2>
       <div class="pinned" id="pinned" data-show-if="pinned">
         <p>Pinned: <strong id="pinned-title">this painting</strong>. It stays on your watch until you unpin it.</p>
         <button type="button" class="text-button" id="unpin">Unpin</button>
       </div>
       <div class="row stacked" data-show-if="notPinned">
-        <span class="row-text">New painting
+        <span class="row-text">How often
           <small>Off keeps the current painting until you hang another one.</small></span>
-        <div class="segmented" role="radiogroup" aria-label="Painting rotation" data-key="rotation">
+        <div class="segmented" role="radiogroup" aria-label="Swap painting" data-key="rotation">
           <label><input type="radio" name="rotation" value="off"><span>Off</span></label>
           <label><input type="radio" name="rotation" value="daily"><span>Daily</span></label>
           <label><input type="radio" name="rotation" value="weekly"><span>Weekly</span></label>
@@ -149,7 +154,7 @@
       </div>
     </section>
 
-    <section class="group" aria-labelledby="g-datetime">
+    <section class="group block" aria-labelledby="g-datetime">
       <h2 id="g-datetime">Date &amp; time</h2>
       <label class="row">
         <span class="row-text">Show time</span>
@@ -231,7 +236,7 @@
     <footer class="credits">
       <p>Paintings, images and data: Rijksmuseum, Amsterdam, through the
         <a href="https://data.rijksmuseum.nl/about/" target="_blank" rel="noopener">Rijksmuseum data services</a>.
-        Only works in the public domain or under an open Creative Commons licence are shown, following the museum’s
+        Only works in the public domain or under an open Creative Commons license are shown, following the museum’s
         <a href="https://data.rijksmuseum.nl/policy/" target="_blank" rel="noopener">information and data policy</a>.</p>
       <p>Treasure Trove is an independent project and is not affiliated with or endorsed by the Rijksmuseum.</p>
     </footer>

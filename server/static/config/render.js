@@ -1,6 +1,6 @@
 /**
- * Treasure Trove rendering: turn a full-colour crop into the exact bytes a
- * colour Pebble shows, with the chosen colour tuning and frame.
+ * Treasure Trove rendering: turn a full-color crop into the exact bytes a
+ * color Pebble shows, with the chosen color tuning and frame.
  *
  * Shared by the phone (PebbleKit JS, required as './render') and the settings
  * page (window.TreasureRender), so the preview is the same code as the watch.
@@ -10,9 +10,9 @@
  * its output (watchface/test/fixtures/render.json). Arithmetic follows Rust's
  * 32-bit floats via Math.fround so dithering matches it exactly.
  *
- * Colour approach from czmanix/pebble-color-optimizer (MIT): match each pixel
- * against how Pebble colours *look* on the screen in some light, then write the
- * real colour with the same index; Atkinson error diffusion.
+ * Color approach from czmanix/pebble-color-optimizer (MIT): match each pixel
+ * against how Pebble colors *look* on the screen in some light, then write the
+ * real color with the same index; Atkinson error diffusion.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -25,7 +25,7 @@
 
   var f = Math.fround;
 
-  /** How the 64 Pebble colours look in each light (same order as `defined`). */
+  /** How the 64 Pebble colors look in each light (same order as `defined`). */
   var PALETTES = {
   defined: [
     [0, 0, 0], [0, 0, 85], [0, 0, 170], [85, 0, 0],
@@ -103,7 +103,7 @@
 
   // ------------------------------------------------------------ palettes
 
-  /** Pebble's 8-bit colour byte: 0b11RRGGBB. */
+  /** Pebble's 8-bit color byte: 0b11RRGGBB. */
   function gcolor8(rgb) {
     return 0xC0 | ((rgb[0] / 85) << 4) | ((rgb[1] / 85) << 2) | (rgb[2] / 85);
   }
@@ -112,7 +112,7 @@
   var cache = {};
 
   /**
-   * The colours to match against, stretched to the full 0-255 range (the
+   * The colors to match against, stretched to the full 0-255 range (the
    * simulated palettes are much darker than the image otherwise).
    */
   function matchPalette(name) {
@@ -143,7 +143,7 @@
 
   /**
    * Atkinson-dither an RGB image (Uint8Array, w*h*3) to palette indices.
-   * Each of 6 neighbours gets 1/8 of the error; the rest is dropped, which
+   * Each of 6 neighbors gets 1/8 of the error; the rest is dropped, which
    * keeps highlights and shadows crisp on a tiny screen.
    */
   function dither(rgb, w, h, paletteName) {
@@ -159,7 +159,7 @@
         var r = Math.min(Math.max(buf[p], 0), 255);
         var g = Math.min(Math.max(buf[p + 1], 0), 255);
         var b = Math.min(Math.max(buf[p + 2], 0), 255);
-        // Nearest colour, weighted towards green (the eye is most sensitive to it).
+        // Nearest color, weighted towards green (the eye is most sensitive to it).
         var best = 0;
         var bestD = Infinity;
         for (var k = 0; k < 64; k++) {
@@ -191,7 +191,7 @@
     return out;
   }
 
-  /** Index of the nearest palette colour (same weighting as `dither`). */
+  /** Index of the nearest palette color (same weighting as `dither`). */
   function nearest(colors, r, g, b) {
     var best = 0;
     var bestD = Infinity;
@@ -208,7 +208,7 @@
     return best;
   }
 
-  /** No dithering: every pixel gets its nearest colour (flat, posterised). */
+  /** No dithering: every pixel gets its nearest color (flat, posterized). */
   function nearestOnly(rgb, w, h, paletteName) {
     var colors = matchPalette(paletteName);
     var out = new Uint8Array(w * h);
@@ -219,9 +219,9 @@
   }
 
   /**
-   * 50:50 checkerboard: mix the nearest colour with the one that, averaged
+   * 50:50 checkerboard: mix the nearest color with the one that, averaged
    * with it, lands closest to the pixel, alternating them like a chessboard.
-   * Falls back to the nearest colour when mixing doesn't get closer. A calm,
+   * Falls back to the nearest color when mixing doesn't get closer. A calm,
    * regular texture instead of error-diffusion noise.
    */
   function checker(rgb, w, h, paletteName) {
@@ -256,8 +256,8 @@
   var DITHERS = { atkinson: dither, checker: checker, none: nearestOnly };
 
   /**
-   * Brightness and contrast, each -100..100 (0 = unchanged), around mid-grey.
-   * Contrast 100 triples it, -100 flattens everything to grey.
+   * Brightness and contrast, each -100..100 (0 = unchanged), around mid-gray.
+   * Contrast 100 triples it, -100 flattens everything to gray.
    */
   function adjust(rgb, brightness, contrast) {
     var b = (brightness || 0) / 200;
@@ -280,8 +280,8 @@
   var GOLD = [255, 170, 0];
   var YELLOW = [255, 255, 85];
   var PALE = [255, 255, 170];
-  var GREY = [85, 85, 85];
-  var LIGHT_GREY = [170, 170, 170];
+  var GRAY = [85, 85, 85];
+  var LIGHT_GRAY = [170, 170, 170];
   var WHITE = [255, 255, 255];
 
   function solid(c) {
@@ -290,9 +290,9 @@
 
   /**
    * A frame is a band along the screen edge (a ring on round watches), drawn
-   * in exact Pebble colours without dithering. Each profile lists bands from
+   * in exact Pebble colors without dithering. Each profile lists bands from
    * the outer edge in: [ends at fraction of the border, lit, mid, shade];
-   * each tone is two colours mixed in a fine checker (Pebble has no dark brown).
+   * each tone is two colors mixed in a fine checker (Pebble has no dark brown).
    */
   var FRAMES = {
     gold: {
@@ -323,10 +323,10 @@
       share: 0.10,
       background: WHITE,
       bands: [
-        [0.08, solid(GREY), solid(BLACK), solid(BLACK)],
+        [0.08, solid(GRAY), solid(BLACK), solid(BLACK)],
         [0.30, solid(BLACK), solid(BLACK), solid(BLACK)],
         [0.92, solid(WHITE), solid(WHITE), solid(WHITE)],
-        [1.00, solid(WHITE), solid(LIGHT_GREY), solid(LIGHT_GREY)]
+        [1.00, solid(WHITE), solid(LIGHT_GRAY), solid(LIGHT_GRAY)]
       ]
     }
   };
@@ -344,7 +344,7 @@
 
   var SQRT_2 = f(Math.SQRT2);
 
-  /** Colour of screen pixel (x, y), or null where the painting shows. */
+  /** Color of screen pixel (x, y), or null where the painting shows. */
   function framePixel(frame, x, y, w, h, round) {
     var border = frameBorder(frame, w, h);
     if (!border) {
@@ -449,8 +449,8 @@
 
   /**
    * The watch's bytes for a crop: fit it into the frame's opening, dither it
-   * with the colour tuning, centre it, and draw the frame around it.
-   * @param {Uint8Array|Array} crop full-colour RGB, cw*ch*3
+   * with the color tuning, center it, and draw the frame around it.
+   * @param {Uint8Array|Array} crop full-color RGB, cw*ch*3
    * @param {object} o {w, h, stride, round, fit, frame, palette,
    *   dither ('atkinson' | 'checker' | 'none'), brightness, contrast (-100..100)}
    * @returns {Uint8Array} stride*h GColor8 bytes
@@ -513,10 +513,10 @@
   var screenCache = {};
 
   /**
-   * RGB for every watch byte as that colour looks on a Pebble Time 2 screen in
+   * RGB for every watch byte as that color looks on a Pebble Time 2 screen in
    * some light ('room', 'sun', 'backlight'), from the measured palettes. They're
    * scaled to a paper-like range so the phone's own brightness doesn't decide
-   * how light or dark the preview looks; the colour shifts are kept.
+   * how light or dark the preview looks; the color shifts are kept.
    */
   function screenTable(light) {
     if (screenCache[light]) {
@@ -545,7 +545,7 @@
   /**
    * RGBA pixels (for a canvas) showing watch bytes as they look on the screen
    * in `light` ('room', 'sun' or 'backlight'); anything else shows the exact
-   * colours the watch is sent.
+   * colors the watch is sent.
    */
   function toScreenRGBA(bytes, w, h, stride, light) {
     if (light === 'defined' || !PALETTES[light]) {

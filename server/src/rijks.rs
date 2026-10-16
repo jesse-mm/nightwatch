@@ -10,7 +10,7 @@
 //!    `object → shows (VisualItem) → digitally_shown_by (DigitalObject) →
 //!    access_point` which is a IIIF Image API URL.
 //!
-//! The JSON-LD is large and nested, so instead of modelling every type we read
+//! The JSON-LD is large and nested, so instead of modeling every type we read
 //! it as untyped `serde_json::Value` and pick out what we need with small,
 //! forgiving helpers. If the museum adds or moves a field, we degrade instead of
 //! failing (TS analogy: optional chaining everywhere).
@@ -58,7 +58,7 @@ pub struct ArtMeta {
     pub image_url: Option<String>,
     pub license: String,
     pub license_url: Option<String>,
-    /// Whether this painting may be shown (public domain / open licence).
+    /// Whether this painting may be shown (public domain / open license).
     pub eligible: bool,
     pub reason: Option<String>,
 }
@@ -202,10 +202,10 @@ impl Rijks {
             None => id.to_string(),
         };
 
-        // Licence: the image's rights live in `subject_to` on the VisualItem (or
+        // License: the image's rights live in `subject_to` on the VisualItem (or
         // its DigitalObject). Records also carry a CC0 under `subject_of →
         // subject_to`, but that covers the *metadata text*, not the artwork.
-        let licences: Vec<String> = visual_items
+        let licenses: Vec<String> = visual_items
             .iter()
             .chain(digital_docs.iter())
             .flat_map(image_rights)
@@ -213,7 +213,7 @@ impl Rijks {
             .collect();
 
         let (license, license_url, mut eligible, mut reason) =
-            judge_licence(&licences, year, pd_fallback_year);
+            judge_license(&licenses, year, pd_fallback_year);
         if iiif_base.is_none() {
             eligible = false;
             reason = Some("no IIIF image found".into());
@@ -275,26 +275,26 @@ fn retry_after(r: &reqwest::Response) -> Option<Duration> {
     Some(Duration::from_secs(secs.min(3600)))
 }
 
-// ---------- licence rules ----------
+// ---------- license rules ----------
 
-fn is_licence(s: &str) -> bool {
+fn is_license(s: &str) -> bool {
     s.contains("creativecommons.org/") || s.contains("rightsstatements.org/")
 }
 
-/// Licence URLs from a record's own `subject_to` (not nested `subject_of`).
+/// License URLs from a record's own `subject_to` (not nested `subject_of`).
 fn image_rights(doc: &Value) -> Vec<&str> {
     doc.get("subject_to")
-        .map(|r| all_strings(r, &|s| is_licence(s)))
+        .map(|r| all_strings(r, &|s| is_license(s)))
         .unwrap_or_default()
 }
 
 /// Returns (label, url, eligible, reason).
-pub fn judge_licence(
-    licences: &[String],
+pub fn judge_license(
+    licenses: &[String],
     year: Option<i32>,
     pd_fallback_year: i32,
 ) -> (String, Option<String>, bool, Option<String>) {
-    let pick = |needle: &str| licences.iter().find(|l| l.contains(needle)).cloned();
+    let pick = |needle: &str| licenses.iter().find(|l| l.contains(needle)).cloned();
     if let Some(u) = pick("publicdomain/zero") {
         return ("Public domain (CC0 1.0)".into(), Some(u), true, None);
     }
@@ -307,12 +307,12 @@ pub fn judge_licence(
     if let Some(u) = pick("licenses/by/") {
         return ("CC BY".into(), Some(u), true, None);
     }
-    if let Some(u) = licences.first() {
+    if let Some(u) = licenses.first() {
         return (
             "Restricted".into(),
             Some(u.clone()),
             false,
-            Some(format!("licence not open: {u}")),
+            Some(format!("license not open: {u}")),
         );
     }
     match year {
@@ -323,7 +323,7 @@ pub fn judge_licence(
             "Unknown".into(),
             None,
             false,
-            Some("no licence statement".into()),
+            Some("no license statement".into()),
         ),
     }
 }
@@ -462,7 +462,7 @@ fn object_number_of(obj: &Value) -> Option<String> {
     })
 }
 
-/// (display date, latest year for licence fallback)
+/// (display date, latest year for license fallback)
 fn date_of(obj: &Value) -> (Option<String>, Option<i32>) {
     let Some(prod) = obj.get("produced_by") else {
         return (None, None);
@@ -525,34 +525,34 @@ mod tests {
     }
 
     #[test]
-    fn judge_licence_allows_cc0_whatever_the_date() {
+    fn judge_license_allows_cc0_whatever_the_date() {
         let cc0 = ["https://creativecommons.org/publicdomain/zero/1.0/".to_string()];
-        assert!(judge_licence(&cc0, Some(1990), 1850).2);
+        assert!(judge_license(&cc0, Some(1990), 1850).2);
     }
 
     #[test]
-    fn judge_licence_rejects_in_copyright_even_for_old_works() {
+    fn judge_license_rejects_in_copyright_even_for_old_works() {
         let inc = ["http://rightsstatements.org/vocab/InC/1.0/".to_string()];
-        assert!(!judge_licence(&inc, Some(1600), 1850).2);
+        assert!(!judge_license(&inc, Some(1600), 1850).2);
     }
 
     #[test]
-    fn judge_licence_allows_unlicensed_works_made_before_the_fallback_year() {
-        assert!(judge_licence(&[], Some(1642), 1850).2);
+    fn judge_license_allows_unlicensed_works_made_before_the_fallback_year() {
+        assert!(judge_license(&[], Some(1642), 1850).2);
     }
 
     #[test]
-    fn judge_licence_rejects_unlicensed_works_made_after_the_fallback_year() {
-        assert!(!judge_licence(&[], Some(1920), 1850).2);
+    fn judge_license_rejects_unlicensed_works_made_after_the_fallback_year() {
+        assert!(!judge_license(&[], Some(1920), 1850).2);
     }
 
     #[test]
-    fn judge_licence_rejects_unlicensed_works_when_the_fallback_is_off() {
-        assert!(!judge_licence(&[], Some(1642), 0).2);
+    fn judge_license_rejects_unlicensed_works_when_the_fallback_is_off() {
+        assert!(!judge_license(&[], Some(1642), 0).2);
     }
 
     #[test]
-    fn image_rights_ignores_the_metadata_licence() {
+    fn image_rights_ignores_the_metadata_license() {
         // Shape of a real VisualItem (https://id.rijksmuseum.nl/202109207).
         let vi = json!({
             "type": "VisualItem",

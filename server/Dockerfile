@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# ---- build stage: compile a small, optimised binary ----
+# ---- build stage: compile a small, optimized binary ----
 FROM rust:1.91-slim-bookworm AS build
 WORKDIR /app
 

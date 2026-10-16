@@ -16,7 +16,7 @@
 #define REVEAL_MAX_MIN 60
 #define HELLO_RETRIES 5
 
-/* Colour watches only (basalt, chalk, emery, gabbro), so the paintings can be
+/* Color watches only (basalt, chalk, emery, gabbro), so the paintings can be
  * 8-bit and the inbox can be large. */
 #define INBOX_SIZE 4096
 /* Room for dictionary + tuple headers + the offset tuple. */
@@ -326,7 +326,7 @@ static void text_update(Layer *layer, GContext *ctx) {
   int16_t block_w = ts.w > ds.w ? ts.w : ds.w;
   int16_t block_h = time_h + date_h + gap;
 
-  /* Bottom-right corner on rectangular screens, bottom-centre on round ones. */
+  /* Bottom-right corner on rectangular screens, bottom-center on round ones. */
   GTextAlignment align = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentRight);
   int16_t bottom = area.origin.y + area.size.h - MARGIN - PBL_IF_ROUND_ELSE(8, 0);
 #ifdef PBL_ROUND

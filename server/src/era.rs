@@ -21,7 +21,7 @@ pub enum Era {
     C18,
     #[serde(rename = "1800s")]
     C19,
-    /// Some are still in copyright and get skipped by the licence check.
+    /// Some are still in copyright and get skipped by the license check.
     #[serde(rename = "1900s")]
     C20,
 }

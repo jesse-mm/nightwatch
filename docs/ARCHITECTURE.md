@@ -10,22 +10,22 @@ Two programs share one Rust library (`server/src/lib.rs`):
 - **Server** (`treasure-trove-server`): reads the published snapshot
   (`serve.sqlite`) into plain in-memory maps and serves the files the generator
   made; it reloads when a new snapshot appears. It never calls an outside service and never
-  renders; an unknown painting is a 404. Colour tuning and frames are applied
+  renders; an unknown painting is a 404. Color tuning and frames are applied
   on the phone and in the settings page (`render.js`).
 
 ## The daily flow
 
 1. The watchface starts, creates an empty 8-bit bitmap matching its screen (only
-   colour watches are supported: basalt, chalk, emery, gabbro) and sends a
+   color watches are supported: basalt, chalk, emery, gabbro) and sends a
    **Hello** with width, height, *row stride* (bytes per bitmap row, read from the
    bitmap itself), shape, the largest chunk it can receive, and its 12/24h setting.
 2. The phone JS checks `localStorage`: if today's painting is already cached for
-   this exact screen + framing + colour tuning, it sends it straight away.
+   this exact screen + framing + color tuning, it sends it straight away.
    Otherwise it calls `GET /api/art/random?w=…&h=…&color=1&stride=…&round=…&fit=…&palette=…&frame=…`.
 3. The server picks a painting (Featured for the day, random, optionally from
    one era, or a pinned one) and replies with metadata plus an `rgbUrl`.
 4. The phone downloads the crop (raw RGB as base64, gzipped), caches it, renders
-   it with the colour tuning and frame (`render.js`), and streams the bytes to
+   it with the color tuning and frame (`render.js`), and streams the bytes to
    the watch in chunks (`ImgBegin`, `ImgOffset`+`ImgChunk` × n, `ImgEnd`).
    Changing tuning or frame later just re-renders the cached crop.
 5. The watch `memcpy`s each chunk into the bitmap and redraws, so the painting
@@ -67,13 +67,13 @@ to 4 KB per app. That's why the phone caches it.
 - Each id is resolved as **Linked Art** JSON-LD. The image lives a few links
   away: object → `shows` (visual item) → `digitally_shown_by` (digital object)
   → `access_point` (a IIIF Image API URL).
-- **Licence check** (`rijks.rs::judge_licence`): the image's rights are in
+- **License check** (`rijks.rs::judge_license`): the image's rights are in
   `subject_to` on the visual item (or digital object). The CC0 under
   `subject_of` covers the metadata text, not the artwork.
   - CC0 / Public Domain Mark / CC BY / CC BY-SA → allowed.
   - Any other statement (e.g. "In Copyright") → skipped.
   - No statement at all → allowed only if made no later than `PD_FALLBACK_YEAR`
-    (1850 by default; set to 0 to require an explicit licence).
+    (1850 by default; set to 0 to require an explicit license).
 - Every resolved record is stored, including rejected ones, so a painting is
   only re-checked after `REFRESH_DAYS`.
 - Wikidata/Wikipedia links come from one SPARQL query (`wiki.rs`) matching
@@ -83,11 +83,11 @@ to 4 KB per app. That's why the phone caches it.
 
 ```
 generator:  master image (1200 px, local) ──▶ plan crop ──▶ cut + resize (Lanczos3) ──▶ tone ──▶ crop.png
-phone/page: crop ──▶ fit into the frame opening ──▶ dither (colour tuning) ──▶ frame ──▶ watch bytes
+phone/page: crop ──▶ fit into the frame opening ──▶ dither (color tuning) ──▶ frame ──▶ watch bytes
 ```
 
 The generator makes **8 crops** per painting: 4 screens × Fill/Whole, full
-colour, toned, lossless PNG. Colour tuning and frames are applied by
+color, toned, lossless PNG. Color tuning and frames are applied by
 `server/static/config/render.js`, which the phone (PebbleKit JS) and the
 settings page both run, so one crop covers all 16 tuning × frame combinations,
 changing them never downloads anything, and the settings preview is exactly
@@ -98,18 +98,18 @@ what the phone sends to the watch.
 | Situation | Result |
 |---|---|
 | Shapes match | No crop |
-| Filling the screen would trim ≤ `SAFE_CROP_PX` (20) | Centre crop ("safe crop") |
+| Filling the screen would trim ≤ `SAFE_CROP_PX` (20) | Center crop ("safe crop") |
 | Trims more, framing = Fill | **Smart crop** |
 | Trims more, framing = Whole painting | Letterbox: the crop is the whole painting, smaller than the screen |
 
 **Smart crop** (`saliency.rs`): there is no public points-of-interest dataset for
 this collection (some Wikimedia Commons files have "depicts" regions, but coverage
 is too sparse to rely on), so we estimate interest from the pixels, like
-smartcrop.js: edges (detail), saturation (colour) and a skin-tone detector (faces).
+smartcrop.js: edges (detail), saturation (color) and a skin-tone detector (faces).
 Because "fill" always fits one axis exactly, only one direction is free, so we
-slide a window along a 1-D energy profile. The window weights its centre a little
+slide a window along a 1-D energy profile. The window weights its center a little
 more (strongly on round screens, whose corners are hidden), and there's a gentle
-pull toward the painting's centre and, for tall works, toward the top.
+pull toward the painting's center and, for tall works, toward the top.
 
 **Tone** (`imaging.rs::tone`, in the generator): auto-levels (ignoring the
 extreme 0.5 %), a shadow lift (gamma 0.8, because the reflective screen crushes
@@ -120,17 +120,17 @@ dark varnish into a single black) and +10 % saturation, baked into the crop.
 1. *Fit:* with a frame, the opening is smaller than the screen. A Fill crop is
    scaled (bilinear) to cover the opening and trimmed evenly; a Whole crop is
    scaled to fit inside it.
-2. *Dither:* Atkinson error diffusion to the Pebble palette. With colour tuning
-   other than *Accurate*, pixels are matched against how each Pebble colour
-   actually looks on the screen in that light, and the true Pebble colour with
+2. *Dither:* Atkinson error diffusion to the Pebble palette. With color tuning
+   other than *Accurate*, pixels are matched against how each Pebble color
+   actually looks on the screen in that light, and the true Pebble color with
    the same index is written (pebble-color-optimizer's idea).
-3. *Frame:* drawn in exact palette colours (no dithering) around the opening,
+3. *Frame:* drawn in exact palette colors (no dithering) around the opening,
    or as a ring on round watches.
 4. *Bytes:* `0b11RRGGBB` per pixel, rows padded to the stride the watch reported.
 
 **Preview on the settings page:** the page shows the watch's bytes either
 exactly or as they look on a Pebble Time 2 screen (`toScreenRGBA`): each of the
-64 colours is replaced by its measured appearance indoors, in daylight or with
+64 colors is replaced by its measured appearance indoors, in daylight or with
 the backlight (the pebble-color-optimizer palettes), scaled to a paper-like
 18–232 range so the phone's brightness doesn't decide, with a faint pixel grid.
 
@@ -175,7 +175,7 @@ fetching (and removes folders from the older layout).
 | `GET /api/art/featured?day=N&<screen>` | the Featured painting for day *N* of the year (0-based, wraps; all paintings in turn if there's no Featured list) |
 | `GET /api/art/resolve?q=…` | `{ key }` for an object number, key or Rijksmuseum link (only servable paintings) |
 | `GET /api/art/{key}?<screen>` | same as random, for a specific painting |
-| `GET /api/art/{key}/crop.png?<screen>` | the crop, toned full-colour PNG (settings page) |
+| `GET /api/art/{key}/crop.png?<screen>` | the crop, toned full-color PNG (settings page) |
 | `GET /api/art/{key}/rgb?<screen>[&format=b64]` | the same pixels as raw RGB, width × height × 3 (phone) |
 | `GET /config/` | settings page (incl. `render.js`) |
 

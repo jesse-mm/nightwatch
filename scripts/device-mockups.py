@@ -3,7 +3,7 @@
 
 Used for docs/DEVICES.md. Each screen shows a generated crop rendered by the
 same code as the phone (server/static/config/render.js, run with Node; Accurate
-colours, no frame) at its exact resolution, scaled 2x without smoothing so the
+colors, no frame) at its exact resolution, scaled 2x without smoothing so the
 dithered pixels stay visible. Needs Pillow, Node and a generator run
 (data/art/<key>/c/*.png).
 

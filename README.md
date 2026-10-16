@@ -27,28 +27,28 @@ date that stay out of its way.
 ## Features
 
 - A random painting each day (public domain / CC only), rendered for *your* watch's
-  exact screen: 144×168, 180×180 round, 200×228 or 260×260 round. Colour watches
+  exact screen: 144×168, 180×180 round, 200×228 or 260×260 round. Color watches
   only for now (Pebble Time, Time Steel, Time Round, Time 2, Round 2; see
   [Supported watches](docs/DEVICES.md)).
 - Every crop is cut from a local master image at the screen's exact size, so no
-  stretching. Colour tuning and frames are applied on the phone, so changing them
+  stretching. Color tuning and frames are applied on the phone, so changing them
   is instant and needs no download.
-- Paintings that almost fit (≤ 20 px off) get a simple centre crop; very wide or tall
-  ones get a smart crop that finds faces, detail and colour. Or choose "Whole painting".
-- Colours are dithered to Pebble's 64-colour palette with optional tuning for
+- Paintings that almost fit (≤ 20 px off) get a simple center crop; very wide or tall
+  ones get a smart crop that finds faces, detail and color. Or choose "Whole painting".
+- Colors are dithered to Pebble's 64-color palette with optional tuning for
   daylight, indoor or backlit viewing (based on pebble-color-optimizer).
 - **Date & time:** time on/off, 12/24h (follows the phone by default), hide AM/PM,
   date on/off as DD, DD-MM or MM-DD with a `-`, `/` or `.` separator, all in LECO.
 - **Auto hide:** the painting stays clean; flick your wrist to see the time for
   1 to 60 minutes (default 1).
 - **Frames:** none (default), gold, wood or a gallery mat, drawn into the bitmap in
-  exact Pebble colours. The painting is cropped to fit the opening.
-- **Live preview:** crop, frame, colour settings and "Hang a different painting"
+  exact Pebble colors. The painting is cropped to fit the opening.
+- **Live preview:** crop, frame, color settings and "Hang a different painting"
   update the watch preview on the settings page straight away; nothing reaches
   the watch until you save. The preview shows how the painting looks on a Pebble
   Time 2 screen indoors or in daylight (from measured palettes, with the screen's
   pixel grid), and a small copy stays pinned at the top while you scroll.
-- **Advanced colour settings:** dithering (Atkinson, 50:50 checkerboard or off),
+- **Advanced color settings:** dithering (Atkinson, 50:50 checkerboard or off),
   brightness and contrast (-100 to 100), with a reset. Applied on the phone.
 - **Featured:** the 365 Rijksmuseum paintings most read about on Wikipedia (page
   views over the last year, all languages), one for each day of the year in a
@@ -108,7 +108,7 @@ Watchfaces don't receive button presses on Pebble, so gestures use the accelerom
 
 ```sh
 npm install && npm run lint              # ESLint 10 (flat config) for all JS
-cd server && cargo test                  # unit tests for crop, palette, licence rules
+cd server && cargo test                  # unit tests for crop, palette, license rules
 cd server && cargo run                   # server on :8080, data in ./data
 ```
 
@@ -118,15 +118,15 @@ Checked against the live services and the SDK 4.17 emulators (basalt, chalk, eme
 
 - **Rijksmuseum API.** The search URL works as is. Object records must be requested
   with plain `Accept: application/ld+json`; adding `profile=` gets a 400. The image
-  licence is read from `subject_to` on the VisualItem (the CC0 under `subject_of` is
-  the metadata licence, not the artwork's).
+  license is read from `subject_to` on the VisualItem (the CC0 under `subject_of` is
+  the metadata license, not the artwork's).
 - **LECO glyphs.** `LECO_20_BOLD_NUMBERS` includes `-`, so the date renders as `15-10`.
 - **Text box insets.** `TIME_TOP_INSET 7` / `DATE_TOP_INSET 6` give the "Always" box
   3 px of padding above and below the digits.
 
 Still to check on a real watch:
 
-- **Colour tuning.** "Daylight / Indoors / Backlight" stretch the simulated palettes;
+- **Color tuning.** "Daylight / Indoors / Backlight" stretch the simulated palettes;
   compare them on a real screen and pick a default (`palette` in the phone's
   defaults, `watchface/src/pkjs/index.js`).
 
@@ -134,5 +134,5 @@ Still to check on a real watch:
 
 Artwork and data: Rijksmuseum, Amsterdam, via the
 [Rijksmuseum data services](https://data.rijksmuseum.nl/about/). Not affiliated with
-the Rijksmuseum. Colour approach: czmanix/pebble-color-optimizer (MIT). See
+the Rijksmuseum. Color approach: czmanix/pebble-color-optimizer (MIT). See
 [NOTICE.md](NOTICE.md).
