@@ -43,7 +43,7 @@ recorded with its hash, and the next run continues where it left off.
    `catalog/featured.json` in rank order. Otherwise the file is just read.
 6. **Render** (local, all CPU cores): 32 crops and 128 variants per painting,
    only those whose inputs changed.
-7. **Export**: `catalog/paintings.jsonl` for git.
+7. **Export**: `catalog/paintings.jsonl`.
 
 ## Being polite
 
@@ -84,14 +84,14 @@ data/catalog.sqlite                 the catalog (server loads it into memory)
 data/art/<key>/source.jpg           master image
 data/art/<key>/crops/*.webp         32 full-colour crops (lossy WebP q90, for viewing)
 data/art/<key>/v/*.png              128 variants (indexed PNG, lossless)
-catalog/paintings.jsonl             metadata for git: one painting per line, sorted
-catalog/featured.json               the Featured list for git (see below)
+catalog/paintings.jsonl             metadata: one painting per line, sorted
+catalog/featured.json               the Featured list (see below)
 ```
 
 ### The Featured list
 
 Wikipedia readership barely changes month to month, so `catalog/featured.json`
-is built once and then reused; refresh it now and then with
+is built once and then reused (and shared as a release artifact, below); refresh it now and then with
 `docker compose run --rm generator --refresh-featured`. It lists the 365
 paintings in rank order with title, artist, number of articles and views, so
 diffs are readable and you can swap paintings by hand (any eligible painting's
@@ -99,7 +99,29 @@ diffs are readable and you can swap paintings by hand (any eligible painting's
 to a fixed per-year shuffle of the list, so famous works are spread over the
 year. Test runs (`--only`, `--limit`) never overwrite the file.
 
-`data/` is not in git (binaries); `catalog/paintings.jsonl` is.
+Neither is in git. `data/` stays on the machine (or is copied with rsync, see
+DEPLOY.md); `catalog/` is shared as a release artifact.
+
+### Sharing the catalog (release artifact)
+
+`catalog/` is generated, so instead of committing it, publish it as a release
+asset (e.g. on GitHub) and fetch it where it's needed:
+
+```sh
+scripts/catalog.sh pack     # -> catalog.tar.gz + catalog.tar.gz.sha256
+# upload both to a release, keeping these names
+scripts/catalog.sh fetch    # downloads $CATALOG_URL (+ .sha256), verifies, unpacks into catalog/
+```
+
+Set `CATALOG_URL` in `.env`. With fixed asset names, GitHub's
+`https://github.com/<owner>/<repo>/releases/latest/download/catalog.tar.gz`
+always points at the newest upload. The script only needs `tar`, `curl` or
+`wget`, and `sha256sum` or `shasum`, so it also works on a bare Linux box
+(tested with BusyBox on Alpine), and it refuses an archive whose checksum
+doesn't match.
+
+Fetch before a generator run on a new machine, so it reuses the Featured list
+instead of rebuilding it.
 
 ## How the server picks up new output
 

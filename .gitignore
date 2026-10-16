@@ -7,3 +7,6 @@ data/
 *.pbw
 .DS_Store
 .lock-waf*
+catalog/
+catalog.tar.gz
+catalog.tar.gz.sha256

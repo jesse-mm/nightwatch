@@ -19,7 +19,7 @@ date that stay out of its way.
 |---|---|
 | `watchface/` | The Pebble project: C watchface (`src/c/main.c`) and phone-side JS (`src/pkjs/`). |
 | `server/` | Rust: the **generator** (fetches paintings politely, smart-crops, dithers every variant) and the **server** (serves the pre-rendered files + settings page). |
-| `catalog/paintings.jsonl` | Painting metadata exported by the generator (in git; the images in `data/` are not). |
+| `catalog/` | Generated metadata and the Featured list. Not in git: published as a `catalog.tar.gz` release asset (see `scripts/catalog.sh`). |
 | `server/static/config/` | The custom settings page (plain HTML/CSS/JS, no Clay). |
 | `docker-compose.yml` | Runs the server, optionally with a Tailscale Funnel sidecar for a public HTTPS URL. |
 | `docs/` | [Architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [deployment](docs/DEPLOY.md), [Rust for TypeScript developers](docs/RUST_FOR_TS_DEVS.md). |
@@ -46,7 +46,8 @@ date that stay out of its way.
 - **Featured:** the 365 Rijksmuseum paintings most read about on Wikipedia (page
   views over the last year, all languages), one for each day of the year in a
   fixed order. Topped up with other paintings when fewer have an article. The
-  list lives in `catalog/featured.json` (in git) and is only rebuilt on request.
+  list lives in `catalog/featured.json`, shared as a release artifact, and is only
+  rebuilt on request.
 - **Rotation:** a new painting daily, weekly or monthly, or Off to keep the current
   one. Show Featured or "Surprise me" (random, optionally from one century:
   before 1600, or the 1600s, 1700s, 1800s or 1900s; there's no 2000s option,

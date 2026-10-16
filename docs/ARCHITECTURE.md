@@ -127,7 +127,9 @@ data/                                   (not in git)
   art/<key>/source.jpg                  master image, longest side 1200 px
   art/<key>/crops/<crop>.webp           32: <w>x<h>-<rect|round>-<fill|whole>-<frame>
   art/<key>/v/<variant>.png             128: <w>x<h>-c-s<w>-<rect|round>-<fill|whole>-<palette>[-<frame>]
-catalog/paintings.jsonl                 (in git) one painting per line: metadata, eras, links, hashes
+catalog/paintings.jsonl                 one painting per line: metadata, eras, links, hashes
+catalog/featured.json                   the Featured list, rank order
+                                        (catalog/ is a release artifact: scripts/catalog.sh)
 ```
 
 Variants are **indexed PNGs** (palettized, as Pebble recommends for colour
