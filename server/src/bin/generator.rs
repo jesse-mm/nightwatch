@@ -22,6 +22,9 @@ OPTIONS (environment variable in brackets):
                         (Wikimedia requires it for Wikipedia pageviews; without it
                         Featured is ranked by number of Wikipedia articles)
   --refresh-days N      re-check metadata/pools older than this   [REFRESH_DAYS, 25]
+  --featured FILE       the Featured list, kept in git; built only when missing
+                        [FEATURED_PATH, ./catalog/featured.json]
+  --refresh-featured    rebuild the Featured list (e.g. once a year, ~20 min)
   --limit N             only N paintings (test runs)
   --only KEY            only this painting (repeatable), e.g. 200107928
   --skip-fetch          render from what's on disk, no network
@@ -62,6 +65,8 @@ fn parse_args() -> Result<Options> {
         contact: std::env::var("CONTACT")
             .ok()
             .filter(|c| !c.trim().is_empty()),
+        featured_path: var("FEATURED_PATH", PathBuf::from("./catalog/featured.json")),
+        refresh_featured: false,
         user_agent: String::new(),
     };
     let mut args = std::env::args().skip(1);
@@ -75,6 +80,8 @@ fn parse_args() -> Result<Options> {
             "--export" => o.export = Some(value("--export")?.into()),
             "--rps" => o.requests_per_second = value("--rps")?.parse()?,
             "--contact" => o.contact = Some(value("--contact")?),
+            "--featured" => o.featured_path = value("--featured")?.into(),
+            "--refresh-featured" => o.refresh_featured = true,
             "--refresh-days" => o.refresh_days = value("--refresh-days")?.parse()?,
             "--limit" => o.limit = Some(value("--limit")?.parse()?),
             "--only" => o.only.push(value("--only")?),

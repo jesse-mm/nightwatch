@@ -45,7 +45,8 @@ date that stay out of its way.
   watch until you save.
 - **Featured:** the 365 Rijksmuseum paintings most read about on Wikipedia (page
   views over the last year, all languages), one for each day of the year in a
-  fixed order. Topped up with other paintings when fewer have an article.
+  fixed order. Topped up with other paintings when fewer have an article. The
+  list lives in `catalog/featured.json` (in git) and is only rebuilt on request.
 - **Rotation:** a new painting daily, weekly or monthly, or Off to keep the current
   one. Show Featured or "Surprise me" (random, optionally from one century:
   before 1600, or the 1600s, 1700s, 1800s or 1900s; there's no 2000s option,

@@ -32,6 +32,7 @@ use rayon::prelude::*;
 use crate::{
     catalog::{key_of, Catalog, Table},
     era::{self, Era},
+    featured,
     imaging::{self, CropPlan},
     png8, popularity,
     rijks::Rijks,
@@ -66,25 +67,36 @@ pub struct Options {
     pub user_agent: String,
     /// Email or URL in the User-Agent; Wikimedia requires it for pageviews.
     pub contact: Option<String>,
+    /// The Featured list (in git). Built only when missing or when
+    /// `refresh_featured` is set; otherwise just read.
+    pub featured_path: PathBuf,
+    pub refresh_featured: bool,
 }
 
 pub async fn run(opts: Options) -> Result<()> {
     let mut catalog = Catalog::open(&opts.data_dir)?;
     let started = Instant::now();
 
+    let mut featured_keys: Vec<String> = featured::load(&opts.featured_path)?
+        .map(|f| f.paintings.into_iter().map(|e| e.key).collect())
+        .unwrap_or_default();
     if !opts.skip_fetch {
         let throttle = Arc::new(Throttle::per_second(opts.requests_per_second));
         let rijks = Rijks::new(&opts.user_agent, throttle)?;
         refresh_wiki(&mut catalog, &rijks, &opts).await?;
         refresh_pools(&mut catalog, &rijks, &opts).await?;
         fetch_paintings(&catalog, &rijks, &opts).await?;
-        refresh_popularity(&catalog, &rijks, &opts).await?;
-        catalog.publish()?;
+        if featured_keys.is_empty() || opts.refresh_featured {
+            featured_keys = build_featured(&catalog, &rijks, &opts).await?;
+        }
     }
+    let (year, _) = popularity::year_month(now_secs());
+    let day_order = featured::day_order(&featured_keys, year);
+    catalog.publish(&day_order)?;
     if !opts.skip_render {
-        render_all(&mut catalog, &opts)?;
+        render_all(&mut catalog, &opts, &day_order)?;
     }
-    catalog.publish()?;
+    catalog.publish(&day_order)?;
     tracing::info!("published serve.sqlite for the server");
     if let Some(path) = &opts.export {
         let n = catalog.export_jsonl(path)?;
@@ -128,57 +140,80 @@ async fn refresh_wiki(catalog: &mut Catalog, rijks: &Rijks, opts: &Options) -> R
     Ok(())
 }
 
-/// Wikipedia readership for eligible paintings, for the Featured year: one
-/// SPARQL query for the article list, then one pageviews request per article
-/// (~1,200 for the whole collection, ~20 minutes at 1 request/s).
-async fn refresh_popularity(catalog: &Catalog, rijks: &Rijks, opts: &Options) -> Result<()> {
-    let now = now_secs();
-    let due = catalog.popularity_due(now.saturating_sub(opts.refresh_days * 86_400))?;
-    if due.is_empty() {
-        return Ok(());
-    }
+/// Build the Featured list: rank eligible paintings by Wikipedia readership
+/// (one SPARQL query, then one pageviews request per article, ~20 minutes for
+/// the collection) and save it to `featured_path` for git. Only a complete
+/// list from a full run is saved, so test runs never overwrite it.
+async fn build_featured(catalog: &Catalog, rijks: &Rijks, opts: &Options) -> Result<Vec<String>> {
+    let candidates = catalog.featured_candidates()?;
     let articles = match popularity::articles(rijks).await {
         Ok(a) => a,
         Err(e) => {
-            tracing::warn!(error = %e, "could not list Wikipedia articles; popularity unchanged");
-            return Ok(());
+            tracing::warn!(error = %e, "could not list Wikipedia articles; Featured not rebuilt");
+            return Ok(Vec::new());
         }
     };
-    let todo: Vec<(&String, &Vec<String>)> = due
-        .iter()
-        .filter_map(|num| articles.get(num).map(|list| (num, list)))
-        .collect();
-    // Without contact info Wikimedia rejects pageview requests (429), so rank by
-    // the number of Wikipedia articles instead, and check again next run.
-    if opts.contact.is_none() {
+    let now = now_secs();
+    let range = popularity::last_twelve_months(now);
+    let mut views: HashMap<String, u64> = HashMap::new();
+    let ranking = if opts.contact.is_some() {
+        let todo: Vec<(&str, &Vec<String>)> = candidates
+            .iter()
+            .filter_map(|c| {
+                articles
+                    .get(&c.object_number)
+                    .map(|l| (c.object_number.as_str(), l))
+            })
+            .collect();
+        tracing::info!(
+            paintings = todo.len(),
+            articles = todo.iter().map(|(_, l)| l.len()).sum::<usize>(),
+            "fetching Wikipedia pageviews"
+        );
+        for (i, (num, list)) in todo.iter().enumerate() {
+            let mut total = 0;
+            for article in *list {
+                match popularity::views(rijks, article, &range).await {
+                    Ok(v) => total += v,
+                    Err(e) => tracing::warn!(article, error = %e, "pageviews failed; counted as 0"),
+                }
+            }
+            views.insert((*num).to_string(), total);
+            if (i + 1) % 50 == 0 || i + 1 == todo.len() {
+                tracing::info!(done = i + 1, total = todo.len(), "pageviews progress");
+            }
+        }
+        format!(
+            "Wikipedia pageviews, all languages, {} to {} (months)",
+            &range.0[..6],
+            &range.1[..6]
+        )
+    } else {
+        // Without contact info Wikimedia rejects pageview requests (429).
         tracing::warn!(
             "CONTACT not set: Featured is ranked by number of Wikipedia articles, not pageviews"
         );
-        for (num, list) in &todo {
-            catalog.set_popularity(num, list.len(), 0, 0)?;
-        }
-        return Ok(());
+        "number of Wikipedia articles, all languages (set CONTACT to rank by pageviews)".to_string()
+    };
+
+    let entries = featured::rank(candidates, &articles, &views);
+    let keys = entries.iter().map(|e| e.key.clone()).collect();
+    let full_run = opts.only.is_empty() && opts.limit.is_none();
+    if full_run && entries.len() == featured::SIZE {
+        let file = featured::FeaturedFile {
+            generated: popularity::ymd(now),
+            ranking,
+            paintings: entries,
+        };
+        featured::save(&opts.featured_path, &file)?;
+        tracing::info!(path = %opts.featured_path.display(), "saved the Featured list");
+    } else {
+        tracing::info!(
+            paintings = entries.len(),
+            "Featured list used for this run only (not a full list)"
+        );
     }
-    let range = popularity::last_twelve_months(now);
-    tracing::info!(
-        paintings = todo.len(),
-        articles = todo.iter().map(|(_, l)| l.len()).sum::<usize>(),
-        "fetching Wikipedia pageviews"
-    );
-    for (i, (num, list)) in todo.iter().enumerate() {
-        let mut views = 0;
-        for article in *list {
-            match popularity::views(rijks, article, &range).await {
-                Ok(v) => views += v,
-                Err(e) => tracing::warn!(article, error = %e, "pageviews failed; counted as 0"),
-            }
-        }
-        catalog.set_popularity(num, list.len(), views, now)?;
-        if (i + 1) % 50 == 0 || i + 1 == todo.len() {
-            tracing::info!(done = i + 1, total = todo.len(), "pageviews progress");
-        }
-    }
-    Ok(())
+    Ok(keys)
 }
 
 async fn crawl(rijks: &Rijks, start: &str, max_pages: usize) -> Result<Vec<String>> {
@@ -342,7 +377,7 @@ struct Rendered {
     variants: Vec<(String, String, String, String, usize)>,
 }
 
-fn render_all(catalog: &mut Catalog, opts: &Options) -> Result<()> {
+fn render_all(catalog: &mut Catalog, opts: &Options, featured_days: &[String]) -> Result<()> {
     let mut work = catalog.renderable()?;
     if !opts.only.is_empty() {
         work.retain(|(k, _)| opts.only.iter().any(|o| key_of(o) == k));
@@ -411,7 +446,7 @@ fn render_all(catalog: &mut Catalog, opts: &Options) -> Result<()> {
         })?;
         // Let the server offer finished paintings during long runs.
         if (n + 1) % 50 == 0 {
-            catalog.publish()?;
+            catalog.publish(featured_days)?;
         }
         let done = ((n + 1) * 16).min(total);
         let per = started.elapsed().as_secs_f64() / done.max(1) as f64;

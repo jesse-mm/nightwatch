@@ -27,10 +27,7 @@ use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 
-use crate::{era::Era, imaging::CropPlan, popularity, rijks::ArtMeta, variants, wiki::WikiLinks};
-
-/// Paintings in the Featured selection: one per day of the year.
-pub const FEATURED_SIZE: usize = 365;
+use crate::{era::Era, featured::Candidate, imaging::CropPlan, rijks::ArtMeta, wiki::WikiLinks};
 
 const SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS kv (
@@ -85,13 +82,6 @@ CREATE TABLE IF NOT EXISTS wiki (
   object_number TEXT PRIMARY KEY,
   links         TEXT NOT NULL          -- WikiLinks as JSON
 );
--- Wikipedia readership, for the Featured year (see popularity.rs).
-CREATE TABLE IF NOT EXISTS popularity (
-  object_number TEXT PRIMARY KEY,
-  articles      INTEGER NOT NULL,      -- Wikipedia articles, all languages
-  views         INTEGER NOT NULL,      -- their views over the last 12 months
-  checked_at    INTEGER NOT NULL
-);
 ";
 
 pub struct Catalog {
@@ -143,9 +133,8 @@ impl Catalog {
 
     /// Write the server's snapshot: only the tables it reads, then an atomic
     /// rename over the previous one.
-    pub fn publish(&self) -> Result<()> {
-        let (year, _) = popularity::year_month(now_secs());
-        let featured = self.featured(year)?;
+    /// `featured`: Featured keys in day-of-year order (see featured.rs).
+    pub fn publish(&self, featured: &[String]) -> Result<()> {
         let dest = Self::serve_path(&self.root);
         let tmp = dest.with_extension("sqlite.tmp");
         let _ = std::fs::remove_file(&tmp);
@@ -386,82 +375,34 @@ impl Catalog {
         Ok(())
     }
 
-    // ---------------- popularity + featured ----------------
+    // ---------------- featured ----------------
 
-    /// Object numbers of eligible pool paintings whose popularity wasn't
-    /// checked since `checked_after` (unix secs).
-    pub fn popularity_due(&self, checked_after: u64) -> Result<Vec<String>> {
+    /// Paintings that may be Featured: eligible, in the pool, with an object
+    /// number (to match Wikipedia articles).
+    pub fn featured_candidates(&self) -> Result<Vec<Candidate>> {
         let mut stmt = self.conn.prepare(
-            "SELECT DISTINCT p.object_number FROM paintings p JOIN pool ON pool.key = p.key
-             LEFT JOIN popularity pop ON pop.object_number = p.object_number
-             WHERE p.eligible = 1 AND p.object_number IS NOT NULL
-               AND (pop.object_number IS NULL OR pop.checked_at < ?1)
-             ORDER BY p.object_number",
+            "SELECT p.key, p.object_number, p.meta FROM paintings p JOIN pool ON pool.key = p.key
+             WHERE p.eligible = 1 AND p.object_number IS NOT NULL ORDER BY p.key",
         )?;
-        let rows = stmt
-            .query_map([checked_after as i64], |r| r.get(0))?
-            .collect::<Result<_, _>>()?;
-        Ok(rows)
-    }
-
-    pub fn set_popularity(
-        &self,
-        object_number: &str,
-        articles: usize,
-        views: u64,
-        now: u64,
-    ) -> Result<()> {
-        self.conn.execute(
-            "INSERT OR REPLACE INTO popularity (object_number, articles, views, checked_at)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![object_number, articles as i64, views as i64, now as i64],
-        )?;
-        Ok(())
-    }
-
-    /// The Featured list for `year`: the most-read paintings on Wikipedia that
-    /// are ready to serve, in a fixed per-year order so famous works are spread
-    /// over the year rather than all in January. Fewer than 365 paintings have
-    /// a Wikipedia article, so the rest of the year is filled with other ready
-    /// paintings in a fixed per-year order. Once a full list exists it's frozen
-    /// for the rest of the year, so day N always shows the same painting.
-    /// Without any popularity data yet, the list is empty.
-    pub fn featured(&self, year: i64) -> Result<Vec<String>> {
-        let kv_key = format!("featured-{year}");
-        if let Some(saved) = self.get_kv(&kv_key)? {
-            return Ok(serde_json::from_str(&saved)?);
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (key, object_number, meta) = row?;
+            let meta: ArtMeta = serde_json::from_str(&meta)?;
+            out.push(Candidate {
+                key,
+                object_number,
+                title: meta.title,
+                artist: meta.artist,
+            });
         }
-        let mut stmt = self.conn.prepare(
-            "SELECT p.key FROM paintings p JOIN pool ON pool.key = p.key
-             JOIN popularity pop ON pop.object_number = p.object_number
-             WHERE p.eligible = 1 AND p.ready = 1
-             ORDER BY pop.views DESC, pop.articles DESC, p.key LIMIT ?1",
-        )?;
-        let mut keys: Vec<String> = stmt
-            .query_map([FEATURED_SIZE as i64], |r| r.get(0))?
-            .collect::<Result<_, _>>()?;
-        if keys.is_empty() {
-            return Ok(keys);
-        }
-        let seed = year.to_string();
-        if keys.len() < FEATURED_SIZE {
-            let mut stmt = self.conn.prepare(
-                "SELECT p.key FROM paintings p JOIN pool ON pool.key = p.key
-                 LEFT JOIN popularity pop ON pop.object_number = p.object_number
-                 WHERE p.eligible = 1 AND p.ready = 1 AND pop.object_number IS NULL",
-            )?;
-            let mut others: Vec<String> = stmt
-                .query_map([], |r| r.get(0))?
-                .collect::<Result<_, _>>()?;
-            others.sort_by_cached_key(|k| variants::hash(&[&seed, "fill", k]));
-            others.truncate(FEATURED_SIZE - keys.len());
-            keys.extend(others);
-        }
-        keys.sort_by_cached_key(|k| variants::hash(&[&seed, k]));
-        if keys.len() == FEATURED_SIZE {
-            self.set_kv(&kv_key, &serde_json::to_string(&keys)?)?;
-        }
-        Ok(keys)
+        Ok(out)
     }
 
     pub fn stats(&self) -> Result<Stats> {
@@ -536,12 +477,6 @@ impl Table {
             Table::Variants => "variants",
         }
     }
-}
-
-fn now_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
 }
 
 /// `https://id.rijksmuseum.nl/200107928` → `200107928`
@@ -632,7 +567,7 @@ pub(crate) mod testing {
         c.put_variant("1", VARIANT, CROP, "h2", "art/1/v/a.png", 20)
             .unwrap();
         c.finish_painting("1", variant_count).unwrap();
-        c.publish().unwrap();
+        c.publish(&[]).unwrap();
         c
     }
 }
@@ -726,57 +661,19 @@ mod tests {
     }
 
     #[test]
-    fn featured_is_empty_without_popularity_data() {
-        let dir = TempDir::new("featured-none");
-        let c = published(&dir, 1);
-
-        assert!(c.featured(2026).unwrap().is_empty());
-    }
-
-    #[test]
-    fn featured_includes_ready_paintings_read_on_wikipedia() {
-        let dir = TempDir::new("featured-one");
-        let c = published(&dir, 1);
-        c.set_popularity("SK-C-5", 2, 1000, 100).unwrap();
-
-        assert_eq!(c.featured(2026).unwrap(), vec!["1".to_string()]);
-    }
-
-    #[test]
-    fn featured_fills_up_with_paintings_without_wikipedia_articles() {
-        let dir = TempDir::new("featured-fill");
-        let mut c = published(&dir, 1);
-        let ids = [
-            "https://id.rijksmuseum.nl/1".to_string(),
-            "https://id.rijksmuseum.nl/2".to_string(),
-        ];
-        c.set_pool(&ids, &[]).unwrap();
-        let mut other = meta("2", "A quiet landscape");
-        other.object_number = Some("SK-A-1".into());
-        c.upsert_painting(&other, 100).unwrap();
-        c.finish_painting("2", 0).unwrap();
-        c.set_popularity("SK-C-5", 2, 1000, 100).unwrap();
-
-        assert_eq!(c.featured(2026).unwrap().len(), 2);
-    }
-
-    #[test]
-    fn featured_is_not_frozen_until_the_list_is_full() {
-        let dir = TempDir::new("featured-unfrozen");
-        let c = published(&dir, 1);
-        c.set_popularity("SK-C-5", 2, 1000, 100).unwrap();
-
-        c.featured(2026).unwrap();
-
-        assert_eq!(c.get_kv("featured-2026").unwrap(), None);
-    }
-
-    #[test]
-    fn popularity_due_lists_eligible_paintings_not_checked_yet() {
-        let dir = TempDir::new("popularity-due");
+    fn featured_candidates_lists_eligible_paintings_with_title() {
+        let dir = TempDir::new("featured-candidates");
         let c = fetched(&dir);
 
-        assert_eq!(c.popularity_due(100).unwrap(), vec!["SK-C-5".to_string()]);
+        let candidates = c.featured_candidates().unwrap();
+
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|c| (c.object_number.as_str(), c.title.as_str()))
+                .collect::<Vec<_>>(),
+            [("SK-C-5", "The Night Watch")]
+        );
     }
 
     #[test]

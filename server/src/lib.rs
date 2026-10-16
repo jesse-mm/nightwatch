@@ -13,6 +13,7 @@
 
 pub mod catalog;
 pub mod era;
+pub mod featured;
 pub mod frame;
 pub mod generate;
 pub mod imaging;

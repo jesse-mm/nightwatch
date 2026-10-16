@@ -91,6 +91,7 @@ rsync -a --delete data/ proxmox-host:/path/to/treasure-trove/data/
 | `REQUESTS_PER_SECOND` | 1 | Generator: pace of all outside requests |
 | `REFRESH_DAYS` | 25 | Generator: re-check metadata/pools older than this |
 | `CONTACT` | (empty) | Generator: your email or URL for the User-Agent; needed for Wikipedia pageviews |
+| `FEATURED_PATH` | ./catalog/featured.json | Generator: the Featured list (compose passes `/catalog/featured.json`) |
 | `SAFE_CROP_PX` | 20 | Max pixels trimmed by a plain centre crop before smart crop takes over |
 | `PD_FALLBACK_YEAR` | 1850 | Accept records without licence info only if made by this year; 0 = never |
 | `POOL_MAX_PAGES` | 80 | Search pages crawled per pool |

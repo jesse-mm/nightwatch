@@ -28,7 +28,7 @@ services:
     image: treasure-trove:latest
     build: ./server
     restart: "no"
-    command: ["treasure-trove-generator", "--export", "/catalog/paintings.jsonl"]
+    command: ["treasure-trove-generator", "--export", "/catalog/paintings.jsonl", "--featured", "/catalog/featured.json"]
     environment:
       RUST_LOG: ${RUST_LOG:-info}
       REQUESTS_PER_SECOND: ${REQUESTS_PER_SECOND:-1}

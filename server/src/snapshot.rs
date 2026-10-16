@@ -306,8 +306,7 @@ mod tests {
     fn snapshot_with_featured(name: &str) -> (TempDir, Snapshot) {
         let dir = TempDir::new(name);
         let c = published(&dir, 1);
-        c.set_popularity("SK-C-5", 2, 1000, 100).unwrap();
-        c.publish().unwrap();
+        c.publish(&["1".to_string()]).unwrap();
         let snap = Snapshot::load(dir.path()).unwrap();
         (dir, snap)
     }

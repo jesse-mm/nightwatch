@@ -34,12 +34,13 @@ recorded with its hash, and the next run continues where it left off.
    stored too, so they aren't re-checked until `REFRESH_DAYS` have passed.
 4. **Master image**: downloads the 1200 px image once. It's only fetched again
    if the painting's IIIF URL changes (IIIF images are immutable).
-5. **Popularity** (for Featured): one SPARQL query lists the Wikipedia articles
-   about Rijksmuseum paintings (~415 paintings, ~1,200 articles, all
-   languages), then one Wikimedia pageviews request per article for the last
-   12 full months (~20 minutes). The top 365 ready paintings, topped up with
-   others when fewer have an article, become the year's Featured list in a
-   fixed per-year order; once complete it's frozen for that year.
+5. **Featured** (only when `catalog/featured.json` is missing, or with
+   `--refresh-featured`, e.g. once a year): one SPARQL query lists the
+   Wikipedia articles about Rijksmuseum paintings (~415 paintings, ~1,200
+   articles, all languages), then one Wikimedia pageviews request per article
+   for the last 12 full months (~20 minutes). The top 365 eligible paintings,
+   topped up with others when fewer have an article, are saved to
+   `catalog/featured.json` in rank order. Otherwise the file is just read.
 6. **Render** (local, all CPU cores): 32 crops and 128 variants per painting,
    only those whose inputs changed.
 7. **Export**: `catalog/paintings.jsonl` for git.
@@ -61,8 +62,8 @@ headers, so we stay well below anything that could matter.
 
 | What | Redone when |
 |---|---|
-| Pools, Wikidata, popularity | older than `REFRESH_DAYS` (25) |
-| Featured list | once per calendar year, when 365 ready paintings exist |
+| Pools, Wikidata | older than `REFRESH_DAYS` (25) |
+| Featured list (`catalog/featured.json`) | only when missing or with `--refresh-featured` |
 | Metadata | older than `REFRESH_DAYS`; marked *changed* only if its hash differs |
 | Master image | its IIIF URL changed, or the file is missing |
 | Crop | master image hash, crop settings or `PIPELINE_VERSION` changed |
@@ -84,7 +85,19 @@ data/art/<key>/source.jpg           master image
 data/art/<key>/crops/*.webp         32 full-colour crops (lossy WebP q90, for viewing)
 data/art/<key>/v/*.png              128 variants (indexed PNG, lossless)
 catalog/paintings.jsonl             metadata for git: one painting per line, sorted
+catalog/featured.json               the Featured list for git (see below)
 ```
+
+### The Featured list
+
+Wikipedia readership barely changes month to month, so `catalog/featured.json`
+is built once and then reused; refresh it now and then with
+`docker compose run --rm generator --refresh-featured`. It lists the 365
+paintings in rank order with title, artist, number of articles and views, so
+diffs are readable and you can swap paintings by hand (any eligible painting's
+`key` works; ones that aren't rendered are skipped). The day of the year maps
+to a fixed per-year shuffle of the list, so famous works are spread over the
+year. Test runs (`--only`, `--limit`) never overwrite the file.
 
 `data/` is not in git (binaries); `catalog/paintings.jsonl` is.
 

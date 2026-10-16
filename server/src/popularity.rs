@@ -100,16 +100,28 @@ pub fn last_twelve_months(now: u64) -> (String, String) {
 
 /// Calendar (year, month) of a unix time in UTC.
 pub fn year_month(unix: u64) -> (i64, u32) {
-    // Howard Hinnant's civil_from_days.
+    let (year, month, _) = civil(unix);
+    (year, month)
+}
+
+/// `YYYY-MM-DD` of a unix time in UTC.
+pub fn ymd(unix: u64) -> String {
+    let (year, month, day) = civil(unix);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// (year, month, day) of a unix time in UTC: Howard Hinnant's `civil_from_days`.
+fn civil(unix: u64) -> (i64, u32, u32) {
     let days = (unix / 86_400) as i64 + 719_468;
     let era = days.div_euclid(146_097);
     let doe = days - era * 146_097;
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
+    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
     let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
     let year = yoe + era * 400 + i64::from(month <= 2);
-    (year, month)
+    (year, month, day)
 }
 
 #[cfg(test)]
@@ -144,6 +156,11 @@ mod tests {
     fn year_month_reads_a_known_date() {
         // 2026-10-16T00:00:00Z
         assert_eq!(year_month(1_792_108_800), (2026, 10));
+    }
+
+    #[test]
+    fn ymd_formats_a_known_date() {
+        assert_eq!(ymd(1_792_108_800), "2026-10-16");
     }
 
     #[test]
