@@ -82,6 +82,31 @@ half-copied snapshot:
 rsync -a --delete data/ proxmox-host:/path/to/treasure-trove/data/
 ```
 
+## Load test
+
+`scripts/loadtest.js` ([k6](https://k6.io)) has many watches ask for their
+painting at the same moment: each client fetches the painting info (Featured,
+random or pinned) for one of the four screens and then its pixels, with gzip
+like a phone. Run it against a running server:
+
+```sh
+docker run --rm -i -v "$PWD/scripts:/scripts" grafana/k6:0.57.0 run \
+  -e BASE_URL=http://host.docker.internal:8080 /scripts/loadtest.js
+```
+
+`CLIENTS` (default 100) and `ROUNDS` (fetches per client, default 10) change
+the size. On a laptop (Docker on macOS, 55 paintings):
+
+| Clients at once | Fetches | Errors | Median | p95 |
+|---|---|---|---|---|
+| 100 | 1,000 | 0 | 34 ms | 244 ms |
+| 1,000 | 3,000 | 0 | 532 ms | 1.65 s |
+
+A fetch is about 86 KB, so a 1 Gbps uplink carries roughly 1,400 watches per
+second. Each watch fetches about once a day, so a home server has plenty of
+headroom. At 1,000 at once the limit is most likely CPU (decoding and gzipping
+pixels), not the network.
+
 ## Settings reference (.env)
 
 | Variable | Default | Meaning |
