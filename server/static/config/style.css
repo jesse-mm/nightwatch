@@ -67,17 +67,19 @@ a { color: inherit; text-underline-offset: 0.18em; }
   align-items: center;
 }
 
+/* The watch around the screen: a plain dark bezel, so it can't be mistaken
+   for a painting frame (those are drawn on the screen itself). */
 .frame {
   margin: 0;
   padding: 14px;
-  /* Layered gilt: bright inner lip, darker moulding, soft gallery shadow. */
-  background: linear-gradient(145deg, var(--gilt-light), var(--gilt) 40%, var(--gilt-dark) 100%);
+  background: linear-gradient(160deg, #3a3d41, #1e2023 55%, #141517);
   box-shadow:
-    inset 0 0 0 2px var(--gilt-dark),
-    inset 0 0 0 5px var(--gilt-light),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
     0 18px 30px -12px rgba(0, 0, 0, 0.55);
-  border-radius: 2px;
+  border-radius: 28px;
 }
+
+.frame.round { border-radius: 50%; padding: 18px; }
 
 .screen {
   position: relative;
@@ -112,9 +114,10 @@ a { color: inherit; text-underline-offset: 0.18em; }
 }
 
 .overlay {
+  /* Placed by app.js (placeOverlay), the same way as on the watch. */
   position: absolute;
-  right: calc(var(--scale, 2) * 4px);
-  bottom: calc(var(--scale, 2) * 4px);
+  left: 0;
+  top: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -127,13 +130,6 @@ a { color: inherit; text-underline-offset: 0.18em; }
   transition: opacity 160ms ease;
 }
 
-.screen.round .overlay {
-  right: 50%;
-  transform: translateX(50%);
-  bottom: calc(var(--scale, 2) * 18px);
-  align-items: center;
-}
-
 .overlay.outline {
   text-shadow: -1px 0 #000, 1px 0 #000, 0 -1px #000, 0 1px #000;
 }
@@ -142,7 +138,6 @@ a { color: inherit; text-underline-offset: 0.18em; }
   background: #000;
   padding: calc(var(--scale, 2) * 3px);
   border-radius: calc(var(--scale, 2) * 3px);
-  margin: calc(var(--scale, 2) * -3px);
 }
 
 .overlay.hidden { opacity: 0; }
@@ -697,9 +692,11 @@ label, button, input, summary, a { -webkit-tap-highlight-color: transparent; }
 .mini-screen {
   position: relative;
   flex: none;
-  border: 3px solid var(--gilt);
+  border: 4px solid #232528;
+  border-radius: 8px;
   background: #000;
   line-height: 0;
+  overflow: hidden;
 }
 
 .mini-screen.round { border-radius: 50%; overflow: hidden; }
@@ -823,3 +820,40 @@ label, button, input, summary, a { -webkit-tap-highlight-color: transparent; }
 .icon-button .when-large, .mini.large .icon-button .when-small { display: none; }
 .mini.large .icon-button .when-large { display: block; }
 .mini .text-button[aria-pressed="true"] { background: rgba(255, 255, 255, 0.16); }
+
+/* ---------------- label buttons ---------------- */
+
+.label-links { gap: 0.5rem; }
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  font: 500 var(--step--1) var(--sans);
+  color: #eef0ec;
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.cta[hidden] { display: none; }
+.cta.primary { color: #1b211f; background: #eef0ec; border-color: #eef0ec; font-weight: 600; }
+.cta:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.cta svg, .label-actions svg {
+  width: 1.05em;
+  height: 1.05em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon-button[hidden] { display: none; }
+
+/* The small pinned bar: Time and Expand as icons only, to fit on one line. */
+.mini:not(.large) #mini-time span,
+.mini:not(.large) #mini-size span { display: none; }
+.segmented + .segmented { margin-top: 0.5rem; }

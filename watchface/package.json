@@ -16,7 +16,7 @@
     "messageKeys": [
       "Hello", "PhoneReady",
       "ScreenW", "ScreenH", "RowStride", "IsRound", "ChunkSize", "Is24h",
-      "ShowTime", "ClockMode", "HideAmPm", "ShowDate", "DateFormat", "DateSep", "HideUntilShake", "RevealMinutes", "BoxMode",
+      "ShowTime", "ClockMode", "HideAmPm", "ShowDate", "DateFormat", "DateSep", "HideUntilShake", "RevealMinutes", "BoxMode", "TextPos",
       "ImgBegin", "ImgOffset", "ImgChunk", "ImgEnd"
     ],
     "resources": { "media": [] }

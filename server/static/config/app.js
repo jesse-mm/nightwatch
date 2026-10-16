@@ -12,6 +12,8 @@ const DEFAULTS = {
   hideUntilShake: false,
   revealMinutes: 1,
   boxMode: 'off',
+  textRow: 'bottom',
+  textCol: 'auto',
   fit: 'fill',
   palette: 'defined',
   frame: 'none',
@@ -46,6 +48,8 @@ const settings = { ...DEFAULTS, ...(state.settings || {}) };
 if (settings.boxMode !== 'always') settings.boxMode = 'off';
 const art = state.art || null;
 const watch = state.watch || { w: 144, h: 168, round: 0 };
+// "auto" is where the watch puts the time by default.
+if (settings.textCol === 'auto') settings.textCol = watch.round ? 'center' : 'right';
 // A painting picked on this page; only hung on the watch when saved.
 let chosen = null;
 // The painting the label currently describes (for the viewer).
@@ -61,6 +65,7 @@ screenEl.style.setProperty('--sw', `${watch.w * scale}px`);
 screenEl.style.setProperty('--sh', `${watch.h * scale}px`);
 screenEl.style.setProperty('--scale', String(scale));
 screenEl.classList.toggle('round', Boolean(watch.round));
+$('frame').classList.toggle('round', Boolean(watch.round));
 
 const canvas = $('art');
 canvas.width = watch.w;
@@ -90,9 +95,9 @@ miniScreen.classList.toggle('round', Boolean(watch.round));
 
 function savedMiniTime() {
   try {
-    return localStorage.getItem('tt-mini-time') === '1';
+    return localStorage.getItem('tt-mini-time') !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -233,6 +238,26 @@ function renderPreview() {
   $('fmt-d').textContent = dates.dd;
   $('fmt-dm').textContent = dates['dd-mm'];
   $('fmt-md').textContent = dates['mm-dd'];
+  placeOverlay($('overlay'), scale);
+  placeOverlay($('mini-overlay'), Number(miniScreen.style.getPropertyValue('--scale')) || 0);
+}
+
+// Same placement as the watch (main.c text_update), in watch pixels.
+function placeOverlay(overlay, px) {
+  if (!px) return;
+  const round = Boolean(watch.round);
+  const margin = round ? 10 : 4;
+  const edge = margin + (round ? 8 : 0);
+  const pad = settings.boxMode === 'always' ? 3 : 0;
+  const blockW = overlay.offsetWidth / px - 2 * pad;
+  const blockH = overlay.offsetHeight / px - 2 * pad;
+  const top = settings.textRow === 'top' ? edge : watch.h - edge - blockH;
+  // Round screens only offer top or bottom, always centered.
+  const col = round ? 'center' : settings.textCol;
+  const left = col === 'left' ? margin : col === 'right' ? watch.w - margin - blockW : (watch.w - blockW) / 2;
+  overlay.style.left = `${(left - pad) * px}px`;
+  overlay.style.top = `${(top - pad) * px}px`;
+  overlay.style.alignItems = { left: 'flex-start', right: 'flex-end' }[col] || 'center';
 }
 
 // ---------------- wall label ----------------
@@ -247,7 +272,7 @@ function showWikiLink(wiki) {
   link.hidden = !wiki;
   if (!wiki) return;
   link.href = article || wiki.wikidata;
-  link.textContent = article ? 'Read on Wikipedia' : 'Wikidata';
+  link.querySelector('span').textContent = article ? 'Wikipedia' : 'Wikidata';
 }
 
 function showLabel(meta) {
@@ -340,16 +365,20 @@ if (art?.cropUrl) {
 }
 
 function updateShuffle() {
-  $('keep').hidden = !(chosen && art);
+  $('keep').hidden = $('mini-keep').hidden = !(chosen && art);
 }
 
 $('shuffle').addEventListener('click', () => loadPreview('/api/art/random', { pick: true }));
 
-$('keep').addEventListener('click', () => {
+// Back to the painting the watch shows now, after swapping a few times.
+function restoreOriginal() {
   chosen = null;
   updateShuffle();
   refreshPreview();
-});
+}
+
+$('keep').addEventListener('click', restoreOriginal);
+$('mini-keep').addEventListener('click', restoreOriginal);
 
 // ---------------- pin a painting ----------------
 
@@ -474,6 +503,7 @@ function conditions() {
     showDate: settings.showDate,
     ampm: settings.showTime && (settings.clockMode === '12' || (settings.clockMode === 'auto' && !clockIs24h())),
     anyText: settings.showTime || settings.showDate,
+    textColumn: (settings.showTime || settings.showDate) && !watch.round,
     hideUntilShake: settings.hideUntilShake,
     revealMinutes: (settings.showTime || settings.showDate) && settings.hideUntilShake,
     dateSeparator: settings.showDate && settings.dateFormat !== 'dd',
@@ -612,14 +642,20 @@ function showMiniTime() {
 // The overlay is sized in watch pixels, so follow the pinned preview's size.
 new ResizeObserver(() => {
   const height = $('mini-art').clientHeight;
-  if (height) miniScreen.style.setProperty('--scale', String(height / watch.h));
+  if (!height) return;
+  miniScreen.style.setProperty('--scale', String(height / watch.h));
+  renderPreview();
 }).observe($('mini-art'));
 $('mini-shuffle').addEventListener('click', () => loadPreview('/api/art/random', { pick: true }));
 
-// Pin a small preview to the top once the big one has scrolled away.
-new IntersectionObserver(([entry]) => {
-  $('mini').classList.toggle('shown', !entry.isIntersecting && !canvas.hidden);
-}).observe($('frame'));
+// Pin a small preview to the top once half of the big one has scrolled away.
+new IntersectionObserver(
+  ([entry]) => {
+    const scrolledPast = entry.intersectionRatio < 0.5 && entry.boundingClientRect.top < 0;
+    $('mini').classList.toggle('shown', scrolledPast && !canvas.hidden);
+  },
+  { threshold: [0, 0.25, 0.5, 0.75, 1] },
+).observe($('frame'));
 
 function update() {
   applyVisibility();
@@ -629,6 +665,8 @@ function update() {
 update();
 showMiniTime();
 setInterval(renderPreview, 30_000);
+// The overlay is placed by its measured size, which changes once fonts load.
+document.fonts?.ready.then(renderPreview);
 
 // ---------------- save ----------------
 

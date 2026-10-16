@@ -29,6 +29,8 @@ var DEFAULTS = {
   hideUntilShake: false,
   revealMinutes: 1,      // how long a flick shows the time (1-60)
   boxMode: 'off',        // off | always
+  textRow: 'bottom',     // top | bottom
+  textCol: 'auto',       // left | center | right; auto = right (round screens: always center)
   fit: 'fill',           // fill | whole
   palette: 'defined',    // defined | sun | room | backlight
   dither: 'atkinson',    // atkinson | checker | none (applied here, render.js)
@@ -167,8 +169,21 @@ function sendSettings(s) {
     DateSep: Math.max(0, ['-', '/', '.'].indexOf(s.dateSep)),
     HideUntilShake: s.hideUntilShake ? 1 : 0,
     RevealMinutes: Math.min(60, Math.max(1, Math.round(Number(s.revealMinutes) || 1))),
-    BoxMode: s.boxMode === 'always' ? 1 : 0
+    BoxMode: s.boxMode === 'always' ? 1 : 0,
+    TextPos: textPos(s)
   });
+}
+
+/** Row * 3 + column. Round screens are always centered; "auto" is the right on others. */
+function textPos(s) {
+  var row = s.textRow === 'top' ? 0 : 1;
+  var col = ['left', 'center', 'right'].indexOf(s.textCol);
+  if (watch && watch.round) {
+    col = 1;
+  } else if (col < 0) {
+    col = 2;
+  }
+  return row * 3 + col;
 }
 
 function sendImage(bytes) {

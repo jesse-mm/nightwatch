@@ -34,6 +34,9 @@ typedef enum { ClockAuto = 0, Clock12 = 1, Clock24 = 2 } ClockMode;
 typedef enum { DateDayMonth = 0, DateMonthDay = 1, DateDay = 2 } DateFormat;
 /* Separator between day and month: '-', '/' or '.'. */
 static const char DATE_SEPARATORS[] = { '-', '/', '.' };
+/* Where the time and date sit: row * 3 + column. */
+typedef enum { RowTop = 0, RowBottom = 1 } TextRow;
+typedef enum { ColLeft = 0, ColCenter = 1, ColRight = 2 } TextCol;
 /* 2 was a double-flick toggle; older saved settings with it now mean Off. */
 typedef enum { BoxOff = 0, BoxAlways = 1 } BoxMode;
 
@@ -48,6 +51,7 @@ typedef struct {
   /* Added later: settings saved before these existed keep the defaults. */
   uint8_t reveal_minutes;
   uint8_t date_sep;
+  uint8_t text_pos;
 } Settings;
 
 static Settings s_settings;
@@ -84,6 +88,8 @@ static void default_settings(void) {
     .hide_until_shake = false,
     .box_mode = BoxOff,
     .reveal_minutes = 1,
+    /* Bottom-right corner on rectangular screens, bottom-center on round ones. */
+    .text_pos = RowBottom * 3 + PBL_IF_ROUND_ELSE(ColCenter, ColRight),
   };
 }
 
@@ -216,6 +222,7 @@ static void inbox_received(DictionaryIterator *iter, void *ctx) {
   if (read_int(iter, MESSAGE_KEY_DateSep, &v)) { s_settings.date_sep = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_HideUntilShake, &v)) { s_settings.hide_until_shake = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_BoxMode, &v)) { s_settings.box_mode = v; changed = true; }
+  if (read_int(iter, MESSAGE_KEY_TextPos, &v) && v >= 0 && v < 6) { s_settings.text_pos = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_RevealMinutes, &v)) {
     s_settings.reveal_minutes = v < 1 ? 1 : (v > REVEAL_MAX_MIN ? REVEAL_MAX_MIN : v);
     changed = true;
@@ -326,15 +333,19 @@ static void text_update(Layer *layer, GContext *ctx) {
   int16_t block_w = ts.w > ds.w ? ts.w : ds.w;
   int16_t block_h = time_h + date_h + gap;
 
-  /* Bottom-right corner on rectangular screens, bottom-center on round ones. */
-  GTextAlignment align = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentRight);
-  int16_t bottom = area.origin.y + area.size.h - MARGIN - PBL_IF_ROUND_ELSE(8, 0);
-#ifdef PBL_ROUND
-  int16_t left = area.origin.x + (area.size.w - block_w) / 2;
-#else
-  int16_t left = area.origin.x + area.size.w - MARGIN - block_w;
-#endif
-  int16_t top = bottom - block_h;
+  TextRow row = s_settings.text_pos / 3;
+  /* Round screens only offer top or bottom, always centered. */
+  TextCol col = PBL_IF_ROUND_ELSE(ColCenter, s_settings.text_pos % 3);
+  /* Round screens keep the text a little further in from the top and bottom. */
+  int16_t edge = MARGIN + PBL_IF_ROUND_ELSE(8, 0);
+  int16_t top = row == RowTop ? area.origin.y + edge
+                              : area.origin.y + area.size.h - edge - block_h;
+  int16_t left = col == ColLeft    ? area.origin.x + MARGIN
+               : col == ColRight   ? area.origin.x + area.size.w - MARGIN - block_w
+                                   : area.origin.x + (area.size.w - block_w) / 2;
+  GTextAlignment align = col == ColLeft    ? GTextAlignmentLeft
+                       : col == ColRight   ? GTextAlignmentRight
+                                           : GTextAlignmentCenter;
 
   bool boxed = s_settings.box_mode == BoxAlways;
   if (boxed) {

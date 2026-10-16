@@ -163,7 +163,7 @@ fetching (and removes folders from the older layout).
 | `Hello` | watch → phone | 1 = launch, 2 = new day |
 | `ScreenW`, `ScreenH`, `RowStride`, `IsRound`, `ChunkSize`, `Is24h` | watch → phone | screen description |
 | `PhoneReady` | phone → watch | JS started; watch replies with Hello |
-| `ShowTime`, `ClockMode`, `HideAmPm`, `ShowDate`, `DateFormat`, `HideUntilShake`, `RevealMinutes`, `BoxMode` | phone → watch | settings (ints) |
+| `ShowTime`, `ClockMode`, `HideAmPm`, `ShowDate`, `DateFormat`, `DateSep`, `HideUntilShake`, `RevealMinutes`, `BoxMode`, `TextPos` | phone → watch | settings (ints; `TextPos` = row × 3 + column, round screens always centered) |
 | `ImgBegin`, `ImgOffset`, `ImgChunk`, `ImgEnd` | phone → watch | image transfer |
 
 ## HTTP API
