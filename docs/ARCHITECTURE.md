@@ -284,7 +284,8 @@ The page is in English (`en-US`) and Dutch (`nl-NL`).
 
 
 **Search.** `search.json` (~570 KB, ~160 KB gzipped) lists every painting as
-`[key, title, artist, date, objectNumber, pool]`, with the same `id`. The
+`[key, title, artist, date, objectNumber, pool, iiif]`, with the same `id`;
+suggestions show a 128 px square thumbnail cut by the IIIF server (`…/square/128,128/0/default.jpg`). The
 settings page loads it only when someone types in the pin field, matches every
 typed word against title, artist, object number and date (ignoring case and
 accents, titles that start with the first word first) and suggests up to 8.

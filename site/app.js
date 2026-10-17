@@ -546,8 +546,10 @@ function loadSearch() {
     return res.json();
   })]).then(([cat, data]) => {
     if (data.id !== cat.id) throw new Error('the catalog changed; reopen the settings');
-    return data.entries.map(([key, title, artist, date, objectNumber, pool]) => ({
+    return data.entries.map(([key, title, artist, date, objectNumber, pool, iiif]) => ({
       key, title, artist, date, objectNumber, pool,
+      // A small square cut by the IIIF server (128 px, sharp at 64 CSS px).
+      thumb: iiif ? `${cat.iiifPrefix}${iiif}/square/128,128/0/default.jpg` : null,
       text: fold(`${title} ${artist} ${objectNumber || ''} ${date || ''}`),
       titleText: fold(title),
     }));
@@ -575,18 +577,25 @@ function showResults(items, note) {
     li.id = `pin-result-${i}`;
     li.setAttribute('role', 'option');
     li.setAttribute('aria-selected', 'false');
+    const thumb = document.createElement('img');
+    thumb.className = 'pin-result-thumb';
+    thumb.alt = '';
+    thumb.loading = 'lazy';
+    thumb.width = 64;
+    thumb.height = 64;
+    if (e.thumb) thumb.src = e.thumb;
+    const text = document.createElement('span');
+    text.className = 'pin-result-text';
     const title = document.createElement('span');
     title.className = 'pin-result-title';
     title.textContent = e.title;
     const meta = document.createElement('span');
     meta.className = 'pin-result-meta';
     meta.textContent = [e.artist, e.date, e.objectNumber].filter(Boolean).join(' · ');
-    li.append(title, meta);
-    // pointerdown, not click: picking must win over the field losing focus.
-    li.addEventListener('pointerdown', (ev) => {
-      ev.preventDefault();
-      pickResult(e);
-    });
+    text.append(title, meta);
+    li.append(thumb, text);
+    // A tap (click) picks it; touching to scroll the list doesn't.
+    li.addEventListener('click', () => pickResult(e));
     searchList.append(li);
   });
   if (note) {
@@ -660,7 +669,10 @@ searchBox.addEventListener('keydown', (e) => {
     hideResults();
   }
 });
-searchBox.addEventListener('blur', () => setTimeout(hideResults, 150));
+// The list stays open while it's scrolled; a tap outside the pin field closes it.
+document.addEventListener('pointerdown', (e) => {
+  if (!searchList.hidden && !$('pin-form').contains(e.target)) hideResults();
+});
 
 $('pin-form').addEventListener('submit', async (e) => {
   e.preventDefault();

@@ -8,9 +8,9 @@
 //! pre1600.json …    one file per era (1600s, 1700s, 1800s, 1900s)
 //! undated.json      paintings without a usable date (era from the search
 //!                   pools, or else from the painting's date)
-//! search.json       title, artist, date and object number of every painting
-//!                   and the file it's in: for searching by title on the
-//!                   settings page (loaded only when someone searches)
+//! search.json       title, artist, date, object number and IIIF id of every
+//!                   painting and the file it's in: for searching by title on
+//!                   the settings page (loaded only when someone searches)
 //! ```
 //!
 //! Every painting is in exactly one era file (or undated), and Featured ones
@@ -134,12 +134,13 @@ pub fn write(catalog: &Catalog, featured: &[String], dir: &Path) -> Result<usize
         .iter()
         .filter_map(|k| by_key.get(k).cloned())
         .collect();
-    // For searching by title: [key, title, artist, date, objectNumber, pool].
+    // For searching by title: [key, title, artist, date, objectNumber, pool,
+    // iiif] (the IIIF id, for a thumbnail next to each suggestion).
     let search: Vec<Value> = pools
         .iter()
         .flat_map(|(pool, rows)| {
             rows.iter()
-                .map(move |r| json!([r[0], r[2], r[3], r[4], r[5], pool]))
+                .map(move |r| json!([r[0], r[2], r[3], r[4], r[5], pool, r[1]]))
         })
         .collect();
     let mut files: Vec<(String, Vec<Value>)> = vec![("featured".to_string(), featured_rows)];
@@ -249,7 +250,7 @@ mod tests {
         assert_eq!(search["id"], manifest["id"]);
         assert_eq!(
             search["entries"][0],
-            json!(["1", "The Night Watch", "A", "1642", "SK-C-5", "1600s"])
+            json!(["1", "The Night Watch", "A", "1642", "SK-C-5", "1600s", "x"])
         );
     }
 }

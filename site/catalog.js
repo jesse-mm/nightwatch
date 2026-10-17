@@ -244,6 +244,8 @@
       version: data.version,
       /** Identifies this set of files; files with another id don't belong. */
       id: data.id,
+      /** IIIF image base = iiifPrefix + a painting's IIIF id. */
+      iiifPrefix: data.iiifPrefix,
       /** The manifest's file list: [{pool, file, count}]. */
       files: data.files,
       /** The file (e.g. '1600s.json') that holds a pool ('featured', an era, 'undated'). */

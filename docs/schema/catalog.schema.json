@@ -216,7 +216,7 @@
           "type": "array",
           "items": {
             "type": "array",
-            "description": "[key, title, artist, date, objectNumber, pool] (pool: the file the painting is in)",
+            "description": "[key, title, artist, date, objectNumber, pool, iiif] (pool: the file the painting is in; iiif: its IIIF id, for thumbnails)",
             "prefixItems": [
               {
                 "type": "string"
@@ -238,6 +238,9 @@
                   "string",
                   "null"
                 ]
+              },
+              {
+                "type": "string"
               },
               {
                 "type": "string"

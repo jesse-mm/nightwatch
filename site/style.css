@@ -936,7 +936,23 @@ canvas.draggable:active { cursor: grabbing; }
   border-radius: 8px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
 }
-.pin-results li { padding: 0.45rem 0.55rem; border-radius: 6px; cursor: pointer; }
+.pin-results li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pin-results .pin-result-thumb {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 4px;
+  background: var(--control);
+  object-fit: cover;
+}
+.pin-results .pin-result-text { min-width: 0; }
 .pin-results li[aria-selected="true"], .pin-results li:hover { background: var(--control); }
 .pin-results .pin-result-title { display: block; font-weight: 600; }
 .pin-results .pin-result-meta { display: block; color: var(--muted); font-size: var(--step--1); }

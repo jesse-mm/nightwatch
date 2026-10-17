@@ -100,7 +100,7 @@
         </div>
       </div>
       <div class="row stacked view-group" data-show-if="coverView">
-        <span class="row-text"><span data-i18n="view.title">Position &amp; zoom</span>
+        <span class="row-text"><span data-i18n="view.title">Zoom &amp; position</span>
           <small id="view-hint" data-i18n="view.hint.both">Drag the preview to move the painting.</small></span>
         <label class="range-label view-zoom" for="zoom"><span data-i18n="zoom.title">Zoom</span> <output id="zoom-out">100%</output></label>
         <input type="range" class="range" data-key="zoom" id="zoom" min="100" max="200" step="5">
@@ -164,8 +164,6 @@
         <button type="button" class="text-button" id="unpin" data-i18n="pinned.unpin">Unpin</button>
       </div>
       <div class="row stacked" data-show-if="notPinned">
-        <span class="row-text"><span data-i18n="rotation.howOften">How often</span>
-          <small data-i18n="rotation.help">Off keeps the current painting until you hang another one.</small></span>
         <div class="segmented" role="radiogroup" aria-label="Swap painting" data-i18n-attr="aria-label:rotation.title" data-key="rotation">
           <label><input type="radio" name="rotation" value="off"><span data-i18n="rotation.off">Off</span></label>
           <label><input type="radio" name="rotation" value="daily"><span data-i18n="rotation.daily">Daily</span></label>
@@ -239,9 +237,9 @@
       <div class="row stacked" data-show-if="dateSeparator">
         <span class="row-text" data-i18n="dateSep.title">Separator</span>
         <div class="segmented" role="radiogroup" aria-label="Date separator" data-i18n-attr="aria-label:dateSep.label" data-key="dateSep">
-          <label><input type="radio" name="dateSep" value="-"><span data-i18n="dateSep.hyphen">Hyphen (-)</span></label>
-          <label><input type="radio" name="dateSep" value="/"><span data-i18n="dateSep.slash">Slash (/)</span></label>
-          <label><input type="radio" name="dateSep" value="."><span data-i18n="dateSep.dot">Dot (.)</span></label>
+          <label><input type="radio" name="dateSep" value="-"><span data-i18n="dateSep.hyphen">Hyphen</span></label>
+          <label><input type="radio" name="dateSep" value="/"><span data-i18n="dateSep.slash">Slash</span></label>
+          <label><input type="radio" name="dateSep" value="."><span data-i18n="dateSep.dot">Dot</span></label>
         </div>
       </div>
       <div class="row stacked" data-show-if="anyText">
