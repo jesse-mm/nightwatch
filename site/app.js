@@ -51,7 +51,28 @@ const $ = (id) => document.getElementById(id);
 
 // ---------------- preview ----------------
 
-const scale = Math.max(1, Math.min(2, Math.floor((window.innerWidth - 64) / watch.w)));
+// Watches with a picture of the real thing (devices/, from the Pebble app
+// store): the preview sits in its screen opening, the watch drawn on top.
+// Sizes are in the image's pixels; the opening is where its screen is.
+const DEVICES = {
+  '200x228': { src: 'devices/pebble-time-2.png', w: 488, h: 700, x: 100, y: 188, ow: 279, oh: 335 },
+  '260x260': { src: 'devices/pebble-round-2.png', w: 502, h: 700, x: 83, y: 182, ow: 337, oh: 337 },
+};
+const device = DEVICES[`${watch.w}x${watch.h}`];
+// CSS pixels per watch pixel.
+let scale = Math.max(1, Math.min(2, Math.floor((window.innerWidth - 64) / watch.w)));
+if (device) {
+  const k = Math.min(1, (Math.min(window.innerWidth, 480) - 32) / device.w); // CSS px per image px
+  const fit = Math.min(device.ow / watch.w, device.oh / watch.h); // image px per watch px
+  scale = fit * k;
+  const frameEl = $('frame');
+  frameEl.classList.add('device');
+  frameEl.style.setProperty('--dw', `${device.w * k}px`);
+  frameEl.style.setProperty('--dh', `${device.h * k}px`);
+  frameEl.style.setProperty('--device', `url("${device.src}")`);
+  frameEl.style.setProperty('--sx', `${(device.x + (device.ow - watch.w * fit) / 2) * k}px`);
+  frameEl.style.setProperty('--sy', `${(device.y + (device.oh - watch.h * fit) / 2) * k}px`);
+}
 const screenEl = $('screen');
 screenEl.style.setProperty('--sw', `${watch.w * scale}px`);
 screenEl.style.setProperty('--sh', `${watch.h * scale}px`);

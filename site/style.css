@@ -945,3 +945,31 @@ canvas.draggable:active { cursor: grabbing; }
 /* Position & zoom: one group (hint, zoom slider, arrows). */
 .view-group .view-zoom { display: flex; justify-content: space-between; margin-top: 0.4rem; color: var(--ink); }
 .view-group .nudge { margin-top: 0.5rem; }
+
+/* A picture of the real watch around the preview (Pebble Time 2, Round 2):
+   the screen sits in its opening and the watch is drawn on top, so its
+   rounded corners and bezel cover the screen's edges. */
+.frame.device {
+  position: relative;
+  width: var(--dw);
+  height: var(--dh);
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+.frame.device .screen {
+  position: absolute;
+  left: var(--sx);
+  top: var(--sy);
+  max-width: none;
+  box-shadow: none;
+}
+.frame.device::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--device) center / 100% 100% no-repeat;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+}
