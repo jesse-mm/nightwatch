@@ -23,6 +23,8 @@ struct EnergyMap {
     w: usize,
     h: usize,
     e: Vec<f32>,
+    /// Skin-tone weight per pixel (also part of `e`), to spot portraits.
+    skin: Vec<f32>,
 }
 
 fn energy_map(img: &RgbImage) -> EnergyMap {
@@ -46,6 +48,7 @@ fn energy_map(img: &RgbImage) -> EnergyMap {
     }
 
     let mut e = vec![0f32; w * h];
+    let mut skin_map = vec![0f32; w * h];
     for y in 0..h {
         for x in 0..w {
             let i = y * w + x;
@@ -75,9 +78,15 @@ fn energy_map(img: &RgbImage) -> EnergyMap {
             };
 
             e[i] = edge * 1.0 + sat * 0.35 + skin * 1.2;
+            skin_map[i] = skin;
         }
     }
-    EnergyMap { w, h, e }
+    EnergyMap {
+        w,
+        h,
+        e,
+        skin: skin_map,
+    }
 }
 
 /// Weight of a sample at relative position `t` (0..1) inside the window. A round
@@ -93,12 +102,41 @@ fn window_weight(t: f32, round: bool) -> f32 {
     }
 }
 
+/// Share of the painting's skin tones that must sit in its top third, and how
+/// much skin there must be at all (mean weight per pixel), to call it a portrait.
+const PORTRAIT_TOP_SHARE: f32 = 0.6;
+const PORTRAIT_MIN_SKIN: f32 = 0.01;
+
+/// Mostly skin tones near the top: a head (and maybe hands) over a body, the
+/// classic portrait. Busy armor, lace or a bright background below must not
+/// pull the crop down and cut off the face.
+fn looks_like_portrait(map: &EnergyMap) -> bool {
+    let total: f32 = map.skin.iter().sum();
+    if total / ((map.w * map.h) as f32) < PORTRAIT_MIN_SKIN {
+        return false;
+    }
+    let top: f32 = map.skin[..map.w * map.h.div_ceil(3)].iter().sum();
+    top / total >= PORTRAIT_TOP_SHARE
+}
+
 /// Find the best crop window of `crop_w` x `crop_h` (in `img` pixels).
 /// Exactly one of the two must be smaller than the image; returns the top-left.
-pub fn best_window(img: &RgbImage, crop_w: u32, crop_h: u32, round: bool) -> (u32, u32) {
+/// `portrait` (from the title) keeps the top when the window slides vertically,
+/// as does a painting whose skin tones sit near the top.
+pub fn best_window(
+    img: &RgbImage,
+    crop_w: u32,
+    crop_h: u32,
+    round: bool,
+    portrait: bool,
+) -> (u32, u32) {
     let (iw, ih) = img.dimensions();
     let map = energy_map(img);
     let horizontal = crop_w < iw; // slide left/right
+                                  // Portraits: the head is at the top, so keep it and cut the bottom.
+    if !horizontal && (portrait || looks_like_portrait(&map)) {
+        return (0, 0);
+    }
 
     // Collapse the 2-D map into a 1-D profile along the free axis.
     let profile: Vec<f32> = if horizontal {
@@ -161,11 +199,50 @@ mod tests {
                 img.put_pixel(x, y, Rgb([v, v, v]));
             }
         }
-        let (x, y) = best_window(&img, 260, 300, false);
+        let (x, y) = best_window(&img, 260, 300, false, false);
         assert_eq!(y, 0);
         assert!(
             x > 450,
             "window should move right toward the detail, got {x}"
         );
+    }
+
+    /// A tall image with a skin-tone patch at the top and busy detail below.
+    fn armor_portrait() -> RgbImage {
+        let mut img = RgbImage::from_pixel(300, 900, Rgb([20, 18, 16]));
+        for y in 60..200 {
+            for x in 110..190 {
+                img.put_pixel(x, y, Rgb([200, 145, 110]));
+            }
+        }
+        for y in 400..900 {
+            for x in 40..260 {
+                let v = if (x / 4 + y / 4) % 2 == 0 { 30 } else { 240 };
+                img.put_pixel(x, y, Rgb([v, v, v]));
+            }
+        }
+        img
+    }
+
+    #[test]
+    fn keeps_the_head_of_a_portrait() {
+        assert_eq!(
+            best_window(&armor_portrait(), 300, 600, true, false),
+            (0, 0)
+        );
+    }
+
+    #[test]
+    fn a_portrait_title_keeps_the_top() {
+        // Busy detail only at the bottom: the pixels alone would slide down.
+        let mut img = RgbImage::from_pixel(300, 900, Rgb([90, 90, 90]));
+        for y in 600..900 {
+            for x in 0..300 {
+                let v = if (x / 4 + y / 4) % 2 == 0 { 30 } else { 240 };
+                img.put_pixel(x, y, Rgb([v, v, v]));
+            }
+        }
+        assert!(best_window(&img, 300, 600, false, false).1 > 0);
+        assert_eq!(best_window(&img, 300, 600, false, true), (0, 0));
     }
 }

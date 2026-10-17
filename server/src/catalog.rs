@@ -263,13 +263,16 @@ impl Catalog {
 
     /// (key, source sha) for eligible pool paintings that have a master image,
     /// unfinished ones first (so `--limit` makes progress).
-    pub fn renderable(&self) -> Result<Vec<(String, String)>> {
+    /// Paintings to render: key, source hash and title (the title hints at
+    /// portraits when cropping).
+    pub fn renderable(&self) -> Result<Vec<(String, String, String)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT p.key, p.source_sha256 FROM paintings p JOIN pool ON pool.key = p.key
+            "SELECT p.key, p.source_sha256, coalesce(json_extract(p.meta, '$.title'), '')
+             FROM paintings p JOIN pool ON pool.key = p.key
              WHERE p.eligible = 1 AND p.source_sha256 IS NOT NULL ORDER BY p.ready, p.key",
         )?;
         let rows = stmt
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
             .collect::<Result<_, _>>()?;
         Ok(rows)
     }
@@ -579,7 +582,11 @@ mod tests {
 
         assert_eq!(
             c.renderable().unwrap(),
-            vec![("1".to_string(), "abc".to_string())]
+            vec![(
+                "1".to_string(),
+                "abc".to_string(),
+                "The Night Watch".to_string()
+            )]
         );
     }
 

@@ -176,6 +176,11 @@ Because "fill" always fits one axis exactly, only one direction is free, so we
 slide a window along a 1-D energy profile. The window weights its center a little
 more (strongly on round screens, whose corners are hidden), and there's a gentle
 pull toward the painting's center and, for tall works, toward the top.
+**Portraits keep the top:** when the window slides up and down and the title
+says it's a portrait ("Portrait", "Portret", "Self-portrait", "Zelfportret"), or
+at least 60% of the painting's skin tones sit in its top third, the crop keeps
+the top and cuts the bottom, so busy armor, lace or hands lower down can't pull
+the head out of view.
 
 **Cover slack.** Cover ("fill") crops keep up to `COVER_SLACK_PX` (20) screen
 pixels of extra painting on each side of the free axis, as far as the painting

@@ -360,7 +360,7 @@ struct Rendered {
 fn render_all(catalog: &mut Catalog, opts: &Options, featured_days: &[String]) -> Result<()> {
     let mut work = catalog.renderable()?;
     if !opts.only.is_empty() {
-        work.retain(|(k, _)| opts.only.iter().any(|o| key_of(o) == k));
+        work.retain(|(k, _, _)| opts.only.iter().any(|o| key_of(o) == k));
     }
     if let Some(n) = opts.limit {
         work.truncate(n);
@@ -380,13 +380,16 @@ fn render_all(catalog: &mut Catalog, opts: &Options, featured_days: &[String]) -
     for (n, chunk) in work.chunks(16).enumerate() {
         let existing: Vec<HashMap<String, String>> = chunk
             .iter()
-            .map(|(k, _)| catalog.crop_hashes(k))
+            .map(|(k, _, _)| catalog.crop_hashes(k))
             .collect::<Result<_>>()?;
         let results: Vec<Result<Rendered>> = chunk
             .par_iter()
             .zip(existing.par_iter())
-            .map(|((key, sha), have)| {
-                render_painting(&opts.data_dir, key, sha, have, &targets, opts)
+            .map(|((key, sha, title), have)| {
+                let hints = imaging::CropHints {
+                    portrait: imaging::is_portrait_title(title),
+                };
+                render_painting(&opts.data_dir, key, sha, hints, have, &targets, opts)
             })
             .collect();
         catalog.transaction(|c| {
@@ -433,6 +436,7 @@ fn render_painting(
     root: &Path,
     key: &str,
     source_sha: &str,
+    hints: imaging::CropHints,
     have: &HashMap<String, String>,
     targets: &[Target],
     opts: &Options,
@@ -460,7 +464,7 @@ fn render_painting(
             None => src.insert(load_source(root, key)?),
         };
         // Always from the master image, never from a stored crop.
-        let plan = imaging::plan_crop(src, t, opts.safe_crop_px);
+        let plan = imaging::plan_crop(src, t, opts.safe_crop_px, hints);
         let art = imaging::tone_image(&imaging::crop_locally(src, &plan));
         let png = encode_png(&art)?;
         write_atomic(&root.join(&rel), &png)?;

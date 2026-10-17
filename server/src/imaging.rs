@@ -79,7 +79,21 @@ pub struct CropPlan {
     pub window_y: u32,
 }
 
-pub fn plan_crop(src: &RgbImage, t: &Target, safe_px: u32) -> CropPlan {
+/// What we know about a painting beyond its pixels, to steer the smart crop.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CropHints {
+    /// The title says it's a portrait: keep the top (the head) when the crop
+    /// slides up and down.
+    pub portrait: bool,
+}
+
+/// "Portrait of …", "Self-portrait", "Portret van …", "Zelfportret", in any case.
+pub fn is_portrait_title(title: &str) -> bool {
+    let t = title.to_lowercase();
+    t.contains("portrait") || t.contains("portret")
+}
+
+pub fn plan_crop(src: &RgbImage, t: &Target, safe_px: u32, hints: CropHints) -> CropPlan {
     let (iw, ih) = src.dimensions();
     let (iwf, ihf) = (iw as f64, ih as f64);
     let (tw, th) = (t.w as f64, t.h as f64);
@@ -129,7 +143,7 @@ pub fn plan_crop(src: &RgbImage, t: &Target, safe_px: u32) -> CropPlan {
         };
     }
 
-    let (x, y) = best_window(src, cw, ch, t.round);
+    let (x, y) = best_window(src, cw, ch, t.round, hints.portrait);
     frac(CropMode::Smart, x, y, cw, ch, iw, ih, t)
 }
 
@@ -270,13 +284,19 @@ mod tests {
     fn plan_crop_trims_an_almost_fitting_image_evenly() {
         // 144x168 screen; 150x168 image overflows by 6px → safe crop.
         let img = RgbImage::from_pixel(150, 168, Rgb([100, 50, 20]));
-        assert_eq!(plan_crop(&img, &target(144, 168), 20).mode, CropMode::Safe);
+        assert_eq!(
+            plan_crop(&img, &target(144, 168), 20, CropHints::default()).mode,
+            CropMode::Safe
+        );
     }
 
     #[test]
     fn plan_crop_picks_a_region_of_a_very_wide_image() {
         let img = RgbImage::from_pixel(1200, 400, Rgb([100, 50, 20]));
-        assert_eq!(plan_crop(&img, &target(144, 168), 20).mode, CropMode::Smart);
+        assert_eq!(
+            plan_crop(&img, &target(144, 168), 20, CropHints::default()).mode,
+            CropMode::Smart
+        );
     }
 
     #[test]
@@ -286,13 +306,16 @@ mod tests {
             fit: Fit::Whole,
             ..target(144, 168)
         };
-        assert_eq!(plan_crop(&img, &t, 20).mode, CropMode::Letterbox);
+        assert_eq!(
+            plan_crop(&img, &t, 20, CropHints::default()).mode,
+            CropMode::Letterbox
+        );
     }
 
     #[test]
     fn crop_locally_makes_the_planned_size() {
         let img = RgbImage::from_pixel(1200, 400, Rgb([100, 50, 20]));
-        let plan = plan_crop(&img, &target(144, 168), 20);
+        let plan = plan_crop(&img, &target(144, 168), 20, CropHints::default());
         assert_eq!(
             crop_locally(&img, &plan).dimensions(),
             (plan.inner_w, plan.inner_h)
@@ -304,7 +327,7 @@ mod tests {
         // Uniform image: the smart window lands in the middle, so there's
         // room on both sides.
         let img = RgbImage::from_pixel(1200, 400, Rgb([100, 50, 20]));
-        let plan = plan_crop(&img, &target(144, 168), 20);
+        let plan = plan_crop(&img, &target(144, 168), 20, CropHints::default());
         assert_eq!(plan.inner_h, 168);
         assert_eq!(plan.inner_w, 144 + 2 * COVER_SLACK_PX);
         assert_eq!(plan.window_x, COVER_SLACK_PX);
@@ -315,12 +338,12 @@ mod tests {
     fn fill_slack_stops_at_the_painting_edge() {
         // Overflows by 6 px only: the slack is what the painting has.
         let img = RgbImage::from_pixel(150, 168, Rgb([100, 50, 20]));
-        let plan = plan_crop(&img, &target(144, 168), 20);
+        let plan = plan_crop(&img, &target(144, 168), 20, CropHints::default());
         assert_eq!(plan.inner_w, 150);
         assert_eq!(plan.window_x, 3);
         // A tall painting slides vertically.
         let tall = RgbImage::from_pixel(300, 1200, Rgb([100, 50, 20]));
-        let plan = plan_crop(&tall, &target(144, 168), 20);
+        let plan = plan_crop(&tall, &target(144, 168), 20, CropHints::default());
         assert_eq!(
             (plan.inner_w, plan.inner_h),
             (144, 168 + 2 * COVER_SLACK_PX)
@@ -336,7 +359,7 @@ mod tests {
             fit: Fit::Whole,
             ..target(144, 168)
         };
-        let plan = plan_crop(&img, &t, 20);
+        let plan = plan_crop(&img, &t, 20, CropHints::default());
         assert_eq!((plan.inner_w, plan.inner_h, plan.window_x), (144, 168, 0));
     }
 
