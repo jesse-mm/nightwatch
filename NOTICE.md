@@ -61,10 +61,3 @@ Zoom detailed view. License: `site/vendor/openseadragon-4.1.0.LICENSE.txt`.
 `site/fonts/` holds Figtree, Source Serif 4 and Barlow Semi Condensed (latin
 and latin-ext subsets, WOFF2, as served by Google Fonts), self-hosted. Each
 font's license is next to it as `*.OFL.txt`.
-
-## Watch pictures
-`site/devices/pebble-time-2.png` and `site/devices/pebble-round-2.png` are the
-Pebble Time 2 and Pebble Round 2 frames from the Pebble app store
-(https://apps.repebble.com/images/screenshot_slider_background_emery_v2.png and
-…_gabbro.png), © Core Devices, as used on their own website. Used for the
-settings page's watch preview.
