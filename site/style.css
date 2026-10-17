@@ -966,13 +966,14 @@ canvas.draggable:active { cursor: grabbing; }
 .view-group .view-zoom { display: flex; justify-content: space-between; margin-top: 0.4rem; color: var(--ink); }
 .view-group .nudge { margin-top: 0.5rem; }
 
-/* The three main groups (Painting, Swap painting, Date & time) are set off by
-   a thicker line above each. */
-.group.look,
-section.group[aria-labelledby="g-rotation"],
-section.group[aria-labelledby="g-datetime"] {
-  border-top: 4px solid var(--line);
-  margin-top: 1.5rem;
+
+/* Swap painting and Date & time each start with a thicker line, with the same
+   space above and below it. Painting, the first group, has none. */
+.group.block + .group.block {
+  border-top: 3px solid var(--line);
+  margin-top: 1.25rem;
   padding-top: 1.25rem;
 }
-.group.look { margin-top: 0; }
+
+/* No empty line under the search field until there's something to say. */
+.pin-form .label-status:empty { display: none; }
