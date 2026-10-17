@@ -102,7 +102,13 @@ Watchfaces don't receive button presses on Pebble, so gestures use the accelerom
 
 | Gesture | Effect |
 |---|---|
-| One flick | Shows the time for the chosen number of minutes (when *Hide until I flick my wrist* is on) |
+| One flick | Shows the time for the chosen number of minutes (when *Auto hide* is on) |
+
+**Touch (later).** The Pebble Time 2 and Round 2 have a touchscreen, but touch is
+[not available to watchfaces yet](https://developer.repebble.com/guides/events-and-services/touch.md)
+(SDK 4.33, watchapps only). Once it is, ideas: tap to show the time, swipe to show the
+painting's title and artist, long-press to cycle the color tuning. Keep an eye on the
+[SDK changelogs](https://developer.repebble.com/sdk/changelogs/).
 
 ## Development
 
