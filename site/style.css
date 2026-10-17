@@ -792,8 +792,12 @@ label, button, input, summary, a { -webkit-tap-highlight-color: transparent; }
   font-variant-numeric: tabular-nums;
 }
 
+/* Inset from the sides so dragging the thumb to either end doesn't start the
+   phone's edge-swipe back gesture. */
 .range {
-  width: 100%;
+  box-sizing: border-box;
+  width: calc(100% - 2.5rem);
+  margin-inline: 1.25rem;
   accent-color: var(--ink);
 }
 
