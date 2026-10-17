@@ -147,6 +147,8 @@
   "tour.preview.body": "This is how the painting looks on your watch. Drag it to move the painting; Indoors and Daylight show how it looks in that light.",
   "tour.painting.title": "About this painting",
   "tour.painting.body": "Zoom in to see every brushstroke, or read more about the painting at the Rijksmuseum.",
+  "tour.mini.title": "Always in view",
+  "tour.mini.body": "Scroll down and a small preview stays at the top, so you see every change. Time shows or hides the time and date; Expand makes it larger for fine-tuning colors.",
   "tour.look.title": "Painting",
   "tour.look.body": "Crop, zoom, frame and color tuning. Your changes are kept for this painting, so it looks the same when it comes back.",
   "tour.rotation.title": "Swap painting",

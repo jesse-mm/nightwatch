@@ -11,9 +11,12 @@
 
   // Each step lights up a part of the page (from `target` down to `until`,
   // e.g. a group's heading and its first control); the card explains it.
-  const STEPS = [
+  // `scrollTo` scrolls somewhere else first: the mini preview only slides in
+  // once the big one has scrolled away. `when` leaves a step out.
+  const ALL_STEPS = [
     { target: '#frame', key: 'preview' },
     { target: '.label-links', key: 'painting' },
+    { target: '#mini', scrollTo: '#g-look', key: 'mini', when: () => !document.getElementById('art')?.hidden },
     { target: '#g-look', until: '[aria-labelledby=g-look] > .row', key: 'look' },
     { target: '#g-rotation', until: '[aria-labelledby=g-rotation] > .row', key: 'rotation' },
     { target: '#g-datetime', until: '[aria-labelledby=g-datetime] > .row', key: 'datetime' },
@@ -56,7 +59,9 @@
 
   let spot = null;
   let card = null;
+  let steps = ALL_STEPS;
   let index = 0;
+  let settle = 0;
   let frame = 0;
   let returnFocus = null;
 
@@ -87,7 +92,7 @@
     card.querySelector('#tour-skip').addEventListener('click', end);
     card.querySelector('#tour-back').addEventListener('click', () => go(index - 1));
     card.querySelector('#tour-next').addEventListener('click', () => {
-      if (index === STEPS.length - 1) end();
+      if (index === steps.length - 1) end();
       else go(index + 1);
     });
     // The dimmed page isn't clickable during the tour.
@@ -96,7 +101,7 @@
 
   function onKey(e) {
     if (e.key === 'Escape') end();
-    else if (e.key === 'ArrowRight' && index < STEPS.length - 1) go(index + 1);
+    else if (e.key === 'ArrowRight' && index < steps.length - 1) go(index + 1);
     else if (e.key === 'ArrowLeft' && index > 0) go(index - 1);
     else if (e.key === 'Tab') {
       // Keep keyboard focus inside the card.
@@ -110,7 +115,7 @@
 
   /** Put the spotlight on the step's element and the card beside it. */
   function place() {
-    const r = card && area(STEPS[index]);
+    const r = card && area(steps[index]);
     if (!r) return;
     const pad = 8;
     const vw = document.documentElement.clientWidth;
@@ -140,30 +145,39 @@
 
   function go(i) {
     index = i;
-    const step = STEPS[index];
-    card.querySelector('#tour-count').textContent = t('tour.count', { n: index + 1, total: STEPS.length });
+    const step = steps[index];
+    card.querySelector('#tour-count').textContent = t('tour.count', { n: index + 1, total: steps.length });
     card.querySelector('#tour-title').textContent = t(`tour.${step.key}.title`);
     card.querySelector('#tour-body').textContent = t(`tour.${step.key}.body`);
     card.querySelector('#tour-back').hidden = index === 0;
-    card.querySelector('#tour-skip').hidden = index === STEPS.length - 1;
-    card.querySelector('#tour-next').textContent = t(index === STEPS.length - 1 ? 'tour.done' : 'tour.next');
+    card.querySelector('#tour-skip').hidden = index === steps.length - 1;
+    card.querySelector('#tour-next').textContent = t(index === steps.length - 1 ? 'tour.done' : 'tour.next');
 
     // The save bar is always in view. Groups scroll up to just below the
     // mini preview, leaving room for the card; the rest to the middle.
-    const r = area(step);
+    const r = area(step.scrollTo ? { target: step.scrollTo } : step);
     if (r && step.target !== '#save') {
-      const top = step.until
+      const top = step.until || step.scrollTo
         ? window.scrollY + r.top - topInset()
         : window.scrollY + r.top - (window.innerHeight - r.height) / 2;
       window.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? 'auto' : 'smooth' });
     }
-    place();
+    // Keep following for a moment: things slide in (the mini preview) after
+    // the scroll, without a scroll event of their own.
+    const until = performance.now() + 800;
+    cancelAnimationFrame(settle);
+    const track = () => {
+      place();
+      if (card && performance.now() < until) settle = requestAnimationFrame(track);
+    };
+    track();
     card.querySelector('#tour-next').focus({ preventScroll: true });
   }
 
   function start() {
     if (card) return;
     returnFocus = document.activeElement;
+    steps = ALL_STEPS.filter((step) => !step.when || step.when());
     build();
     card.querySelector('#tour-skip').textContent = t('tour.skip');
     card.querySelector('#tour-back').textContent = t('tour.back');
@@ -180,6 +194,7 @@
     window.removeEventListener('resize', follow);
     document.removeEventListener('keydown', onKey);
     cancelAnimationFrame(frame);
+    cancelAnimationFrame(settle);
     spot?.remove();
     card?.remove();
     spot = null;
