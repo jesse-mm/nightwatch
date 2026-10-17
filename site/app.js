@@ -38,7 +38,10 @@ if (settings.textCol === 'auto') settings.textCol = watch.round ? 'center' : 'en
 const savedLooks = state.looks || {};
 let restoredLooks = null; // a restored backup's looks, written by the phone on save
 let lookTouched = false;
-const initialView = { zoom: settings.zoom, focusX: settings.focusX, focusY: settings.focusY }; // the reader changed the look: the phone saves it with the painting
+// The painting on the watch keeps its own colors, zoom and position when it's
+// shown again (Restore); others without a saved look start from the defaults.
+const initialFresh = Object.fromEntries(window.TreasureLooks.FRESH.map((k) => [k, settings[k]]));
+const freshDefaults = Object.fromEntries(window.TreasureLooks.FRESH.map((k) => [k, DEFAULTS[k]])); // the reader changed the look: the phone saves it with the painting
 // A painting picked on this page; only hung on the watch when saved.
 let chosen = null;
 // The painting the label currently describes (for the viewer).
@@ -395,9 +398,10 @@ async function loadPreview(choose, { pick = false, useLook = true } = {}) {
     const meta = painting;
     if (id !== requestId) return null;
     const look = useLook ? savedLook(meta.key) : null;
-    // Zoom and position belong to one painting: others start at their planned view.
+    // Colors, zoom and position belong to one painting (looks.FRESH): without
+    // a saved look, a painting starts from the defaults.
     if (!look && useLook) {
-      Object.assign(settings, meta.key === art?.key ? initialView : { zoom: 100, focusX: null, focusY: null });
+      Object.assign(settings, meta.key === art?.key ? initialFresh : freshDefaults);
       syncControls();
     }
     if (look) {

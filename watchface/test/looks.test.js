@@ -76,4 +76,9 @@ describe('looks', () => {
     // A newer format than this code knows is ignored rather than misread.
     assert.deepEqual(looks.fromStored({ version: 99, looks: { a: DEFAULTS } }), {});
   });
+
+  test('resets only look fields for a painting without a saved look', () => {
+    assert.ok(looks.FRESH.every((k) => looks.KEYS.includes(k)));
+    assert.deepEqual(looks.FRESH, ['palette', 'dither', 'brightness', 'contrast', 'zoom', 'focusX', 'focusY']);
+  });
 });

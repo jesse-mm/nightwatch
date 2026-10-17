@@ -142,9 +142,10 @@ for the painting on the watch:
 
 A look is about 160 bytes, so even one for every painting (~0.8 MB) fits the
 ~5 MB storage. A painting with a saved look gets it back whenever it is hung
-again, by rotation, a swap or a pin; a new painting without one starts at its
-planned view (zoom and position belong to one painting), and the other settings
-stay as they are. The settings page gets the saved looks too (in its URL, so
+again, by rotation, a swap or a pin. A new painting without one starts with the
+default color adjustments (tuning, dithering, brightness, contrast) at its
+planned view (zoom and position): `looks.FRESH`. Crop, frame and time
+placement carry over from the previous painting. The settings page gets the saved looks too (in its URL, so
 only up to ~100 KB of them), so a swapped-in painting previews with its own
 look.
 

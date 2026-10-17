@@ -722,11 +722,19 @@ function fetchArt(cat, key, period) {
   var samePainting = previous && previous.meta && previous.meta.key === painting.key;
   if (look) {
     applyLook(settings, look);
-  } else if (!samePainting && (settings.zoom !== 100 || settings.focusX !== null || settings.focusY !== null)) {
-    settings.zoom = 100;
-    settings.focusX = null;
-    settings.focusY = null;
-    storeSettings(settings);
+  } else if (!samePainting) {
+    // A painting without a saved look starts with default colors, zoom and
+    // position (looks.FRESH); crop, frame and time placement carry over.
+    var changed = false;
+    looks.FRESH.forEach(function (k) {
+      if (settings[k] !== DEFAULTS[k]) {
+        settings[k] = DEFAULTS[k];
+        changed = true;
+      }
+    });
+    if (changed) {
+      storeSettings(settings);
+    }
   }
 
   var request = cat.cropRequest(painting.key, watch, settings.fit, settings);

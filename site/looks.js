@@ -51,6 +51,11 @@
 
   var KEYS = Object.keys(FIELDS);
 
+  // What a painting without a saved look starts with from the defaults instead
+  // of inheriting from the previous painting: its color adjustments, zoom and
+  // position. Crop, frame and time placement carry over.
+  var FRESH = ['palette', 'dither', 'brightness', 'contrast', 'zoom', 'focusX', 'focusY'];
+
   function isList(field) {
     return Object.prototype.toString.call(field) === '[object Array]';
   }
@@ -180,6 +185,7 @@
     VERSION: VERSION,
     FIELDS: FIELDS,
     KEYS: KEYS,
+    FRESH: FRESH,
     encode: encode,
     decode: decode,
     get: get,
