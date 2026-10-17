@@ -91,7 +91,7 @@
   "pinned.defaultTitle": "this painting",
   "pinned.after": ". It stays on your watch until you unpin it.",
   "pinned.unpin": "Unpin",
-  "pinned.unpinned": "Unpinned: rotation continues after you save.",
+  "pinned.unpinned": "Unpinned: returning to swap painting logic when saving.",
   "pinned.goneCopy": "{hasTitle, select, yes {“{title}”} other {This painting}} is no longer available from the Rijksmuseum. Your watch uses the copy your phone kept, so colors, crop and zoom still work.",
   "pinned.goneKeep": "{hasTitle, select, yes {“{title}”} other {This painting}} is no longer available from the Rijksmuseum. Your watch keeps showing it as it is; unpin it to hang other paintings again.",
   "pin.title": "Pin a specific painting",
