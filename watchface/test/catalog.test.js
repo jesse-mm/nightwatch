@@ -115,11 +115,11 @@ describe('catalog', () => {
 
   test('zoom and focus move the Cover view, kept inside the painting', () => {
     const screen = { w: 260, h: 260, round: 1 };
-    const zoomed = catalog.coverView('2', screen, { zoom: 200, focusX: 500, focusY: 0 });
+    const zoomed = catalog.coverView('2', screen, { zoom: 200, focusX: 5000, focusY: 0 });
     // Tall 1:2 painting: at 100% the view is the full width and half the height.
     assert.deepEqual([zoomed.w, zoomed.h], [0.5, 0.25]);
     assert.deepEqual([zoomed.x, zoomed.y], [0.25, 0]); // clamped to the top
-    const corner = catalog.coverView('2', screen, { zoom: 200, focusX: 1000, focusY: 1000 });
+    const corner = catalog.coverView('2', screen, { zoom: 200, focusX: 10000, focusY: 10000 });
     assert.deepEqual([corner.x, corner.y], [0.5, 0.75]);
     // At 100% the full-width axis can't move.
     assert.equal(catalog.coverView('2', screen, { zoom: 100, focusX: 0 }).x, 0);

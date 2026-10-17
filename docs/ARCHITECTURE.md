@@ -130,7 +130,7 @@ for the painting on the watch:
 |---|---|---|
 | `fit` | Crop | `fill` (Cover), `whole` (Contain) |
 | `zoom` | Cover zoom | 100…200 (%) |
-| `focusX`, `focusY` | Cover view center | 0…1000 across / down the painting; empty = smart crop |
+| `focusX`, `focusY` | Cover view center | 0…10000 across / down the painting; empty = smart crop |
 | `frame` | Frame | `none`, `gold`, `wood`, `gallery` |
 | `palette` | Color tuning | `defined` (Accurate), `sun` (Daylight), `room` (Indoors), `backlight` |
 | `dither` | Dithering | `atkinson`, `checker` (50:50), `none` (Off) |
@@ -352,7 +352,7 @@ plan records where the planned view sits in it (`window` in the catalog row), so
 (100–200 %) and moved anywhere: by dragging the preview, with the arrow buttons,
 or back to the plan with Reset. At 100 % it only moves along the axis the
 painting overflows; zoomed in, both ways. The view is saved per painting in its
-look as `zoom`, `focusX`, `focusY` (view center, 0–1000; empty = the planned
+look as `zoom`, `focusX`, `focusY` (view center, 0–10000; empty = the planned
 view), and `coverView` turns it into the region to ask IIIF for. The page
 downloads one work image per painting (`workImage`, typically 400–1000 px) and
 pans and zooms it locally, with no requests while dragging.

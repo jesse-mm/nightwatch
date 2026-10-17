@@ -107,7 +107,7 @@
 
     /**
      * The part of the painting a Cover screen shows, as fractions {x, y, w, h}.
-     * `view.zoom` (100-200, %) zooms in; `view.focusX`/`focusY` (0-1000, or
+     * `view.zoom` (100-200, %) zooms in; `view.focusX`/`focusY` (0-10000, or
      * null for the generator's smart crop) set the center. At 100% only the
      * free axis can move; zoomed in, both can.
      */
@@ -139,8 +139,8 @@
       }
       w /= zoom;
       h /= zoom;
-      var cx = view.focusX === null || view.focusX === undefined ? plannedX : view.focusX / 1000;
-      var cy = view.focusY === null || view.focusY === undefined ? plannedY : view.focusY / 1000;
+      var cx = view.focusX === null || view.focusX === undefined ? plannedX : view.focusX / 10000;
+      var cy = view.focusY === null || view.focusY === undefined ? plannedY : view.focusY / 10000;
       // Zooming into the planned view keeps its center where it can.
       cx = clamp(cx, w / 2, 1 - w / 2);
       cy = clamp(cy, h / 2, 1 - h / 2);

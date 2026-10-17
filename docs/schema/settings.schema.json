@@ -132,8 +132,8 @@
         "null"
       ],
       "minimum": 0,
-      "maximum": 1000,
-      "description": "Cover only: view center across the painting (0 = left edge, 1000 = right edge); null = the generator's smart crop",
+      "maximum": 10000,
+      "description": "Cover only: view center across the painting (0 = left edge, 10000 = right edge); null = the generator's smart crop",
       "default": null
     },
     "focusY": {
@@ -142,8 +142,8 @@
         "null"
       ],
       "minimum": 0,
-      "maximum": 1000,
-      "description": "Cover only: view center down the painting (0 = top, 1000 = bottom); null = the generator's smart crop",
+      "maximum": 10000,
+      "description": "Cover only: view center down the painting (0 = top, 10000 = bottom); null = the generator's smart crop",
       "default": null
     },
     "textRow": {

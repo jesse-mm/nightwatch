@@ -728,7 +728,7 @@ $('color-reset').addEventListener('click', () => {
 // ---------------- Cover zoom and position ----------------
 // Cover shows part of the painting. The reader can zoom in (100-200 %) and
 // move the view anywhere (drag the preview, or the arrow buttons). Saved per
-// painting as zoom + focusX/focusY (view center, 0-1000; null = smart crop).
+// painting as zoom + focusX/focusY (view center, 0-10000, fine enough for a pixel on a panorama; null = smart crop).
 
 /** The view now, clamped by the catalog (null outside Cover). */
 function currentView() {
@@ -759,9 +759,9 @@ function updateViewControls() {
 /** Move the view so its center is at (cx, cy) (fractions), clamped. */
 function setFocus(cx, cy) {
   if (!catalog || crop?.kind !== 'work') return;
-  const v = catalog.coverView(crop.key, watch, { zoom: settings.zoom, focusX: cx * 1000, focusY: cy * 1000 });
-  const focusX = Math.round(v.cx * 1000);
-  const focusY = Math.round(v.cy * 1000);
+  const v = catalog.coverView(crop.key, watch, { zoom: settings.zoom, focusX: cx * 10000, focusY: cy * 10000 });
+  const focusX = Math.round(v.cx * 10000);
+  const focusY = Math.round(v.cy * 10000);
   if (focusX === settings.focusX && focusY === settings.focusY) return;
   settings.focusX = focusX;
   settings.focusY = focusY;
@@ -791,13 +791,37 @@ for (const el of [canvas, $('mini-art')]) {
   el.addEventListener('pointercancel', end);
 }
 
-// Arrow buttons: move by a tenth of the screen.
+// Arrow buttons: move by NUDGE_PX watch pixels per tap, for precise
+// positioning; holding one repeats (dragging is quicker for long moves).
+const NUDGE_PX = 2;
 document.querySelectorAll('[data-nudge]').forEach((b) => {
-  b.addEventListener('click', () => {
+  const [dx, dy] = b.dataset.nudge.split(',').map(Number);
+  const nudge = () => {
     const v = currentView();
     if (!v) return;
-    const [dx, dy] = b.dataset.nudge.split(',').map(Number);
-    setFocus(v.cx + dx * v.w * 0.1, v.cy + dy * v.h * 0.1);
+    setFocus(v.cx + dx * v.w * (NUDGE_PX / watch.w), v.cy + dy * v.h * (NUDGE_PX / watch.h));
+  };
+  let repeat = null;
+  const stop = () => {
+    clearTimeout(repeat);
+    repeat = null;
+  };
+  b.addEventListener('pointerdown', (e) => {
+    if (b.disabled) return;
+    e.preventDefault();
+    nudge();
+    const again = (delay) => {
+      repeat = setTimeout(() => {
+        nudge();
+        again(60);
+      }, delay);
+    };
+    again(400);
+  });
+  for (const type of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(type, stop);
+  // Keyboard (Enter/Space) still clicks; pointer presses are handled above.
+  b.addEventListener('click', (e) => {
+    if (e.detail === 0) nudge();
   });
 });
 
@@ -813,8 +837,8 @@ $('view-reset').addEventListener('click', () => {
 $('zoom').addEventListener('input', () => {
   const v = currentView();
   if (v && settings.focusX === null) {
-    settings.focusX = Math.round(v.cx * 1000);
-    settings.focusY = Math.round(v.cy * 1000);
+    settings.focusX = Math.round(v.cx * 10000);
+    settings.focusY = Math.round(v.cy * 10000);
   }
   updateViewControls();
 });

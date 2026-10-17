@@ -42,8 +42,8 @@
     brightness: { min: -100, max: 100 },
     contrast: { min: -100, max: 100 },
     zoom: { min: 100, max: 200 },
-    focusX: { min: 0, max: 1000, empty: true },
-    focusY: { min: 0, max: 1000, empty: true },
+    focusX: { min: 0, max: 10000, empty: true },
+    focusY: { min: 0, max: 10000, empty: true },
     textRow: ['top', 'center', 'bottom'],
     textCol: ['auto', 'start', 'center', 'end'],
     timeSize: ['s', 'm', 'l']
