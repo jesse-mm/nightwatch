@@ -537,7 +537,8 @@ main {
   box-sizing: border-box;
   width: 100%;
   padding: 0.55rem 0.7rem;
-  font: 400 var(--step--1)/1.4 ui-monospace, Menlo, monospace;
+  /* 16px or more: iOS Safari zooms the page into smaller text fields on focus. */
+  font: 400 max(16px, var(--step--1))/1.4 ui-monospace, Menlo, monospace;
   color: var(--ink);
   background: var(--control);
   border: 1px solid var(--line);
