@@ -651,6 +651,7 @@ async function copyText(text) {
   } catch {
     // No clipboard API (plain http): fall back to selecting a text field.
     const field = $('backup-input');
+    field.closest('details').open = true;
     field.value = text;
     field.select();
     try {
