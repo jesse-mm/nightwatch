@@ -39,7 +39,7 @@
         "mm-dd",
         "dd"
       ],
-      "default": "dd-mm"
+      "default": "dd"
     },
     "dateSep": {
       "enum": [
@@ -47,11 +47,11 @@
         "/",
         "."
       ],
-      "default": "-"
+      "default": "/"
     },
     "hideUntilShake": {
       "type": "boolean",
-      "default": false,
+      "default": true,
       "description": "Auto hide: show the time after a flick"
     },
     "revealMinutes": {
@@ -84,7 +84,7 @@
         "gallery"
       ],
       "description": "Frame drawn around the painting",
-      "default": "none"
+      "default": "wood"
     },
     "palette": {
       "enum": [

@@ -27,9 +27,9 @@
     clockMode: 'auto',     // auto | 12 | 24
     hideAmPm: false,
     showDate: true,
-    dateFormat: 'dd-mm',   // dd-mm | mm-dd | dd
-    dateSep: '-',          // - | / | .
-    hideUntilShake: false,
+    dateFormat: 'dd',      // dd-mm | mm-dd | dd
+    dateSep: '/',          // - | / | .
+    hideUntilShake: true,  // Auto hide: show the time after a flick
     revealMinutes: 1,      // how long a flick shows the time (1-60)
     boxMode: 'off',        // off | always
     textRow: 'bottom',     // top | center | bottom
@@ -43,7 +43,7 @@
     zoom: 100,             // Cover only: 100-200 %
     focusX: null,          // Cover only: view center, 0-10000 across the painting; null = smart crop
     focusY: null,          // Cover only: view center, 0-10000 down the painting; null = smart crop
-    frame: 'none',         // none | gold | wood | gallery
+    frame: 'wood',         // none | gold | wood | gallery
     selection: 'featured', // featured (365 most-read) | random
     era: 'any',            // for random: any | pre1600 | 1600s | 1700s | 1800s | 1900s
     rotation: 'daily',     // daily | weekly | monthly | off

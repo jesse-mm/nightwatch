@@ -119,8 +119,9 @@ static void default_settings(void) {
     .clock_mode = ClockAuto,
     .hide_ampm = false,
     .show_date = true,
-    .date_format = DateDayMonth,
-    .hide_until_shake = false,
+    .date_format = DateDay,
+    .date_sep = 1, /* '/' (DATE_SEPARATORS) */
+    .hide_until_shake = true,
     .box_mode = BoxOff,
     .reveal_minutes = 1,
     /* Bottom-right corner on rectangular screens, bottom-center on round ones. */

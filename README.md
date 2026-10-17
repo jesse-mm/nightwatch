@@ -82,6 +82,38 @@ date that stay out of its way.
 - The settings page shows today's painting, its artist, a link to the object on
   rijksmuseum.nl and to the full image, plus attribution.
 
+## Defaults
+
+What a new install starts with. A painting without a saved look gets the
+painting defaults again (colors, zoom and position); crop, frame and time
+placement carry over from the previous painting.
+
+| Group | Setting | Default |
+|---|---|---|
+| Painting | Crop | Cover |
+| | Zoom | 100 % (the smart crop's view) |
+| | Frame | Wood |
+| | Color tuning | Accurate |
+| | Dithering | Atkinson |
+| | Brightness, contrast | 0 |
+| Swap painting | How often | Daily |
+| | Collection | Featured |
+| | Paintings from (Selection only) | Any era |
+| Date & time | Show time | On |
+| | Clock format | Auto (follows the watch), AM/PM shown in 12-hour |
+| | Show date | On |
+| | Date format | Day only (17) |
+| | Separator | Slash (/), for day-month formats |
+| | Position & size | Bottom right (round watches: bottom center), size S |
+| | Auto hide | On: a flick shows the time for 1 minute |
+| | Improve readability | Off |
+
+The defaults live in `site/settings.js` (shared by the phone and the settings
+page), with the watch's own copy in `default_settings()` in
+`watchface/src/c/main.c` (used before the phone has sent anything) and the
+schema in `docs/schema/settings.schema.json`; `npm test` checks the schema
+against `settings.js`.
+
 ## Quick start
 
 1. **Generate the catalog** (see [docs/GENERATOR.md](docs/GENERATOR.md); a full
