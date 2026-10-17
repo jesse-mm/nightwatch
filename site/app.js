@@ -709,6 +709,8 @@ if (gone && gone.key === settings.pinned) {
 
 $('unpin').addEventListener('click', () => {
   settings.pinned = '';
+  searchBox.value = '';
+  hideResults();
   $('pin-status').textContent = '';
   setStatus(t('pinned.unpinned'));
   update();
