@@ -108,6 +108,10 @@ placement carry over from the previous painting.
 | | Auto hide | On: a flick shows the time for 1 minute |
 | | Improve readability | Off |
 
+Before the watch has a painting, the settings page previews Vermeer's *Woman
+Reading a Letter* (SK-C-251); saving hangs it (not pinned), so the watch shows
+what the preview showed. `FIRST_PAINTING` in `site/app.js`.
+
 The defaults live in `site/settings.js` (shared by the phone and the settings
 page), with the watch's own copy in `default_settings()` in
 `watchface/src/c/main.c` (used before the phone has sent anything) and the

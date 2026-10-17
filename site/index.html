@@ -204,6 +204,10 @@
           <input type="text" id="pin-input" placeholder="Title, artist or SK-C-5" data-i18n-attr="placeholder:pin.placeholder"
             autocomplete="off" spellcheck="false" enterkeyhint="go"
             role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="pin-results">
+          <!-- Lucide "x" (ISC license) -->
+          <button type="button" class="pin-clear" id="pin-clear" aria-label="Clear search" data-i18n-attr="aria-label:pin.clear">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
         </span>
         <ul class="pin-results" id="pin-results" role="listbox" hidden></ul>
         <span class="label-status" id="pin-status" role="status"></span>

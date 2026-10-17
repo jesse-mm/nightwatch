@@ -447,12 +447,22 @@ function refreshPreview({ useLook = false } = {}) {
   if (key) loadPreview(byKey(key), { useLook });
 }
 
+// Before the watch has a painting (first start): Vermeer's Woman Reading a
+// Letter, hung (not pinned) when the reader saves.
+const FIRST_PAINTING = { objectNumber: 'SK-C-251', pool: '1600s' };
+
 // First paint: the painting on the watch (from the phone).
 if (art?.key) {
   showPainting(art).catch((err) => {
     setStatus(t('status.previewFailed', { error: err.message }));
     hideLoader();
   });
+} else {
+  loadPreview(async (cat) => {
+    await loadPool(cat, FIRST_PAINTING.pool);
+    const found = cat.resolve(FIRST_PAINTING.objectNumber);
+    return found && cat.get(found.key);
+  }, { pick: true });
 }
 
 /** Catalog rows by key, for the phone. */
@@ -657,6 +667,15 @@ searchBox.addEventListener('input', () => {
       showResults([], t('pin.searchFailed'));
     }
   }, 150);
+});
+
+// The ✕ in the field (shown by CSS while it has text).
+$('pin-clear').addEventListener('click', () => {
+  clearTimeout(searchTimer);
+  searchBox.value = '';
+  hideResults();
+  $('pin-status').textContent = '';
+  searchBox.focus();
 });
 
 searchBox.addEventListener('keydown', (e) => {
@@ -1102,8 +1121,6 @@ $('backup-restore').addEventListener('click', () => {
 // ---------------- loader + sticky mini preview ----------------
 
 let loaderTimer = setTimeout(hideLoader, 8000); // never block the page for long
-// Nothing to load yet (first set-up, before the watch has a painting).
-if (!art?.key) setTimeout(hideLoader, 0);
 
 function hideLoader() {
   if (!loaderTimer) return;
