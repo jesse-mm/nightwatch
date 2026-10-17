@@ -181,6 +181,15 @@
           <label><input type="radio" name="era" value="1900s"><span>1900s</span></label>
         </div>
       </div>
+      <form class="row stacked pin-form" id="pin-form">
+        <label class="row-text" for="pin-input">Pin a specific painting
+          <small>Its object number (SK-C-5), Rijksmuseum id or a link to it. Pinning turns rotation off.</small></label>
+        <span class="pin-field">
+          <input type="text" id="pin-input" placeholder="SK-C-5" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+          <button type="submit" class="text-button">Pin</button>
+        </span>
+        <span class="label-status" id="pin-status" role="status"></span>
+      </form>
     </section>
 
     <section class="group block" aria-labelledby="g-datetime">
@@ -257,21 +266,6 @@
       </label>
     </section>
 
-    <section class="group" aria-label="Advanced">
-      <details class="advanced">
-        <summary>Advanced</summary>
-        <form class="row stacked pin-form" id="pin-form">
-          <label class="row-text" for="pin-input">Pin a specific painting
-            <small>Its object number (SK-C-5), Rijksmuseum id or a link to it. Pinning turns rotation off.</small></label>
-          <span class="pin-field">
-            <input type="text" id="pin-input" placeholder="SK-C-5" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
-            <button type="submit" class="text-button">Pin</button>
-          </span>
-          <span class="label-status" id="pin-status" role="status"></span>
-        </form>
-      </details>
-    </section>
-
     <aside class="visit">
       <p class="visit-kicker">Enjoying these paintings?</p>
       <p class="visit-title">Support the Rijksmuseum</p>
@@ -307,6 +301,7 @@
   </div>
 
   <script src="render.js"></script>
+  <script src="looks.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -15,6 +15,7 @@ var CONFIG = require('./config');
 var base64 = require('./base64');
 var rotation = require('./rotation');
 var render = require('./render');
+var looks = require('./looks');
 
 var SETTINGS_KEY = 'tt-settings';
 var ART_KEY = 'tt-art';
@@ -312,6 +313,25 @@ function ensureArt(hangKey) {
   return true;
 }
 
+/**
+ * Make a painting's saved look the current settings. Returns whether anything
+ * changed (the watch is told about time placement and size).
+ */
+function applyLook(settings, look) {
+  var changed = false;
+  for (var k in look) {
+    if (Object.prototype.hasOwnProperty.call(look, k) && settings[k] !== look[k]) {
+      settings[k] = look[k];
+      changed = true;
+    }
+  }
+  if (changed) {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    sendSettings(settings);
+  }
+  return changed;
+}
+
 /** Try again later when the server or network is unavailable. */
 function scheduleRetry() {
   if (retryTimer) {
@@ -386,6 +406,14 @@ function fetchArt(path, settings, period, extraQuery) {
           cropUrl: base + meta.cropUrl
         }
       };
+      // A painting with a saved look gets it back; others keep the current one.
+      var current = loadSettings();
+      var look = looks.get(localStorage, meta.key, current);
+      if (look && applyLook(current, look) && look.fit !== settings.fit) {
+        // Saved with the other crop: fetch that one instead (still fetching).
+        fetchArt('/api/art/' + encodeURIComponent(meta.key), loadSettings(), period);
+        return;
+      }
       try {
         localStorage.setItem(ART_KEY, JSON.stringify(record));
       } catch (e) {
@@ -430,7 +458,8 @@ Pebble.addEventListener('showConfiguration', function () {
   var state = {
     settings: loadSettings(),
     art: art ? art.meta : null,
-    watch: watch
+    watch: watch,
+    looks: looks.all(localStorage)
   };
   Pebble.openURL(CONFIG.SERVER_URL + '/config/#' + encodeURIComponent(JSON.stringify(state)));
 });
@@ -459,6 +488,13 @@ Pebble.addEventListener('webviewclosed', function (e) {
   }
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   sendSettings(settings);
+  // The reader changed the look: remember it for the painting that ends up on
+  // the watch, so it comes back whenever that painting is hung again.
+  if (result.saveLook) {
+    var hung = typeof result.artKey === 'string' ? result.artKey : null;
+    var cached = readJson(ART_KEY);
+    looks.save(localStorage, hung || (cached && cached.meta && cached.meta.key), settings);
+  }
   // The painting previewed on the settings page, or another crop if the fit
   // changed; otherwise just re-render the cached crop (tuning and frame are
   // applied here, no download).

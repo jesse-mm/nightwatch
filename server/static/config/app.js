@@ -51,6 +51,11 @@ const art = state.art || null;
 const watch = state.watch || { w: 144, h: 168, round: 0 };
 // "auto" is where the watch puts the time by default.
 if (settings.textCol === 'auto') settings.textCol = watch.round ? 'center' : 'right';
+
+// Looks saved per painting on the phone (looks.js): crop, frame, color tuning
+// and time placement. A painting shown here gets its saved look back.
+const savedLooks = state.looks || {};
+let lookTouched = false; // the reader changed the look: the phone saves it with the painting
 // A painting picked on this page; only hung on the watch when saved.
 let chosen = null;
 // The painting the label currently describes (for the viewer).
@@ -322,7 +327,26 @@ function setStatus(text) {
   $('status').textContent = text;
 }
 
-async function loadPreview(path, { pick = false, extra = '' } = {}) {
+/** The painting's saved look, or null. */
+function savedLook(key) {
+  if (!Object.hasOwn(savedLooks, key)) return null;
+  const look = window.TreasureLooks.decode(savedLooks[key], settings);
+  if (look.textCol === 'auto') look.textCol = watch.round ? 'center' : 'right';
+  return look;
+}
+
+/** Put the settings on the page's controls after they changed in code. */
+function syncControls() {
+  document.querySelectorAll('.segmented[data-key] input[type=radio]').forEach((radio) => {
+    radio.checked = radio.value === String(settings[radio.name]);
+  });
+  document.querySelectorAll('input.range[data-key]').forEach((input) => {
+    input.value = settings[input.dataset.key];
+    showRange(input);
+  });
+}
+
+async function loadPreview(path, { pick = false, extra = '', useLook = true } = {}) {
   const id = ++requestId;
   screenEl.classList.add('loading');
   setStatus(pick ? 'Hanging a new painting…' : '');
@@ -330,12 +354,22 @@ async function loadPreview(path, { pick = false, extra = '' } = {}) {
     const res = await fetch(`${path}?${screenQuery()}${extra}`);
     const meta = await res.json();
     if (!res.ok) throw new Error(meta.error || `HTTP ${res.status}`);
-    if (id !== requestId) return;
+    if (id !== requestId) return null;
+    const look = useLook ? savedLook(meta.key) : null;
+    if (look) {
+      const otherCrop = look.fit !== settings.fit;
+      Object.assign(settings, look);
+      syncControls();
+      update();
+      // Saved with the other crop: load that one instead.
+      if (otherCrop) return loadPreview(`/api/art/${encodeURIComponent(meta.key)}`, { pick, useLook: false });
+    }
     if (pick) chosen = meta;
     await showPainting(meta);
     if (id !== requestId) return null;
     showLabel(meta);
-    setStatus(chosen ? 'Preview: this painting is hung when you save.' : '');
+    const hint = chosen ? 'Preview: this painting is hung when you save.' : '';
+    setStatus(look ? `${hint} Using the look you saved for it.`.trim() : hint);
     updateShuffle();
     return meta;
   } catch (err) {
@@ -351,9 +385,10 @@ function currentKey() {
   return (chosen || art)?.key;
 }
 
-function refreshPreview() {
+/** Reload the shown painting, e.g. for another crop. `useLook` re-applies its saved look. */
+function refreshPreview({ useLook = false } = {}) {
   const key = currentKey();
-  if (key) loadPreview(`/api/art/${encodeURIComponent(key)}`);
+  if (key) loadPreview(`/api/art/${encodeURIComponent(key)}`, { useLook });
 }
 
 // First paint: the phone passes the cached painting's crop URL. Older phone
@@ -377,7 +412,7 @@ $('shuffle').addEventListener('click', () => loadPreview('/api/art/random', { pi
 function restoreOriginal() {
   chosen = null;
   updateShuffle();
-  refreshPreview();
+  refreshPreview({ useLook: true });
 }
 
 $('keep').addEventListener('click', restoreOriginal);
@@ -560,6 +595,7 @@ document.querySelectorAll('.segmented[data-key]').forEach((group) => {
     radio.addEventListener('change', () => {
       if (radio.checked) {
         settings[key] = radio.value;
+        if (window.TreasureLooks.KEYS.includes(key)) lookTouched = true;
         update();
         if (CROP_KEYS.includes(key)) refreshPreview();
         if (LOCAL_KEYS.includes(key)) draw();
@@ -590,6 +626,7 @@ document.querySelectorAll('input.range[data-key]').forEach((input) => {
   showRange(input);
   input.addEventListener('input', () => {
     settings[key] = Number(input.value);
+    lookTouched = true;
     showRange(input);
     draw();
   });
@@ -597,6 +634,7 @@ document.querySelectorAll('input.range[data-key]').forEach((input) => {
 
 $('color-reset').addEventListener('click', () => {
   for (const key of COLOR_KEYS) settings[key] = DEFAULTS[key];
+  lookTouched = true;
   document.querySelectorAll('input[name=palette], input[name=dither]').forEach((r) => {
     r.checked = r.value === settings[r.name];
   });
@@ -679,6 +717,6 @@ function returnTo() {
 }
 
 $('save').addEventListener('click', () => {
-  const result = { settings, artKey: chosen ? chosen.key : null };
+  const result = { settings, artKey: chosen ? chosen.key : null, saveLook: lookTouched };
   document.location = returnTo() + encodeURIComponent(JSON.stringify(result));
 });

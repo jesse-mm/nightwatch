@@ -33,6 +33,17 @@ Two programs share one Rust library (`server/src/lib.rs`):
 6. At midnight the watch's tick handler sends Hello again with reason 2, and the
    date check on the phone fetches a new painting.
 
+### Looks per painting (phone, `looks.js`)
+
+When the reader changes the crop, frame, color tuning or time placement and
+saves, the phone remembers that look for the painting on the watch, in
+`localStorage` (`tt-looks`): one compact string per painting key, e.g.
+`"200108369": "0,1,0,2,10,-5,1,0,0"` (option indexes and numbers, in a fixed
+order). A painting with a saved look gets it back whenever it is hung again,
+by rotation, a swap or a pin; others keep the current settings. The settings
+page gets the saved looks too, so a swapped-in painting previews with its own
+look. `looks.js` lives next to `render.js` and is shared the same way.
+
 ### Rotation, Featured and pinning (phone, `rotation.js`)
 
 Each cached painting remembers its **period**: `daily:2026-10-16`,

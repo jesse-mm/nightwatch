@@ -31,13 +31,15 @@ export default defineConfig([
     rules: {
       'no-var': 'off',
       eqeqeq: 'error',
+      // ES5 has no optional catch binding, so `catch (e)` may go unused.
+      'no-unused-vars': ['error', { caughtErrors: 'none' }],
     },
   },
 
   // The shared renderer runs in PebbleKit JS too, so it's held to ES5 (with the
   // typed arrays every runtime has). Loaded as CommonJS or a plain <script>.
   {
-    files: ['server/static/config/render.js'],
+    files: ['server/static/config/render.js', 'server/static/config/looks.js'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 5,
@@ -52,13 +54,15 @@ export default defineConfig([
     rules: {
       'no-var': 'off',
       eqeqeq: 'error',
+      // ES5 has no optional catch binding, so `catch (e)` may go unused.
+      'no-unused-vars': ['error', { caughtErrors: 'none' }],
     },
   },
 
   // Settings page: a modern phone webview.
   {
     files: ['server/static/**/*.js'],
-    ignores: ['server/static/config/render.js'],
+    ignores: ['server/static/config/render.js', 'server/static/config/looks.js'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,
