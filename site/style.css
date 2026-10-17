@@ -142,15 +142,19 @@ a { color: inherit; text-underline-offset: 0.18em; }
 
 .overlay.hidden { opacity: 0; }
 
-.ov-time { font-size: calc(var(--scale, 2) * 19px); }
-.ov-date { font-size: calc(var(--scale, 2) * 14px); }
-.ov-ampm { margin-left: calc(var(--scale, 2) * 2px); font-size: calc(var(--scale, 2) * 14px); }
-.overlay.size-s .ov-time { font-size: calc(var(--scale, 2) * 14px); }
+/* Sized to the watch's fonts, measured on the emulator (Pebble Time 2):
+   time (LECO) S 14, M 18, L 25 px tall; date S 11 (Gothic), M 14, L 18 (LECO).
+   This font's digits are ~72 % of its size and narrower than LECO's, hence
+   the letter spacing. */
+.ov-time { font-size: calc(var(--scale, 2) * 25px); letter-spacing: 0.1em; }
+.ov-date { font-size: calc(var(--scale, 2) * 19.5px); letter-spacing: 0.055em; }
+.ov-ampm { margin-left: calc(var(--scale, 2) * 2px); font-size: calc(var(--scale, 2) * 19.5px); letter-spacing: 0.055em; }
+.overlay.size-s .ov-time { font-size: calc(var(--scale, 2) * 19.5px); letter-spacing: 0.12em; }
 .overlay.size-s .ov-date,
-.overlay.size-s .ov-ampm { font-size: calc(var(--scale, 2) * 10px); }
-.overlay.size-l .ov-time { font-size: calc(var(--scale, 2) * 27px); }
+.overlay.size-s .ov-ampm { font-size: calc(var(--scale, 2) * 15.5px); letter-spacing: -0.08em; }
+.overlay.size-l .ov-time { font-size: calc(var(--scale, 2) * 35px); letter-spacing: 0; }
 .overlay.size-l .ov-date,
-.overlay.size-l .ov-ampm { font-size: calc(var(--scale, 2) * 19px); }
+.overlay.size-l .ov-ampm { font-size: calc(var(--scale, 2) * 25px); letter-spacing: 0.07em; }
 
 .preview-note {
   margin: 0.6rem 0 0;
@@ -961,3 +965,14 @@ canvas.draggable:active { cursor: grabbing; }
 /* Position & zoom: one group (hint, zoom slider, arrows). */
 .view-group .view-zoom { display: flex; justify-content: space-between; margin-top: 0.4rem; color: var(--ink); }
 .view-group .nudge { margin-top: 0.5rem; }
+
+/* The three main groups (Painting, Swap painting, Date & time) are set off by
+   a thicker line above each. */
+.group.look,
+section.group[aria-labelledby="g-rotation"],
+section.group[aria-labelledby="g-datetime"] {
+  border-top: 4px solid var(--line);
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+}
+.group.look { margin-top: 0; }
