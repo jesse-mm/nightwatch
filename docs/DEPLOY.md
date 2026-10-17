@@ -82,6 +82,14 @@ server and hands them over as base64 text; add
 404 for that image, to try what happens when the Rijksmuseum drops a pinned
 painting.
 
+**Debug pane.** With `DEBUG: true` in your local `config.js`, the app opens the
+settings page with `?debug=true` (you can also add it by hand in a browser).
+The pane shows what the phone stores (and how big it is), the catalog version
+on the phone and on the site, and the current painting, and has actions the
+phone runs when the page closes: pin *The Milkmaid*, new painting now, re-send
+the image to the watch, clear the catalog cache, reset the phone's storage, plus
+clearing the page's own storage and copying the debug info.
+
 ## Settings reference (.env)
 
 Read by the generator. `docker-compose.yml` passes on `RUST_LOG`,

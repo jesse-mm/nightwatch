@@ -893,3 +893,21 @@ canvas.draggable:active { cursor: grabbing; }
   color: var(--ink);
   font-size: var(--step--1);
 }
+
+/* Debug pane (?debug=true). */
+.debug { border: 2px dashed color-mix(in srgb, var(--gilt) 70%, transparent); border-radius: 8px; padding: 0.75rem 1rem; }
+.debug-hint { margin: 0 0 0.6rem; color: var(--muted); font-size: var(--step--1); }
+.debug-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.debug-actions .text-button { margin-top: 0; }
+.debug-info {
+  max-height: 18rem;
+  overflow: auto;
+  margin: 0.6rem 0 0;
+  padding: 0.6rem;
+  font: 400 0.75rem/1.4 ui-monospace, Menlo, monospace;
+  background: var(--control);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

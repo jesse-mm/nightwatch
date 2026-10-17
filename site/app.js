@@ -479,27 +479,33 @@ function showPinned(title) {
   $('pinned-title').textContent = title || 'this painting';
 }
 
+/** Find a painting by object number, key or link, preview it and pin it. */
+async function pinPainting(q) {
+  $('pin-status').textContent = 'Looking it up…';
+  const cat = await catalogReady;
+  // Look among what's loaded first; otherwise load every era file (rare).
+  let found = cat.resolve(q);
+  if (!found) {
+    $('pin-status').textContent = 'Searching the whole collection…';
+    await Promise.all(cat.files.map((f) => loadPool(cat, f.pool)));
+    found = cat.resolve(q);
+  }
+  if (!found) throw new Error('No painting found for that number or link.');
+  const meta = await loadPreview(byKey(found.key), { pick: true });
+  if (!meta) throw new Error('could not load it');
+  settings.pinned = meta.key;
+  showPinned(meta.title);
+  $('pin-status').textContent = `Pinned “${meta.title}”. Save to hang it.`;
+  update();
+  return meta;
+}
+
 $('pin-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const q = $('pin-input').value.trim();
   if (!q) return;
-  $('pin-status').textContent = 'Looking it up…';
   try {
-    const cat = await catalogReady;
-    // Look among what's loaded first; otherwise load every era file (rare).
-    let found = cat.resolve(q);
-    if (!found) {
-      $('pin-status').textContent = 'Searching the whole collection…';
-      await Promise.all(cat.files.map((f) => loadPool(cat, f.pool)));
-      found = cat.resolve(q);
-    }
-    if (!found) throw new Error('No painting found for that number or link.');
-    const meta = await loadPreview(byKey(found.key), { pick: true });
-    if (!meta) throw new Error('could not load it');
-    settings.pinned = meta.key;
-    showPinned(meta.title);
-    $('pin-status').textContent = `Pinned “${meta.title}”. Save to hang it.`;
-    update();
+    await pinPainting(q);
   } catch (err) {
     $('pin-status').textContent = err.message;
   }
@@ -948,8 +954,13 @@ function returnTo() {
   return match ? decodeURIComponent(match[1]) : 'pebblejs://close#';
 }
 
-$('save').addEventListener('click', () => {
-  const result = {
+/** Hand the result to the phone; the page closes. */
+function sendToPhone(result) {
+  document.location = returnTo() + encodeURIComponent(JSON.stringify(result));
+}
+
+function saveToWatch() {
+  sendToPhone({
     version: window.TreasureSettings.VERSION,
     settings,
     artKey: chosen ? chosen.key : null,
@@ -959,6 +970,64 @@ $('save').addEventListener('click', () => {
     saveLook: lookTouched,
     // From a restored backup: replaces every saved look ({version, looks}).
     looks: restoredLooks || undefined,
+  });
+}
+
+$('save').addEventListener('click', saveToWatch);
+
+// ---------------- debug (?debug=true) ----------------
+// A dev build (DEBUG: true in the phone's config.js) opens the page with
+// ?debug=true. The pane shows the phone's state and runs actions on the phone:
+// the page closes with { debug: action } and the phone does it (runDebug).
+
+if (new URLSearchParams(location.search).get('debug') === 'true') {
+  const pane = $('debug');
+  pane.hidden = false;
+  const show = (info) => {
+    $('debug-info').textContent = JSON.stringify(info, null, 2);
   };
-  document.location = returnTo() + encodeURIComponent(JSON.stringify(result));
-});
+  const info = {
+    phone: state.debug || '(open the settings from a debug build to see the phone)',
+    page: { watch, settings, pinned: settings.pinned || null, painting: art?.key || null },
+  };
+  show(info);
+  catalogReady.then((cat) => {
+    info.page.catalogId = cat.id;
+    info.page.catalogFiles = cat.files.map((f) => `${f.pool} ${f.count}${cat.has(f.pool) ? ' (loaded)' : ''}`);
+    show(info);
+  }).catch((err) => {
+    info.page.catalog = String(err.message || err);
+    show(info);
+  });
+
+  const status = (text) => {
+    $('debug-status').textContent = text;
+  };
+  pane.querySelectorAll('[data-debug]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const action = button.dataset.debug;
+      if (action === 'reset' && !window.confirm('Remove everything Treasure Trove stored on the phone?')) return;
+      sendToPhone({ debug: action });
+    });
+  });
+  $('debug-milkmaid').addEventListener('click', async () => {
+    try {
+      status('Pinning The Milkmaid…');
+      await pinPainting('SK-A-2344');
+      saveToWatch();
+    } catch (err) {
+      status(err.message);
+    }
+  });
+  $('debug-page-storage').addEventListener('click', () => {
+    try {
+      localStorage.clear();
+      status('This page’s storage is cleared (Indoors/Daylight, pinned preview time).');
+    } catch (err) {
+      status(String(err.message || err));
+    }
+  });
+  $('debug-copy').addEventListener('click', async () => {
+    status((await copyText(JSON.stringify(info, null, 2))) ? 'Debug info copied.' : 'Couldn’t copy; select the text above.');
+  });
+}

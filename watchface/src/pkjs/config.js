@@ -6,4 +6,7 @@
  */
 module.exports = {
   SETTINGS_URL: 'https://your-name.github.io/treasure-trove'
+  // Development only (see docs/DEPLOY.md, "Testing locally"):
+  // DEV_BASE64_URL: 'http://<your-mac>:8092/base64?url=',  // images for the emulator
+  // DEBUG: true                                             // settings page debug pane
 };

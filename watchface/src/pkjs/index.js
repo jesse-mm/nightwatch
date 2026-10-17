@@ -801,6 +801,76 @@ function looksForPage() {
   return JSON.stringify(saved).length > 100000 ? {} : saved;
 }
 
+// ------------------------------------------------------------------- debug
+// A build with DEBUG: true in config.js (e.g. a sideloaded dev build) opens
+// the settings page with ?debug=true: it shows the phone's state and offers
+// actions the phone runs when the page closes (see runDebug).
+
+/** Every localStorage key we use, with the cached catalog files. */
+function storageKeys() {
+  var keys = [SETTINGS_KEY, 'tt-looks', ART_KEY, CATALOG_KEY, ROWS_KEY, SOURCE_KEY, UNAVAILABLE_KEY];
+  var manifest = readJson(CATALOG_KEY);
+  ((manifest && manifest.files) || []).forEach(function (f) {
+    keys.push(CATALOG_KEY + '-' + f.pool);
+  });
+  return keys;
+}
+
+/** What the debug pane shows: stored items and their sizes, and the state. */
+function debugInfo() {
+  var storage = {};
+  storageKeys().forEach(function (key) {
+    var value = localStorage.getItem(key);
+    if (value !== null && value !== undefined) {
+      storage[key] = String(value).length;
+    }
+  });
+  var art = readJson(ART_KEY);
+  var manifest = readJson(CATALOG_KEY);
+  return {
+    storage: storage,
+    catalogId: manifest ? manifest.id : null,
+    painting: art ? { key: art.meta.key, title: art.meta.title, period: art.period, cropKey: art.cropKey, date: art.date } : null,
+    watchArtId: watchArtId,
+    fetching: fetching,
+    retryCount: retryCount,
+    config: { SETTINGS_URL: PAGE_URL, DEV_BASE64_URL: CONFIG.DEV_BASE64_URL || null }
+  };
+}
+
+/** Run a debug action from the settings page. */
+function runDebug(action) {
+  console.log('Debug: ' + action);
+  if (action === 'reset') {
+    // Everything we stored, as after a fresh install (the watch keeps its own
+    // copy of the painting until a new one arrives).
+    storageKeys().forEach(function (key) {
+      localStorage.removeItem(key);
+    });
+    watchArtId = 0;
+    watchEmpty = true;
+    sendSettings(loadSettings());
+    ensureArt();
+  } else if (action === 'clear-catalog') {
+    storageKeys().forEach(function (key) {
+      if (key.indexOf(CATALOG_KEY) === 0) {
+        localStorage.removeItem(key);
+      }
+    });
+  } else if (action === 'new-painting') {
+    // Forget the current period, so the rotation picks a painting now.
+    var art = readJson(ART_KEY);
+    if (art) {
+      art.period = 'debug';
+      localStorage.setItem(ART_KEY, JSON.stringify(art));
+    }
+    ensureArt();
+  } else if (action === 'resend') {
+    watchArtId = 0;
+    showCached(readJson(ART_KEY), loadSettings());
+  }
+}
+
 Pebble.addEventListener('showConfiguration', function () {
   var art = readJson(ART_KEY);
   // Rows of the paintings we know (on the watch, pinned): the page shows them
@@ -818,7 +888,11 @@ Pebble.addEventListener('showConfiguration', function () {
     // The pinned painting can't be fetched any more (shown as a notice).
     unavailable: readJson(UNAVAILABLE_KEY)
   };
-  Pebble.openURL(PAGE_URL + '/#' + encodeURIComponent(JSON.stringify(state)));
+  if (CONFIG.DEBUG) {
+    state.debug = debugInfo();
+  }
+  Pebble.openURL(PAGE_URL + '/' + (CONFIG.DEBUG ? '?debug=true' : '') + '#' +
+    encodeURIComponent(JSON.stringify(state)));
 });
 
 Pebble.addEventListener('webviewclosed', function (e) {
@@ -836,6 +910,11 @@ Pebble.addEventListener('webviewclosed', function (e) {
       console.log('Could not read settings: ' + err + ' / ' + err2);
       return;
     }
+  }
+  // A debug action from the settings page (?debug=true) instead of settings.
+  if (result.debug) {
+    runDebug(result.debug);
+    return;
   }
   // The page says which settings version it speaks.
   var sent = result.settings || {};

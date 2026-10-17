@@ -93,6 +93,22 @@
   </div>
 
   <main>
+    <section class="group debug" id="debug" aria-labelledby="g-debug" hidden>
+      <h2 id="g-debug">Debug</h2>
+      <p class="debug-hint">Actions run on the phone: the page closes and the phone does it.</p>
+      <div class="debug-actions">
+        <button type="button" class="text-button" id="debug-milkmaid">Pin The Milkmaid</button>
+        <button type="button" class="text-button" data-debug="new-painting">New painting now</button>
+        <button type="button" class="text-button" data-debug="resend">Re-send image to watch</button>
+        <button type="button" class="text-button" data-debug="clear-catalog">Clear catalog cache</button>
+        <button type="button" class="text-button" data-debug="reset">Reset phone storage</button>
+        <button type="button" class="text-button" id="debug-page-storage">Clear this page’s storage</button>
+        <button type="button" class="text-button" id="debug-copy">Copy debug info</button>
+      </div>
+      <p class="label-status" id="debug-status" role="status"></p>
+      <pre class="debug-info" id="debug-info"></pre>
+    </section>
+
     <section class="group look block" aria-labelledby="g-look">
       <h2 id="g-look">Painting</h2>
       <div class="row stacked">
