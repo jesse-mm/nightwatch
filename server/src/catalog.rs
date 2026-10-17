@@ -502,6 +502,8 @@ pub(crate) mod testing {
             h: 1.0,
             inner_w: 144,
             inner_h: 168,
+            window_x: 0,
+            window_y: 0,
         };
         c.put_crop("1", CROP, "h1", &plan, "art/1/c/a.png", 10)
             .unwrap();

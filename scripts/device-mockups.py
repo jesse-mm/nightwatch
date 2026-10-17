@@ -12,6 +12,7 @@ dithered pixels stay visible. Needs Pillow, Node and a generator run
 
 import base64
 import json
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -42,17 +43,29 @@ process.stdin.on('data', (d) => (input += d)).on('end', () => {
   const o = JSON.parse(input);
   const bytes = render.compose(Buffer.from(o.rgb, 'base64'), o.cw, o.ch, {
     w: o.w, h: o.h, stride: o.w, round: o.round, fit: 'fill', frame: 'none', palette: 'defined',
+    windowX: o.windowX, windowY: o.windowY,
   });
   process.stdout.write(Buffer.from(bytes).toString('base64'));
 });
 """
 
 
+def planned_window(data: Path, key: str, name: str) -> tuple[int, int]:
+    """Where the planned view sits in a Cover crop with slack (serve.sqlite)."""
+    db = sqlite3.connect(f"file:{data / 'serve.sqlite'}?mode=ro", uri=True)
+    row = db.execute("SELECT plans FROM paintings WHERE key = ?", (key,)).fetchone()
+    plan = json.loads(row[0]).get(name, {}) if row and row[0] else {}
+    return plan.get("windowX", 0), plan.get("windowY", 0)
+
+
 def screen_image(data: Path, key: str, w: int, h: int, round_: bool) -> Image.Image:
     shape = "round" if round_ else "rect"
-    crop = Image.open(data / "art" / key / "c" / f"{w}x{h}-{shape}-fill.png").convert("RGB")
+    name = f"{w}x{h}-{shape}-fill"
+    crop = Image.open(data / "art" / key / "c" / f"{name}.png").convert("RGB")
+    window_x, window_y = planned_window(data, key, name)
     request = {
         "w": w, "h": h, "round": round_, "cw": crop.width, "ch": crop.height,
+        "windowX": window_x, "windowY": window_y,
         "rgb": base64.b64encode(crop.tobytes()).decode(),
     }
     out = subprocess.run(

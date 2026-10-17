@@ -90,7 +90,10 @@ function composeFor(art, settings) {
     palette: settings.palette,
     dither: settings.dither,
     brightness: settings.brightness,
-    contrast: settings.contrast
+    contrast: settings.contrast,
+    windowX: art.windowX || 0,
+    windowY: art.windowY || 0,
+    shift: settings.shift
   });
 }
 
@@ -389,6 +392,9 @@ function fetchArt(path, settings, period, extraQuery) {
         crop: crop,
         cropW: meta.render.width,
         cropH: meta.render.height,
+        // Where the planned view sits in a Cover crop with slack.
+        windowX: meta.render.windowX || 0,
+        windowY: meta.render.windowY || 0,
         meta: {
           key: meta.key,
           title: meta.title,
@@ -401,12 +407,22 @@ function fetchArt(path, settings, period, extraQuery) {
           license: meta.license,
           licenseUrl: meta.licenseUrl,
           cropMode: meta.render && meta.render.crop ? meta.render.crop.mode : null,
+          windowX: meta.render.windowX || 0,
+          windowY: meta.render.windowY || 0,
           cropUrl: base + meta.cropUrl
         }
       };
       // A painting with a saved look gets it back; others keep the current one.
       var current = loadSettings();
       var look = looks.get(localStorage, meta.key, current);
+      // The Cover position belongs to one painting: a new one without a saved
+      // look starts at its planned view.
+      var previous = readJson(ART_KEY);
+      var samePainting = previous && previous.meta && previous.meta.key === meta.key;
+      if (!look && !samePainting && current.shift) {
+        current.shift = 0;
+        storeSettings(current);
+      }
       if (look && applyLook(current, look) && look.fit !== settings.fit) {
         // Saved with the other crop: fetch that one instead (still fetching).
         fetchArt('/api/art/' + encodeURIComponent(meta.key), loadSettings(), period);

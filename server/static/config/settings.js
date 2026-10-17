@@ -40,6 +40,7 @@
     dither: 'atkinson',    // atkinson | checker | none
     brightness: 0,         // -100..100
     contrast: 0,           // -100..100
+    shift: 0,              // Cover only: move the crop's window along its free axis (watch px, about -20..20)
     frame: 'none',         // none | gold | wood | gallery
     selection: 'featured', // featured (365 most-read) | random
     era: 'any',            // for random: any | pre1600 | 1600s | 1700s | 1800s | 1900s

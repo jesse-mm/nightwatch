@@ -151,9 +151,14 @@ pub struct EraQuery {
 #[serde(rename_all = "camelCase")]
 struct RenderInfo {
     crop: CropPlan,
-    /// Size of the crop image (the screen for "fill", smaller for "whole").
+    /// Size of the crop image: for "fill" the screen plus some slack on one
+    /// axis, for "whole" the painting inside the screen.
     width: u32,
     height: u32,
+    /// Where the screen-sized window sits in a "fill" crop (the planned view);
+    /// the reader may shift it within the crop.
+    window_x: u32,
+    window_y: u32,
 }
 
 #[derive(Serialize)]
@@ -181,6 +186,8 @@ fn respond(snap: &Snapshot, key: &str, t: &Target) -> Result<Response, AppError>
             crop: *s.plan,
             width: s.plan.inner_w,
             height: s.plan.inner_h,
+            window_x: s.plan.window_x,
+            window_y: s.plan.window_y,
         },
         meta: &s.painting.meta,
         attribution: ATTRIBUTION,

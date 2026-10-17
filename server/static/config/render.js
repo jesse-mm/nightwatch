@@ -448,11 +448,36 @@
   // ------------------------------------------------------------ compose
 
   /**
+   * The screen-sized window of a "fill" crop that is larger than the screen
+   * along one axis (the generator keeps some slack there). (windowX, windowY)
+   * is the planned position; `shift` moves it along the free axis, clamped to
+   * the crop. `min`/`max` are the shifts the crop allows (0/0: nothing to move).
+   */
+  function coverWindow(cw, ch, sw, sh, windowX, windowY, shift) {
+    var slackX = Math.max(0, cw - sw);
+    var slackY = Math.max(0, ch - sh);
+    var free = slackX ? 'x' : (slackY ? 'y' : null);
+    var slack = free === 'x' ? slackX : slackY;
+    var base = Math.min(free === 'x' ? (windowX || 0) : (windowY || 0), slack);
+    var pos = Math.min(Math.max(base + (Math.round(shift) || 0), 0), slack);
+    return {
+      x: free === 'x' ? pos : 0,
+      y: free === 'y' ? pos : 0,
+      w: Math.min(cw, sw),
+      h: Math.min(ch, sh),
+      axis: free,
+      min: -base,
+      max: slack - base
+    };
+  }
+
+  /**
    * The watch's bytes for a crop: fit it into the frame's opening, dither it
    * with the color tuning, center it, and draw the frame around it.
    * @param {Uint8Array|Array} crop full-color RGB, cw*ch*3
    * @param {object} o {w, h, stride, round, fit, frame, palette,
-   *   dither ('atkinson' | 'checker' | 'none'), brightness, contrast (-100..100)}
+   *   dither ('atkinson' | 'checker' | 'none'), brightness, contrast (-100..100),
+   *   windowX, windowY (planned window in a "fill" crop with slack), shift}
    * @returns {Uint8Array} stride*h GColor8 bytes
    */
   function compose(crop, cw, ch, o) {
@@ -460,8 +485,15 @@
     var h = o.h;
     var stride = o.stride || w;
     var border = frameBorder(o.frame, w, h);
-    var art = fitArt(crop instanceof Uint8Array ? crop : new Uint8Array(crop), cw, ch,
-      w - 2 * border, h - 2 * border, o.fit);
+    var rgb = crop instanceof Uint8Array ? crop : new Uint8Array(crop);
+    // A "fill" crop with slack: cut the window the reader positioned.
+    if (o.fit !== 'whole' && (cw > w || ch > h)) {
+      var win = coverWindow(cw, ch, w, h, o.windowX, o.windowY, o.shift);
+      rgb = cut(rgb, cw, win.x, win.y, win.w, win.h);
+      cw = win.w;
+      ch = win.h;
+    }
+    var art = fitArt(rgb, cw, ch, w - 2 * border, h - 2 * border, o.fit);
     var pixels = o.brightness || o.contrast ? adjust(art.rgb, o.brightness, o.contrast) : art.rgb;
     var idx = (DITHERS[o.dither] || dither)(pixels, art.w, art.h, o.palette);
     var out = new Uint8Array(stride * h);
@@ -568,6 +600,7 @@
 
   return {
     compose: compose,
+    coverWindow: coverWindow,
     toScreenRGBA: toScreenRGBA,
     dither: dither,
     adjust: adjust,

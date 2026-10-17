@@ -877,3 +877,7 @@ label, button, input, summary, a { -webkit-tap-highlight-color: transparent; }
 .mini:not(.large) #mini-time span,
 .mini:not(.large) #mini-size span { display: none; }
 .segmented + .segmented { margin-top: 0.5rem; }
+
+/* Cover crops can be slid a little by dragging the preview. */
+canvas.draggable { cursor: grab; }
+canvas.draggable:active { cursor: grabbing; }

@@ -16,7 +16,7 @@ use crate::imaging::{Fit, Target};
 
 /// Bump when the crop or tone code changes output: every crop whose hash
 /// includes it is then rebuilt from the local master images.
-pub const PIPELINE_VERSION: &str = "2026-10-16.2-crops";
+pub const PIPELINE_VERSION: &str = "2026-10-17.2-cover-slack";
 
 /// The color screens we support: (width, height, round). See docs/DEVICES.md.
 pub const SCREENS: [(u32, u32, bool); 4] = [

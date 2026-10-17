@@ -74,6 +74,12 @@
           "maximum": 100,
           "description": "Contrast adjustment"
         },
+        "shift": {
+          "type": "integer",
+          "minimum": -20,
+          "maximum": 20,
+          "description": "Cover only: moves the crop along its free axis by this many watch pixels (the crop keeps up to 20 px of slack per side)"
+        },
         "textRow": {
           "enum": [
             "top",

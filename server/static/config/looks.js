@@ -40,6 +40,7 @@
     dither: ['atkinson', 'checker', 'none'],
     brightness: null,
     contrast: null,
+    shift: null,
     textRow: ['top', 'center', 'bottom'],
     textCol: ['auto', 'start', 'center', 'end'],
     timeSize: ['s', 'm', 'l']

@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const looks = require('../src/pkjs/looks.js');
 
 const DEFAULTS = {
-  fit: 'fill', frame: 'none', palette: 'defined', dither: 'atkinson', brightness: 0, contrast: 0,
+  fit: 'fill', frame: 'none', palette: 'defined', dither: 'atkinson', brightness: 0, contrast: 0, shift: 0,
   textRow: 'bottom', textCol: 'auto', timeSize: 's',
 };
 

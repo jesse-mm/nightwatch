@@ -34,7 +34,8 @@ if (settings.textCol === 'auto') settings.textCol = watch.round ? 'center' : 'en
 // and time placement. A painting shown here gets its saved look back.
 const savedLooks = state.looks || {};
 let restoredLooks = null; // a restored backup's looks, written by the phone on save
-let lookTouched = false; // the reader changed the look: the phone saves it with the painting
+let lookTouched = false;
+const initialShift = settings.shift; // the reader changed the look: the phone saves it with the painting
 // A painting picked on this page; only hung on the watch when saved.
 let chosen = null;
 // The painting the label currently describes (for the viewer).
@@ -57,6 +58,8 @@ canvas.width = watch.w;
 canvas.height = watch.h;
 // The crop on screen: full-color RGB from the server, before tuning and frame.
 let crop = null;
+// What the Cover crop on screen lets the reader shift (see coverWindow in render.js).
+let shiftRange = { axis: null, min: 0, max: 0 };
 
 // ---------------- how the preview is shown ----------------
 // A page-only preference (not a watch setting): show the watch's pixels as they
@@ -126,6 +129,9 @@ function draw() {
     dither: settings.dither,
     brightness: settings.brightness,
     contrast: settings.contrast,
+    windowX: crop.windowX,
+    windowY: crop.windowY,
+    shift: settings.shift,
   });
   const rgba = window.TreasureRender.toScreenRGBA(bytes, watch.w, watch.h, watch.w, previewLight);
   canvas.getContext('2d').putImageData(new ImageData(rgba, watch.w, watch.h), 0, 0);
@@ -166,6 +172,11 @@ function loadCrop(url) {
 /** Show a painting: fetch its crop, then draw it with the current settings. */
 async function showPainting(meta) {
   crop = await loadCrop(meta.cropUrl);
+  // Where the planned window sits in a Cover crop with slack (from the server,
+  // or from the phone's cache for the painting on the watch).
+  crop.windowX = meta.render?.windowX ?? meta.windowX ?? 0;
+  crop.windowY = meta.render?.windowY ?? meta.windowY ?? 0;
+  updateShiftRange();
   canvas.setAttribute('aria-label', `${meta.title} by ${meta.artist}, as shown on the watch`);
   draw();
   screenEl.classList.remove('loading');
@@ -343,6 +354,8 @@ async function loadPreview(path, { pick = false, extra = '', useLook = true } = 
     if (!res.ok) throw new Error(meta.error || `HTTP ${res.status}`);
     if (id !== requestId) return null;
     const look = useLook ? savedLook(meta.key) : null;
+    // The shift belongs to one painting: others start at their planned view.
+    if (!look && useLook) settings.shift = meta.key === art?.key ? initialShift : 0;
     if (look) {
       const otherCrop = look.fit !== settings.fit;
       Object.assign(settings, look);
@@ -526,6 +539,7 @@ function conditions() {
   return {
     showTime: settings.showTime,
     showDate: settings.showDate,
+    coverShift: Boolean(shiftRange.axis),
     ampm: settings.showTime && (settings.clockMode === '12' || (settings.clockMode === 'auto' && !clockIs24h())),
     anyText: settings.showTime || settings.showDate,
     textColumn: (settings.showTime || settings.showDate) && !watch.round,
@@ -631,6 +645,64 @@ $('color-reset').addEventListener('click', () => {
   });
   draw();
 });
+
+// ---------------- Cover position (shift) ----------------
+// Cover crops keep up to 20 watch pixels of extra painting on one axis; the
+// reader can slide the window there (slider, or drag the preview).
+
+
+function updateShiftRange() {
+  if (!crop || settings.fit !== 'fill') {
+    shiftRange = { axis: null, min: 0, max: 0 };
+  } else {
+    shiftRange = window.TreasureRender.coverWindow(crop.w, crop.h, watch.w, watch.h,
+      crop.windowX, crop.windowY, 0);
+  }
+  const input = $('shift');
+  input.min = shiftRange.min;
+  input.max = shiftRange.max;
+  if (shiftRange.axis) settings.shift = Math.min(Math.max(settings.shift, shiftRange.min), shiftRange.max);
+  input.value = settings.shift;
+  showRange(input);
+  $('shift-hint').textContent = shiftRange.axis === 'y'
+    ? 'Drag the preview up or down, or slide, to move the painting a little.'
+    : 'Drag the preview sideways, or slide, to move the painting a little.';
+  for (const el of [canvas, $('mini-art')]) {
+    el.classList.toggle('draggable', Boolean(shiftRange.axis));
+    el.style.touchAction = shiftRange.axis === 'x' ? 'pan-y' : shiftRange.axis === 'y' ? 'pan-x' : '';
+  }
+  applyVisibility();
+}
+
+function setShift(value) {
+  const next = Math.round(Math.min(Math.max(value, shiftRange.min), shiftRange.max));
+  if (next === settings.shift) return;
+  settings.shift = next;
+  lookTouched = true;
+  $('shift').value = next;
+  showRange($('shift'));
+  draw();
+}
+
+// Dragging moves the painting with the finger, i.e. the window the other way.
+for (const el of [canvas, $('mini-art')]) {
+  let drag = null;
+  el.addEventListener('pointerdown', (e) => {
+    if (!shiftRange.axis) return;
+    drag = { x: e.clientX, y: e.clientY, shift: settings.shift, perPx: watch.w / el.clientWidth };
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const moved = shiftRange.axis === 'x' ? e.clientX - drag.x : e.clientY - drag.y;
+    setShift(drag.shift - moved * drag.perPx);
+  });
+  const end = () => {
+    drag = null;
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+}
 
 // ---------------- backup ----------------
 // Settings and saved looks live only on the phone; a backup is that data as

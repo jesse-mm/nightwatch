@@ -102,6 +102,11 @@
           <label><input type="radio" name="fit" value="whole"><span>Contain</span></label>
         </div>
       </div>
+      <label class="row stacked" data-show-if="coverShift">
+        <span class="row-text range-label">Position <output id="shift-out">0</output>
+          <small id="shift-hint">Drag the preview, or slide, to move the painting a little.</small></span>
+        <input type="range" class="range" data-key="shift" id="shift" min="-20" max="20" step="1">
+      </label>
       <div class="row stacked">
         <span class="row-text">Frame</span>
         <div class="segmented" role="radiogroup" aria-label="Frame" data-key="frame">

@@ -88,6 +88,7 @@ on the watch:
 | `dither` | Dithering | `atkinson`, `checker` (50:50), `none` (Off) |
 | `brightness` | Brightness | −100…100 |
 | `contrast` | Contrast | −100…100 |
+| `shift` | Cover position | about −20…20 watch pixels along the free axis |
 | `textRow` | Time row | `top`, `center`, `bottom` |
 | `textCol` | Time column | `auto`, `start` (left), `center`, `end` (right) |
 | `timeSize` | Time size | `s`, `m`, `l` |
@@ -175,6 +176,15 @@ Because "fill" always fits one axis exactly, only one direction is free, so we
 slide a window along a 1-D energy profile. The window weights its center a little
 more (strongly on round screens, whose corners are hidden), and there's a gentle
 pull toward the painting's center and, for tall works, toward the top.
+
+**Cover slack.** Cover ("fill") crops keep up to `COVER_SLACK_PX` (20) screen
+pixels of extra painting on each side of the free axis, as far as the painting
+goes, so the crop image is a little larger than the screen. The plan records
+where the planned view sits in it (`windowX`/`windowY`, also in the API's
+`render`). `render.js` (`coverWindow`) cuts the screen-sized window there, moved
+by the `shift` setting, which the reader sets on the settings page by dragging
+the preview or with the Position slider. The shift is saved per painting with
+its look; a painting without one starts at its planned view.
 
 **Tone** (`imaging.rs::tone`, in the generator): auto-levels (ignoring the
 extreme 0.5 %), a shadow lift (gamma 0.8, because the reflective screen crushes
