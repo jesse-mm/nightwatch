@@ -1,5 +1,5 @@
-//! Treasure Trove's generator: builds `catalog.json`, the catalog the
-//! watchface (bundled into the app) and the settings page use to show
+//! Treasure Trove's generator: builds the catalog (`catalog/web/`) the
+//! watchface and the settings page load (from the static site) to show
 //! public-domain Rijksmuseum paintings.
 //!
 //! It fetches metadata and a master image per painting politely, checks

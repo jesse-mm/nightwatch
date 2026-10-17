@@ -1,8 +1,8 @@
 # The generator
 
-`treasure-trove-generator` (in `generator/`) builds `catalog/catalog.json`: the
-painting catalog that is bundled into the watchface and loaded by the settings
-page. It keeps metadata and a master image per painting in `data/`, plans a
+`treasure-trove-generator` (in `generator/`) builds `catalog/web/`: the
+painting catalog as a folder of small JSON files, which the phone and the
+settings page load from the page's host. It keeps metadata and a master image per painting in `data/`, plans a
 Cover crop of each painting for every supported screen, and writes the plans
 into the catalog. It never stores pictures for the watch: the phone and the
 settings page ask the Rijksmuseum's IIIF server for exactly the planned crop.
@@ -16,7 +16,7 @@ cp .env.example .env                         # set CONTACT
 docker compose run --rm generator            # full run, also writes catalog/paintings.jsonl
 docker compose run --rm generator treasure-trove-generator --help
 docker compose run --rm generator treasure-trove-generator --limit 20   # test run
-node scripts/bundle-catalog.mjs              # copy catalog.json into the app and site/
+node scripts/bundle-catalog.mjs              # copy catalog/web/ to site/catalog/
 ```
 
 Options replace the service's default command, so name the binary when you
@@ -29,7 +29,7 @@ cargo run --release --manifest-path generator/Cargo.toml -- --export catalog/pai
 | Option | Use |
 |---|---|
 | `--data DIR` | Working directory: `catalog.sqlite` + `art/` (`DATA_DIR`, default `./data`) |
-| `--bundle FILE` | Where to write `catalog.json` (`BUNDLE_PATH`, default `./catalog/catalog.json`) |
+| `--bundle DIR` | Where to write the catalog folder (`BUNDLE_DIR`, default `./catalog/web`) |
 | `--export FILE` | Also write `paintings.jsonl`, for diffs (`EXPORT_PATH`) |
 | `--rps 0.5` | Requests per second to outside services; 0.5 = one every 2 seconds (`REQUESTS_PER_SECOND`, default 1) |
 | `--contact TEXT` | Your email or a URL, sent in the User-Agent (`CONTACT`) |
@@ -47,7 +47,9 @@ recorded with its hash, and the next run continues where it left off.
 ## What it does
 
 1. **Pools**: crawls the Search API for paintings with an image, and again per
-   century for the "Paintings from" filter (~90 requests).
+   century for the "Paintings from" filter (~90 requests). A painting the
+   century searches miss (their `creationDate` wildcards skip approximate
+   dates like "c. 1650") gets its era from the first year of its own date.
 2. **Metadata**: resolves each painting (3–5 requests). Rejected paintings are
    stored too, so they aren't re-checked until `REFRESH_DAYS` have passed.
 3. **Master image**: downloads a 1200 px image (`SOURCE_SIZE`) of each eligible
@@ -65,11 +67,12 @@ recorded with its hash, and the next run continues where it left off.
    144×168, 180×180 round, 200×228, 260×260 round) with the smart crop, stored
    with the image's width and height in `data/catalog.sqlite` (table
    `crop_plans`); only plans whose inputs changed are redone.
-6. **Write**: `catalog/catalog.json` (`--bundle`) and, with `--export`,
-   `paintings.jsonl`.
+6. **Write**: the catalog folder `catalog/web/` (`--bundle`) and, with
+   `--export`, `paintings.jsonl`.
 
-Then run `node scripts/bundle-catalog.mjs` to copy `catalog.json` to
-`watchface/src/pkjs/catalog-data.js` and `site/catalog.json`.
+Then run `node scripts/bundle-catalog.mjs` to copy `catalog/web/` to
+`site/catalog/`, and publish `site/` (see [DEPLOY.md](DEPLOY.md)). No new
+`.pbw` is needed.
 
 ## Being polite
 
@@ -93,7 +96,7 @@ headers, so we stay well below anything that could matter.
 | Metadata | older than `REFRESH_DAYS`; marked *changed* only if its hash differs |
 | Master image | its IIIF URL changed, or the file is missing |
 | Crop plan | master image hash, `SAFE_CROP_PX` or `PIPELINE_VERSION` changed |
-| `catalog.json` | every run |
+| `catalog/web/` | every run |
 
 Tone, frames and color tunings live in `render.js`, so changing them needs no
 generator run at all. Changing the planning code (bump `PIPELINE_VERSION` in
@@ -109,13 +112,16 @@ docker compose run --rm generator treasure-trove-generator --skip-fetch
 ```
 data/catalog.sqlite                 the working database: paintings, eras, crop plans + input hashes
 data/art/<key>/source.jpg           master image, for planning
-catalog/catalog.json                the catalog for the phone and the settings page
+catalog/web/                        the catalog for the phone and the settings page
 catalog/paintings.jsonl             metadata: one painting per line, sorted (--export)
 catalog/featured.json               the Featured list (see below)
 ```
 
-`catalog.json` is described in [ARCHITECTURE.md](ARCHITECTURE.md#the-catalog-catalogjson)
-and [`docs/schema/catalog.schema.json`](schema/catalog.schema.json). Only
+`catalog/web/` holds `manifest.json`, `featured.json`, one file per era
+(`pre1600.json`, `1600s.json`, `1700s.json`, `1800s.json`, `1900s.json`) and
+`undated.json`. It is described in
+[ARCHITECTURE.md](ARCHITECTURE.md#the-catalog-catalogweb) and
+[`docs/schema/catalog.schema.json`](schema/catalog.schema.json). Only
 paintings with a crop plan and an image on the IIIF server make it in.
 
 Rendered crops from before the generator stopped rendering
@@ -128,9 +134,9 @@ is built once and then reused (and shared as a release artifact, below);
 refresh it now and then with `--refresh-featured`. It lists the 365 paintings
 in rank order with title, artist, number of articles and views, so diffs are
 readable and you can swap paintings by hand (any eligible painting's `key`
-works; ones without a crop plan are skipped). `catalog.json` stores the list in
-day-of-year order, a fixed per-year shuffle of the ranking, so famous works are
-spread over the year. Test runs (`--only`, `--limit`) never overwrite the file.
+works; ones without a crop plan are skipped). `catalog/web/featured.json`
+stores the paintings in day-of-year order, a fixed per-year shuffle of the
+ranking, so famous works are spread over the year. Test runs (`--only`, `--limit`) never overwrite the file.
 
 Neither `data/` nor `catalog/` is in git. `data/` stays on the machine that
 runs the generator; `catalog/` is shared as a release artifact.
@@ -168,6 +174,6 @@ For the ~4,900 paintings in the collection:
 | Monthly run (metadata only, 3–5 requests per painting), 1 request/s | 4–7 hours |
 | Planning all 4,868 paintings (all cores) | ~12 seconds |
 | Master images (~0.17 MB each) | ~0.8 GB |
-| `catalog.json` | ~1 MB (~275 KB gzipped) |
+| `catalog/web/` | ~1.1 MB in 8 files; the largest, `1600s.json`, ~480 KB |
 
 The default of 1 request per second stays gentle on purpose.

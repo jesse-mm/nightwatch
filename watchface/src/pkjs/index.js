@@ -19,13 +19,17 @@ var render = require('./render');
 var looks = require('./looks');
 var settingsLib = require('./settings');
 var png = require('./png');
-// The painting catalog, bundled with the app (generated from catalog.json).
-var catalog = require('./catalog').create(require('./catalog-data'));
-// Where the settings page is hosted (static files; no server of our own).
+var Catalog = require('./catalog');
+// Where the settings page and the catalog files are hosted (static files; no
+// server of our own): SETTINGS_URL/ and SETTINGS_URL/catalog/.
 var PAGE_URL = CONFIG.SETTINGS_URL;
 
 var SETTINGS_KEY = 'tt-settings';
 var ART_KEY = 'tt-art';
+// The catalog manifest, and each catalog file we loaded (tt-catalog-<pool>).
+var CATALOG_KEY = 'tt-catalog';
+// Rows of paintings the settings page handed over (pinned or hung), by key.
+var ROWS_KEY = 'tt-rows';
 
 var DEFAULTS = settingsLib.DEFAULTS;
 
@@ -251,13 +255,13 @@ function ensureArt(hangKey) {
     return true;
   }
   if (hangKey) {
-    fetchArt(catalog.get(hangKey), settings, period);
+    startFetch(false, byKey(hangKey), period);
     return true;
   }
   // A pinned painting stays until it's unpinned; rotation doesn't apply.
   if (settings.pinned) {
     if (!(current && art.meta.key === settings.pinned)) {
-      fetchArt(catalog.get(settings.pinned), settings, period);
+      startFetch(false, byKey(settings.pinned), period);
       return true;
     }
     return false;
@@ -265,16 +269,149 @@ function ensureArt(hangKey) {
   var due = !art || !art.meta || (settings.rotation !== 'off' && art.period !== period);
   if (!due) {
     if (!current) {
-      // Same painting, different screen or fit: fetch its other crop.
-      fetchArt(catalog.get(art.meta.key), settings, art.period);
+      // Same painting, different screen, fit, zoom or position: fetch that crop.
+      startFetch(false, byKey(art.meta.key), art.period);
       return true;
     }
     return false;
   }
-  fetchArt(settings.selection === 'featured' ?
-    catalog.featured(rotation.featuredDay(settings.rotation, now)) :
-    catalog.random(settings.era), settings, period);
+  // A new painting: check for a new catalog, then load just the file we need.
+  if (settings.selection === 'featured') {
+    var day = rotation.featuredDay(settings.rotation, now);
+    startFetch(true, function (cat, ok, fail) {
+      withPool(cat, 'featured', function () {
+        var p = cat.featured(day);
+        return p ? ok(p.key) : fail('no Featured paintings');
+      }, fail);
+    }, period);
+  } else {
+    startFetch(true, function (cat, ok, fail) {
+      var pool = cat.poolFor(settings.era);
+      withPool(cat, pool, function () {
+        var p = cat.random(pool);
+        return p ? ok(p.key) : fail('no paintings in ' + pool);
+      }, fail);
+    }, period);
+  }
   return true;
+}
+
+// ----------------------------------------------------------------- catalog
+
+function byKey(key) {
+  return function (cat, ok) {
+    ok(key);
+  };
+}
+
+/** The catalog from its manifest: cached, or fetched when `refresh` (or none). */
+function withCatalog(refresh, done, fail) {
+  var cached = readJson(CATALOG_KEY);
+  if (cached && !refresh) {
+    done(Catalog.create(cached));
+    return;
+  }
+  getText(PAGE_URL + '/catalog/manifest.json', function (text) {
+    var manifest;
+    try {
+      manifest = JSON.parse(text);
+    } catch (e) {
+      fail('bad catalog manifest: ' + e);
+      return;
+    }
+    if (cached && cached.id !== manifest.id) {
+      // A new catalog: its files replace the ones we kept.
+      (cached.files || []).forEach(function (f) {
+        localStorage.removeItem(CATALOG_KEY + '-' + f.pool);
+      });
+    }
+    localStorage.setItem(CATALOG_KEY, text);
+    done(Catalog.create(manifest));
+  }, function (why) {
+    // Offline: the cached catalog still works.
+    if (cached) {
+      done(Catalog.create(cached));
+    } else {
+      fail('no catalog: ' + why);
+    }
+  });
+}
+
+/** Make sure a pool's file (e.g. 1600s.json) is in the catalog: cached or fetched. */
+function withPool(cat, pool, done, fail) {
+  if (cat.has(pool) || cat.add(readJson(CATALOG_KEY + '-' + pool))) {
+    done();
+    return;
+  }
+  var file = cat.fileFor(pool);
+  if (!file) {
+    fail('no catalog file for ' + pool);
+    return;
+  }
+  getText(PAGE_URL + '/catalog/' + file, function (text) {
+    var part;
+    try {
+      part = JSON.parse(text);
+    } catch (e) {
+      fail('bad catalog file ' + file + ': ' + e);
+      return;
+    }
+    if (!cat.add(part)) {
+      fail(file + ' is from another catalog version');
+      return;
+    }
+    try {
+      localStorage.setItem(CATALOG_KEY + '-' + pool, text);
+    } catch (e) {
+      console.log('Not caching ' + file + ': ' + e);
+    }
+    done();
+  }, fail);
+}
+
+/** Add the paintings we know without a file: the one on the watch, pinned, hung. */
+function addKnownRows(cat) {
+  var rows = readJson(ROWS_KEY) || {};
+  for (var key in rows) {
+    if (Object.prototype.hasOwnProperty.call(rows, key)) {
+      cat.addRow(rows[key]);
+    }
+  }
+  var art = readJson(ART_KEY);
+  if (art && art.row) {
+    cat.addRow(art.row);
+  }
+}
+
+/**
+ * Pick a painting and fetch it: `choose(cat, ok(key), fail(why))` runs once
+ * the catalog is there. `refresh` checks for a new catalog first.
+ */
+function startFetch(refresh, choose, period) {
+  fetching = true;
+  withCatalog(refresh, function (cat) {
+    addKnownRows(cat);
+    choose(cat, function (key) {
+      fetchArt(cat, key, period);
+    }, fetchFailed);
+  }, fetchFailed);
+}
+
+function fetchDone() {
+  fetching = false;
+  if (pendingHang) {
+    var key = pendingHang;
+    pendingHang = null;
+    ensureArt(key);
+  }
+}
+
+function fetchFailed(why) {
+  console.log('Could not load painting: ' + why);
+  // The watch keeps whatever it shows (a launch already got the cached
+  // painting); just try again later.
+  scheduleRetry();
+  fetchDone();
 }
 
 /**
@@ -308,6 +445,38 @@ function scheduleRetry() {
     retryTimer = null;
     ensureArt();
   }, minutes * 60000);
+}
+
+/** GET text (the catalog files) with our own timeout, calling back once. */
+function getText(url, onSuccess, onError) {
+  var xhr = new XMLHttpRequest();
+  var settled = false;
+  var finish = function (fn, value) {
+    if (!settled) {
+      settled = true;
+      clearTimeout(timer);
+      fn(value);
+    }
+  };
+  var timer = setTimeout(function () {
+    finish(onError, 'timeout');
+    try {
+      xhr.abort();
+    } catch (e) {
+      console.log('Could not abort timed-out request: ' + e);
+    }
+  }, REQUEST_TIMEOUT_MS);
+  xhr.open('GET', url, true);
+  xhr.onload = function () {
+    if (xhr.status >= 200 && xhr.status < 300) {
+      finish(onSuccess, xhr.responseText);
+    } else {
+      finish(onError, 'HTTP ' + xhr.status + ' for ' + url);
+    }
+  };
+  xhr.onerror = function () { finish(onError, 'network error'); };
+  xhr.onabort = function () { finish(onError, 'aborted'); };
+  xhr.send();
 }
 
 /**
@@ -381,36 +550,24 @@ function getBytes(url, onSuccess, onError, asText) {
 /**
  * Get a painting's crop straight from the Rijksmuseum (IIIF cuts the planned
  * region), tone it, cache it and send it to the watch.
- * @param {object} painting from the catalog (null: unknown painting)
+ * @param {object} cat the catalog, with this painting's row in it
+ * @param {string} key the painting
  * @param {string} period the rotation period it belongs to (see rotation.js)
  */
-function fetchArt(painting, settings, period) {
+function fetchArt(cat, key, period) {
+  var done = fetchDone;
+  var fail = fetchFailed;
+  var painting = cat.get(key);
   if (!painting) {
-    // Not in this app's catalog (e.g. pinned in a newer one): fall back.
-    painting = catalog.featured(rotation.featuredDay('daily', new Date()));
+    fail('painting ' + key + ' is not in the catalog');
+    return;
   }
-  fetching = true;
-  var done = function () {
-    fetching = false;
-    if (pendingHang) {
-      var key = pendingHang;
-      pendingHang = null;
-      ensureArt(key);
-    }
-  };
-  var fail = function (why) {
-    console.log('Could not load painting: ' + why);
-    // The watch keeps whatever it shows (a launch already got the cached
-    // painting); just try again later.
-    scheduleRetry();
-    done();
-  };
 
   // Settle the look first, so we ask for the right part of the painting once.
   // A painting with a saved look gets it back; a new one without starts at its
   // planned view (zoom and position belong to one painting); others keep the
   // current settings.
-  settings = loadSettings();
+  var settings = loadSettings();
   var look = looks.get(localStorage, painting.key, settings);
   var previous = readJson(ART_KEY);
   var samePainting = previous && previous.meta && previous.meta.key === painting.key;
@@ -423,7 +580,7 @@ function fetchArt(painting, settings, period) {
     storeSettings(settings);
   }
 
-  var request = catalog.cropRequest(painting.key, watch, settings.fit, settings);
+  var request = cat.cropRequest(painting.key, watch, settings.fit, settings);
   if (!request) {
     fail('no crop for this screen');
     return;
@@ -451,6 +608,8 @@ function fetchArt(painting, settings, period) {
       crop: base64.encode(rgb),
       cropW: size.w,
       cropH: size.h,
+      // Its catalog row: enough to fetch another crop later without a file.
+      row: cat.row(key),
       meta: {
         key: painting.key,
         title: painting.title,
@@ -515,11 +674,18 @@ function looksForPage() {
 
 Pebble.addEventListener('showConfiguration', function () {
   var art = readJson(ART_KEY);
+  // Rows of the paintings we know (on the watch, pinned): the page shows them
+  // without loading catalog files.
+  var rows = readJson(ROWS_KEY) || {};
+  if (art && art.row) {
+    rows[art.row[0]] = art.row;
+  }
   var state = {
     settings: settingsLib.toStored(loadSettings()),
     art: art ? art.meta : null,
     watch: watch,
-    looks: looksForPage()
+    looks: looksForPage(),
+    rows: rows
   };
   Pebble.openURL(PAGE_URL + '/#' + encodeURIComponent(JSON.stringify(state)));
 });
@@ -557,6 +723,21 @@ Pebble.addEventListener('webviewclosed', function (e) {
   }
   storeSettings(settings);
   sendSettings(settings);
+  // Rows for the paintings the page picked (hung or pinned), so we can fetch
+  // them without loading their catalog file. Keep only the pinned one besides.
+  if (result.rows && typeof result.rows === 'object') {
+    var keep = {};
+    var known = readJson(ROWS_KEY) || {};
+    if (settings.pinned && known[settings.pinned]) {
+      keep[settings.pinned] = known[settings.pinned];
+    }
+    for (var rk in result.rows) {
+      if (Object.prototype.hasOwnProperty.call(result.rows, rk)) {
+        keep[rk] = result.rows[rk];
+      }
+    }
+    localStorage.setItem(ROWS_KEY, JSON.stringify(keep));
+  }
   // A restored backup replaces every saved look.
   if (result.looks && typeof result.looks === 'object') {
     looks.replaceAll(localStorage, result.looks);

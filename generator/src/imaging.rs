@@ -1,7 +1,7 @@
 //! Planning the crop a Pebble screen shows.
 //!
 //! The generator plans each Cover crop from the local master image (smart crop,
-//! see saliency.rs) and stores the plan in catalog.json. The phone and the
+//! see saliency.rs) and stores the plan in the catalog. The phone and the
 //! settings page ask the Rijksmuseum's IIIF server for exactly that region,
 //! then tone, dither and frame it (`site/render.js`).
 

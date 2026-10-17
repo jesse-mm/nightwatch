@@ -7,23 +7,26 @@ slow, polite work happens once, ahead of time:
 - **Generator** (`generator/`, Rust, binary `treasure-trove-generator`):
   fetches paintings from the Rijksmuseum, checks licenses, sorts paintings into
   eras, ranks the Featured 365 and plans a smart crop of each painting for
-  every supported screen. It writes all of that to one file,
-  `catalog/catalog.json`. Run it monthly; it only redoes what changed. See
+  every supported screen. It writes all of that to a folder of small JSON
+  files, `catalog/web/`. Run it monthly; it only redoes what changed. See
   [GENERATOR.md](GENERATOR.md).
-- **Phone** (`watchface/src/pkjs/`, PebbleKit JS): the catalog is bundled into
-  the app. It picks the painting, asks IIIF for the planned crop, tones,
-  dithers and frames it, and streams the bytes to the watch.
-- **Settings page** (`site/`): static files plus a copy of `catalog.json`,
-  hosted anywhere (e.g. GitHub Pages). See [DEPLOY.md](DEPLOY.md).
+- **Phone** (`watchface/src/pkjs/`, PebbleKit JS): loads the catalog from the
+  settings page's host, one file at a time. It picks the painting, asks IIIF
+  for the planned crop, tones, dithers and frames it, and streams the bytes to
+  the watch.
+- **Settings page** (`site/`): static files plus a copy of the catalog folder
+  (`site/catalog/`), hosted anywhere (e.g. GitHub Pages). See
+  [DEPLOY.md](DEPLOY.md).
 
 ```
-generator ──▶ catalog.json ──▶ bundled into the .pbw (phone) ──▶ IIIF crop (PNG) ──▶ tone, dither, frame ──▶ watch
-                           └─▶ site/catalog.json (settings)  ──▶ IIIF image (PNG) ──▶ preview
+generator ──▶ catalog/web/ ──▶ site/catalog/ ─┬─▶ phone    ──▶ IIIF crop (PNG)  ──▶ tone, dither, frame ──▶ watch
+                                               └─▶ settings ──▶ IIIF image (PNG) ──▶ preview
 ```
 
-`node scripts/bundle-catalog.mjs` copies `catalog/catalog.json` to
-`watchface/src/pkjs/catalog-data.js` and `site/catalog.json` (both generated,
-not in git).
+`node scripts/bundle-catalog.mjs` copies `catalog/web/` to `site/catalog/`
+(generated, not in git). Nothing is bundled into the watch app, so a new
+catalog needs no new `.pbw`: publish `site/` again and the phone picks it up
+the next time it fetches a new painting.
 
 The phone and the page share their logic: `catalog.js`, `render.js`,
 `settings.js` and `looks.js` live in `site/` and are symlinked into
@@ -40,9 +43,10 @@ the browser.
 2. The phone sends its cached painting straight away if the watch is empty,
    then checks whether a new one is due (see rotation below) or the cached crop
    no longer matches the screen, fit, zoom or position.
-3. If so, it picks a painting from the bundled catalog (Featured for the day,
-   random, optionally from one era, pinned, or one hung from the settings page)
-   and builds the IIIF URL for its crop with `catalog.js` (`cropRequest`).
+3. If so, it picks a painting from the catalog (Featured for the day, random,
+   optionally from one era, pinned, or one hung from the settings page; see
+   [loading the catalog](#loading-the-catalog-on-the-phone-and-the-page)) and
+   builds the IIIF URL for its crop with `catalog.js` (`cropRequest`).
 4. The phone downloads the PNG (binary XHR, with an `x-user-defined` text
    fallback; it checks the PNG signature), decodes it (`png.js` with the
    vendored `vendor/tiny-inflate.js`), tones it (`render.js` `tone`), caches
@@ -74,11 +78,11 @@ changed, so the midnight Hello does nothing on most days for weekly/monthly.
 - **Featured** takes `catalog.featured(N)`, where *N* is the day of the year
   of the period's first day: weekly shows that Monday's Featured painting,
   monthly the 1st's, so all rotations walk the same year.
-- **Surprise me** takes `catalog.random(era)`.
+- **Surprise me** takes `catalog.random(catalog.poolFor(era))`.
 - **Pinned** (a key set via Advanced in the settings, found with
   `catalog.resolve`) always shows that painting; rotation doesn't apply until
-  it's unpinned. A pinned key that isn't in the app's catalog falls back to
-  today's Featured painting.
+  it's unpinned. The settings page hands the phone the pinned painting's row,
+  so the phone needs no catalog file for it.
 
 ### Settings and looks on the phone (`settings.js`, `looks.js`)
 
@@ -155,30 +159,59 @@ which takes a few seconds over Bluetooth. Watches with 4 KB of app storage
 can't keep the painting between launches, so the phone caches it and sends it
 again on each launch.
 
-## The catalog (`catalog.json`)
+## The catalog (`catalog/web/`)
 
-One file with everything the phone and the page need, ~1 MB of JSON. The
-generator writes it (`generator/src/bundle.rs`);
-[`docs/schema/catalog.schema.json`](schema/catalog.schema.json) describes it.
+A folder of small JSON files, so the phone and the page only download and
+parse what they need. The generator writes it (`generator/src/bundle.rs`);
+[`docs/schema/catalog.schema.json`](schema/catalog.schema.json) describes the
+manifest and the other files.
+
+| File | Paintings | What |
+|---|---|---|
+| `manifest.json` | – | Shared fields and the list of files (~800 bytes) |
+| `featured.json` | 365 | The Featured paintings, in day-of-year order |
+| `pre1600.json` | 505 | Paintings made before 1600 |
+| `1600s.json` | 2,184 | The 1600s (the largest file, ~480 KB) |
+| `1700s.json` | 871 | The 1700s |
+| `1800s.json` | 1,215 | The 1800s |
+| `1900s.json` | 92 | The 1900s |
+| `undated.json` | 1 | Paintings without a usable date |
+
+Every painting is in exactly one era file (or `undated.json`); Featured ones
+are also in `featured.json`. A painting's era comes from the Rijksmuseum's
+search pools, or else from the first year in its own date text
+(`Era::from_date` in `era.rs`), because the search API's `creationDate`
+wildcards miss approximate dates like "c. 1650". "Any era" includes undated
+paintings, so they need no setting of their own.
+
+`manifest.json`:
 
 | Field | What |
 |---|---|
-| `version` | 1 |
+| `version` | 2 |
+| `id` | A hash of all the files; a new id means new files |
 | `iiifPrefix`, `webPrefix` | Base URLs for images (`https://iiif.micr.io/`) and object pages |
 | `eras` | `pre1600`, `1600s`, `1700s`, `1800s`, `1900s` |
 | `licenses` | `[label, url]` pairs, referenced by index |
 | `screens` | `[w, h, round]` for the four screens, in crop order |
 | `slack` | Cover slack in screen pixels (20) |
-| `featured` | Painting keys in day-of-year order |
-| `paintings` | One array per painting: `[key, iiif, title, artist, date, objectNumber, eraBits, license, aspect, crops]` |
+| `files` | `[{pool, file, count}]`: each file, the pool it holds (`featured`, an era or `undated`) and its number of paintings |
+
+Every other file is `{version, id, pool, paintings}`, with `id` the
+manifest's. `paintings` has one array (a *row*) per painting:
+`[key, iiif, title, artist, date, objectNumber, eraBits, license, aspect, crops]`.
 
 `eraBits` has bit *i* set for `eras[i]`; `aspect` is width / height of the
 image. `crops` has one entry per screen: the Cover crop as fractions of the
 image (`x, y, w, h`, slack included) and `window`, where the planned view
 starts in that crop in screen pixels along its free axis.
 
-`catalog.js` reads it (`create(data)`) and offers `get`, `featured(day)`,
-`random(era)`, `resolve(query)` (object number, key or link) and:
+`catalog.js` reads it: `create(manifest)` starts an empty catalog,
+`add(part)` adds a file (and refuses one with another `id`), `addRow(row)`
+adds a single painting. It also offers `files`, `id`, `has(pool)`,
+`fileFor(pool)`, `poolFor(era)` (see below), `row(key)`, `get(key)`,
+`featured(day)`, `random(pool)`, `resolve(query)` (object number, key or link)
+and:
 
 - `coverView(key, screen, {zoom, focusX, focusY})`: the visible part of the
   painting, as fractions. Without a focus it is the planned view; zoom shrinks
@@ -191,11 +224,37 @@ starts in that crop in screen pixels along its free axis.
   (enough to zoom to 200 % at full resolution), at most 1280 px on its long
   side, for the settings page.
 
+### Loading the catalog on the phone and the page
+
+**Phone** (`index.js`). Only when a new painting is due, the phone fetches
+`SETTINGS_URL/catalog/manifest.json` and caches it in `localStorage`
+(`tt-catalog`); a new `id` drops the files it cached before. Then it loads only
+the file it needs, cached as `tt-catalog-<pool>`:
+
+- Featured: `featured.json`.
+- Surprise me: `poolFor(era)`, the era's file, or for "any era" a file chosen
+  in proportion to its painting count, so every painting is equally likely.
+
+Offline it uses the cached manifest and files. The cached painting keeps its
+own catalog row, and paintings the settings page hands over (pinned or hung)
+are kept as rows in `tt-rows`, so fetching another crop of the current
+painting or a pinned one needs no catalog file. Showing the cached painting
+needs no network at all.
+
+**Settings page** (`app.js`). It loads `catalog/manifest.json` and adds the
+rows the phone sends along (`state.rows`: the painting on the watch, the
+pinned one). It loads an era file only for "Hang a different painting", and
+all files only when pinning by object number a painting that isn't among the
+loaded ones (rare). On save it sends back the `rows` of the hung or pinned
+painting.
+
 ## Picking a painting (generator)
 
 - The generator crawls the Rijksmuseum **Search API** for paintings that have an
   image (the pool), and the same search per century with `creationDate`
-  wildcards (`16*` …) for the "Paintings from" filter.
+  wildcards (`16*` …) for the "Paintings from" filter. Paintings the
+  wildcards miss (approximate dates like "c. 1650") get their era from their
+  own date.
 - Each id is resolved as **Linked Art** JSON-LD. The image lives a few links
   away: object → `shows` (visual item) → `digitally_shown_by` (digital object)
   → `access_point` (a IIIF Image API URL).
@@ -208,15 +267,15 @@ starts in that crop in screen pixels along its free axis.
     (1850 by default; set to 0 to require an explicit license).
 - Every resolved record is stored, including rejected ones, so a painting is
   only re-checked after `REFRESH_DAYS`.
-- Only paintings on the IIIF server at `iiif.micr.io` make it into
-  `catalog.json`, since the phone cuts its crops there.
+- Only paintings on the IIIF server at `iiif.micr.io` make it into the
+  catalog, since the phone cuts its crops there.
 - Wikidata is only used to pick the Featured paintings (`popularity.rs`); the
   catalog stores no per-painting Wikidata or Wikipedia links.
 
 ## Crops: planned by the generator, cut by IIIF, rendered on the phone
 
 ```
-generator:  master image (1200 px, local) ──▶ plan crop ──▶ catalog.json
+generator:  master image (1200 px, local) ──▶ plan crop ──▶ catalog/web/
 phone:      IIIF crop at screen size (PNG) ──▶ tone ──▶ fit into the frame opening ──▶ dither ──▶ frame ──▶ watch bytes
 page:       IIIF work image (≤ 1280 px) ──▶ pan/zoom locally ──▶ same steps ──▶ preview
 ```
@@ -253,7 +312,7 @@ the head out of view.
 
 **Cover slack.** Cover crops keep up to `COVER_SLACK_PX` (20) screen pixels of
 extra painting on each side of the free axis, as far as the painting goes. The
-plan records where the planned view sits in it (`window` in `catalog.json`), so
+plan records where the planned view sits in it (`window` in the catalog row), so
 `coverView` can find the planned view's center.
 
 **Zoom and position.** On the settings page a Cover view can be zoomed in
@@ -301,11 +360,13 @@ data/                                   generator's working directory (not in gi
   catalog.sqlite                        paintings, eras, image sizes, crop plans + input hashes
   art/<key>/source.jpg                  master image, longest side 1200 px (for planning)
 catalog/                                (not in git; release artifact: scripts/catalog.sh)
-  catalog.json                          the catalog for the phone and the settings page
+  web/                                  the catalog for the phone and the settings page
+    manifest.json, featured.json        shared fields and file list; Featured, day-of-year order
+    pre1600.json … 1900s.json           one file per era
+    undated.json                        paintings without a usable date
   featured.json                         the Featured list, rank order
   paintings.jsonl                       one painting per line: metadata, eras, hashes (for diffs)
-watchface/src/pkjs/catalog-data.js      copy of catalog.json, bundled into the .pbw (generated)
-site/catalog.json                       copy of catalog.json for the settings page (generated)
+site/catalog/                           copy of catalog/web/, published with the page (generated)
 ```
 
 Bump `PIPELINE_VERSION` in `variants.rs` after changing the planning code: the
@@ -332,7 +393,8 @@ can be deleted by hand.
   PebbleKit JS on the phone's own JavaScript engine; the app tries an
   ArrayBuffer first, then the `x-user-defined` text trick, and checks for a
   real PNG.
-- **New paintings need a new app.** The catalog is bundled; refreshing it
-  (e.g. monthly) means a new `.pbw`. The settings page's copy is a separate
-  file and can be updated on its own.
-- **App size.** The `.pbw` is ~2.4 MB (the catalog plus the SDK's source map).
+- **The phone needs the static site.** It loads the catalog from
+  `SETTINGS_URL`, so it can only pick a new painting while the site is
+  reachable (or from catalog files it cached before). Showing the current
+  painting needs neither the site nor the network.
+- **App size.** The `.pbw` is ~240 KB; the catalog isn't in it.

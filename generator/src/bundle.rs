@@ -1,8 +1,17 @@
-//! `catalog.json`: everything the phone and the settings page need to show
-//! paintings without our server. Pictures come straight from the Rijksmuseum's
-//! IIIF image server, cut to the planned crop (`region` + `size` in the URL).
+//! The catalog the phone and the settings page use, as a folder of small
+//! JSON files, so each only downloads and parses what it needs:
 //!
-//! One row per painting, as arrays to keep it small (~1 MB, ~275 KB gzipped):
+//! ```text
+//! manifest.json     shared fields, the files and their painting counts, and
+//!                   `id`, a hash of everything (a new id = new files)
+//! featured.json     the Featured paintings, one per day of the year, in order
+//! pre1600.json …    one file per era (1600s, 1700s, 1800s, 1900s)
+//! undated.json      paintings without a usable date (era from the search
+//!                   pools, or else from the painting's date)
+//! ```
+//!
+//! Every painting is in exactly one era file (or undated), and Featured ones
+//! also in featured.json. A painting is a row, as an array to keep it small:
 //!
 //! ```text
 //! [key, iiif, title, artist, date, objectNumber, eraBits, license, aspect, crops]
@@ -16,10 +25,11 @@
 //!   the image `x, y, w, h` (slack included) and `window`: where the planned
 //!   view starts in the crop, in screen pixels along its free axis.
 //!
-//! The web page and image links follow from the object number and IIIF id.
-//! `docs/schema/catalog.schema.json` describes the file.
+//! Pictures come straight from the Rijksmuseum's IIIF image server, cut to the
+//! planned crop. The web page and image links follow from the object number
+//! and IIIF id. `docs/schema/catalog.schema.json` describes the files.
 
-use std::{collections::HashSet, path::Path};
+use std::{collections::HashMap, path::Path};
 
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
@@ -31,17 +41,19 @@ use crate::{
     variants,
 };
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 const IIIF_PREFIX: &str = "https://iiif.micr.io/";
+/// The file for paintings without an era.
+pub const UNDATED: &str = "undated";
 
 /// Fractions with 5 decimals: well below a pixel on a 1200 px master.
 fn round5(v: f64) -> f64 {
     (v * 100_000.0).round() / 100_000.0
 }
 
-/// Write the bundle; returns the number of paintings.
+/// Write the catalog folder; returns the number of paintings.
 /// `featured`: Featured keys in day-of-year order (see featured.rs).
-pub fn write(catalog: &Catalog, featured: &[String], path: &Path) -> Result<usize> {
+pub fn write(catalog: &Catalog, featured: &[String], dir: &Path) -> Result<usize> {
     let eras = Era::FILTERED;
     let screens: Vec<Target> = variants::SCREENS
         .iter()
@@ -53,8 +65,13 @@ pub fn write(catalog: &Catalog, featured: &[String], path: &Path) -> Result<usiz
         })
         .collect();
     let mut licenses: Vec<(String, String)> = Vec::new();
-    let mut rows: Vec<Value> = Vec::new();
-    let mut keys: HashSet<String> = HashSet::new();
+    let mut by_key: HashMap<String, Value> = HashMap::new();
+    // Pool name → rows, in file order: eras first, then undated.
+    let mut pools: Vec<(String, Vec<Value>)> = eras
+        .iter()
+        .map(|e| (e.name().to_string(), Vec::new()))
+        .chain(std::iter::once((UNDATED.to_string(), Vec::new())))
+        .collect();
 
     for p in catalog.bundle_rows()? {
         let m = &p.meta;
@@ -65,11 +82,13 @@ pub fn write(catalog: &Catalog, featured: &[String], path: &Path) -> Result<usiz
         else {
             continue; // not on the IIIF server we can cut from
         };
-        let era_bits = eras
-            .iter()
-            .enumerate()
-            .filter(|(_, era)| p.eras.contains(era))
-            .fold(0u32, |bits, (i, _)| bits | (1 << i));
+        // The search's era pools, or else the painting's own date (they miss
+        // approximate dates like "c. 1650").
+        let era = eras.iter().position(|e| p.eras.contains(e)).or_else(|| {
+            let from_date = m.date.as_deref().and_then(Era::from_date)?;
+            eras.iter().position(|e| *e == from_date)
+        });
+        let era_bits = era.map_or(0u32, |i| 1 << i);
         let license = (m.license.clone(), m.license_url.clone().unwrap_or_default());
         let license_idx = if let Some(i) = licenses.iter().position(|l| *l == license) {
             i
@@ -92,8 +111,7 @@ pub fn write(catalog: &Catalog, featured: &[String], path: &Path) -> Result<usiz
                 json!(plan.window_x.max(plan.window_y)),
             ]);
         }
-        keys.insert(m.key.clone());
-        rows.push(json!([
+        let row = json!([
             m.key,
             iiif,
             m.title,
@@ -104,37 +122,56 @@ pub fn write(catalog: &Catalog, featured: &[String], path: &Path) -> Result<usiz
             license_idx,
             round5(f64::from(p.width) / f64::from(p.height)),
             crops
-        ]));
+        ]);
+        by_key.insert(m.key.clone(), row.clone());
+        pools[era.unwrap_or(eras.len())].1.push(row);
     }
 
-    let featured: Vec<&str> = featured
+    let featured_rows: Vec<Value> = featured
         .iter()
-        .map(String::as_str)
-        .filter(|k| keys.contains(*k))
+        .filter_map(|k| by_key.get(k).cloned())
         .collect();
-    let body = json!({
+    let mut files: Vec<(String, Vec<Value>)> = vec![("featured".to_string(), featured_rows)];
+    files.extend(pools);
+
+    // One id for the whole set, so a reader never mixes files from two runs.
+    let parts: Vec<Vec<u8>> = files
+        .iter()
+        .map(|(_, rows)| serde_json::to_vec(rows))
+        .collect::<Result<_, _>>()?;
+    let id = variants::sha256_hex(&parts.concat())[..12].to_string();
+
+    std::fs::create_dir_all(dir)?;
+    for (pool, rows) in &files {
+        write_json(
+            &dir.join(format!("{pool}.json")),
+            &json!({ "version": VERSION, "id": id, "pool": pool, "paintings": rows }),
+        )?;
+    }
+    let manifest = json!({
         "version": VERSION,
+        "id": id,
         "iiifPrefix": IIIF_PREFIX,
         "webPrefix": "https://www.rijksmuseum.nl/en/collection/",
         "eras": eras.iter().map(|e| e.name()).collect::<Vec<_>>(),
         "licenses": licenses.iter().map(|(l, u)| json!([l, u])).collect::<Vec<_>>(),
         "screens": variants::SCREENS.iter().map(|&(w, h, round)| json!([w, h, round])).collect::<Vec<_>>(),
         "slack": crate::imaging::COVER_SLACK_PX,
-        "featured": featured,
-        "paintings": rows,
+        "files": files
+            .iter()
+            .map(|(pool, rows)| json!({ "pool": pool, "file": format!("{pool}.json"), "count": rows.len() }))
+            .collect::<Vec<_>>(),
     });
-    let n = rows_len(&body);
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec(&body)?)?;
-    std::fs::rename(&tmp, path)?;
-    Ok(n)
+    // The manifest last: readers that see the new id find the new files.
+    write_json(&dir.join("manifest.json"), &manifest)?;
+    Ok(by_key.len())
 }
 
-fn rows_len(body: &Value) -> usize {
-    body["paintings"].as_array().map_or(0, Vec::len)
+fn write_json(path: &Path, value: &Value) -> Result<()> {
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_vec(value)?)?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -142,8 +179,12 @@ mod tests {
     use super::*;
     use crate::catalog::testing::{planned, TempDir};
 
+    fn read(dir: &Path, file: &str) -> Value {
+        serde_json::from_slice(&std::fs::read(dir.join(file)).unwrap()).unwrap()
+    }
+
     #[test]
-    fn writes_ready_paintings_with_their_featured_days() {
+    fn writes_a_manifest_featured_and_one_file_per_era() {
         let dir = TempDir::new("bundle");
         let c = planned(&dir, 1);
         // The fixture plans one screen only; give every screen the same plan.
@@ -159,15 +200,23 @@ mod tests {
         }
         let names: Vec<String> = variants::cover().iter().map(variants::crop_name).collect();
         c.finish_painting("1", &names).unwrap();
-        let out = dir.path().join("catalog.json");
+        let out = dir.path().join("web");
 
         let n = write(&c, &["1".to_string(), "gone".to_string()], &out).unwrap();
 
-        let body: Value = serde_json::from_slice(&std::fs::read(&out).unwrap()).unwrap();
         assert_eq!(n, 1);
-        assert_eq!(body["featured"], json!(["1"]));
-        let row = &body["paintings"][0];
-        assert_eq!(row[0], "1");
+        let manifest = read(&out, "manifest.json");
+        let files = manifest["files"].as_array().unwrap();
+        assert_eq!(files.len(), 1 + Era::FILTERED.len() + 1); // featured, eras, undated
+        assert_eq!(
+            files[0],
+            json!({ "pool": "featured", "file": "featured.json", "count": 1 })
+        );
+        let featured = read(&out, "featured.json");
+        assert_eq!(featured["id"], manifest["id"]);
+        assert_eq!(featured["paintings"][0][0], "1");
+        let era = read(&out, "1600s.json");
+        let row = &era["paintings"][0];
         assert_eq!(row[1], "x"); // iiif id after the prefix
         assert_eq!(row[6], 2); // 1600s = bit 1
         assert_eq!(row[8], 0.75); // 300 x 400
@@ -175,5 +224,6 @@ mod tests {
             row[9].as_array().unwrap().len(),
             5 * variants::SCREENS.len()
         );
+        assert_eq!(read(&out, "undated.json")["paintings"], json!([]));
     }
 }

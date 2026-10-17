@@ -1,8 +1,8 @@
 # Supported watches
 
 Treasure Trove supports the **color** Pebbles. The generator plans a Cover
-crop of every painting for each of their four screens (`screens` in
-`catalog.json`, in this order), and the phone asks the Rijksmuseum's IIIF
+crop of every painting for each of their four screens (`screens` in the
+catalog's `manifest.json`, in this order), and the phone asks the Rijksmuseum's IIIF
 server for it at the screen's exact size:
 
 | Screen | Shape | Platform | Watches |
@@ -33,10 +33,10 @@ planned Cover crop from IIIF, toned and rendered by `site/render.js`
 [SK-A-1856](https://www.rijksmuseum.nl/en/collection/SK-A-1856), Rijksmuseum,
 Amsterdam (public domain). The mockups are drawn by
 [`scripts/device-mockups.py`](../scripts/device-mockups.py) (needs Pillow,
-Node and `catalog/catalog.json`; it downloads the crops); regenerate them with
+Node and the catalog folder `catalog/web/`; it downloads the crops); regenerate them with
 
 ```sh
-python3 scripts/device-mockups.py catalog/catalog.json 200107756 docs/images/devices
+python3 scripts/device-mockups.py catalog/web 200107756 docs/images/devices
 ```
 
 ## The real watches

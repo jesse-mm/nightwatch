@@ -58,14 +58,29 @@ canvas.width = watch.w;
 canvas.height = watch.h;
 // The crop on screen: full-color RGB from the server, before tuning and frame.
 let crop = null;
-// The painting catalog (catalog.json next to this page); pictures come straight
+// The painting catalog (the catalog/ folder next to this page); pictures come straight
 // from the Rijksmuseum's IIIF server, so there is no server of our own.
-const catalogReady = fetch('catalog.json')
+const catalogReady = fetch('catalog/manifest.json')
   .then((res) => {
     if (!res.ok) throw new Error(`catalog: HTTP ${res.status}`);
     return res.json();
   })
-  .then((data) => window.TreasureCatalog.create(data));
+  .then((manifest) => {
+    const cat = window.TreasureCatalog.create(manifest);
+    // The paintings the phone knows (on the watch, pinned): no file needed.
+    for (const row of Object.values(state.rows || {})) cat.addRow(row);
+    return cat;
+  });
+
+/** Load one catalog file (a pool: 'featured', an era or 'undated') if needed. */
+async function loadPool(cat, pool) {
+  if (cat.has(pool)) return;
+  const file = cat.fileFor(pool);
+  if (!file) throw new Error(`no catalog file for ${pool}`);
+  const res = await fetch(`catalog/${file}`);
+  if (!res.ok) throw new Error(`catalog: HTTP ${res.status}`);
+  if (!cat.add(await res.json())) throw new Error('the catalog changed; reopen the settings');
+}
 // The catalog once loaded (draw() needs it synchronously for Cover views).
 let catalog = null;
 catalogReady.then((cat) => {
@@ -372,7 +387,7 @@ async function loadPreview(choose, { pick = false, useLook = true } = {}) {
   setStatus(pick ? 'Hanging a new painting…' : '');
   try {
     const cat = await catalogReady;
-    const painting = choose(cat);
+    const painting = await choose(cat);
     if (!painting) throw new Error('not in the catalog');
     const meta = painting;
     if (id !== requestId) return null;
@@ -425,8 +440,22 @@ if (art?.key) {
   });
 }
 
+/** Catalog rows by key, for the phone. */
+function rowsFor(keys) {
+  const rows = {};
+  for (const key of keys) {
+    const row = key && catalog?.row(key);
+    if (row) rows[key] = row;
+  }
+  return rows;
+}
+
 // "Hang a different painting": any painting, or one from the chosen era.
-const randomPick = (cat) => cat.random(settings.selection === 'random' ? settings.era : 'any');
+const randomPick = async (cat) => {
+  const pool = cat.poolFor(settings.selection === 'random' ? settings.era : 'any');
+  await loadPool(cat, pool);
+  return cat.random(pool);
+};
 
 function updateShuffle() {
   $('keep').hidden = $('mini-keep').hidden = !(chosen && art);
@@ -456,7 +485,14 @@ $('pin-form').addEventListener('submit', async (e) => {
   if (!q) return;
   $('pin-status').textContent = 'Looking it up…';
   try {
-    const found = (await catalogReady).resolve(q);
+    const cat = await catalogReady;
+    // Look among what's loaded first; otherwise load every era file (rare).
+    let found = cat.resolve(q);
+    if (!found) {
+      $('pin-status').textContent = 'Searching the whole collection…';
+      await Promise.all(cat.files.map((f) => loadPool(cat, f.pool)));
+      found = cat.resolve(q);
+    }
     if (!found) throw new Error('No painting found for that number or link.');
     const meta = await loadPreview(byKey(found.key), { pick: true });
     if (!meta) throw new Error('could not load it');
@@ -906,6 +942,9 @@ $('save').addEventListener('click', () => {
     version: window.TreasureSettings.VERSION,
     settings,
     artKey: chosen ? chosen.key : null,
+    // Catalog rows for the painting to hang and the pinned one, so the phone
+    // can fetch them without loading their catalog file.
+    rows: rowsFor([chosen?.key, settings.pinned]),
     saveLook: lookTouched,
     // From a restored backup: replaces every saved look ({version, looks}).
     looks: restoredLooks || undefined,

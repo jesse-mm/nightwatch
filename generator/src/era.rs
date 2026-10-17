@@ -53,6 +53,32 @@ impl Era {
     }
 }
 
+impl Era {
+    /// The era of a date as the Rijksmuseum writes it ("1642", "c. 1650",
+    /// "c. 1880 - c. 1923"): its first year. The search API's `creationDate`
+    /// wildcards miss approximate dates, so paintings it doesn't place in an
+    /// era pool get one from their date this way.
+    pub fn from_date(date: &str) -> Option<Era> {
+        let bytes = date.as_bytes();
+        let year = (0..bytes.len().saturating_sub(3)).find_map(|i| {
+            let digits = &date[i..i + 4];
+            let starts_word = i == 0 || !bytes[i - 1].is_ascii_digit();
+            let ends_word = bytes.get(i + 4).is_none_or(|b| !b.is_ascii_digit());
+            (starts_word && ends_word && digits.bytes().all(|b| b.is_ascii_digit()))
+                .then(|| digits.parse::<u32>().ok())
+                .flatten()
+        })?;
+        match year {
+            0..=1599 => Some(Era::Before1600),
+            1600..=1699 => Some(Era::C17),
+            1700..=1799 => Some(Era::C18),
+            1800..=1899 => Some(Era::C19),
+            1900..=1999 => Some(Era::C20),
+            _ => None,
+        }
+    }
+}
+
 /// Add a creationDate filter to a search URL that may already have a query.
 pub fn with_date(search_url: &str, pattern: &str) -> String {
     let sep = if search_url.contains('?') { '&' } else { '?' };
@@ -77,6 +103,18 @@ mod tests {
                 e
             );
         }
+    }
+
+    #[test]
+    fn takes_the_era_from_the_first_year_of_a_date() {
+        assert_eq!(Era::from_date("1642"), Some(Era::C17));
+        assert_eq!(Era::from_date("c. 1650"), Some(Era::C17));
+        assert_eq!(Era::from_date("c. 1880 - c. 1923"), Some(Era::C19));
+        assert_eq!(Era::from_date("c. 1465"), Some(Era::Before1600));
+        assert_eq!(Era::from_date("1905-1910"), Some(Era::C20));
+        assert_eq!(Era::from_date("2012"), None);
+        assert_eq!(Era::from_date("undated"), None);
+        assert_eq!(Era::from_date("16th century"), None);
     }
 
     #[test]

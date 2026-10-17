@@ -9,25 +9,41 @@ const require = createRequire(import.meta.url);
 const Catalog = require('../src/pkjs/catalog.js');
 const png = require('../src/pkjs/png.js');
 
-const data = {
-  version: 1,
+const manifest = {
+  version: 2,
+  id: 'abc123',
   iiifPrefix: 'https://iiif.micr.io/',
   webPrefix: 'https://www.rijksmuseum.nl/en/collection/',
   eras: ['pre1600', '1600s', '1700s', '1800s', '1900s'],
   licenses: [['Public domain', 'https://creativecommons.org/publicdomain/mark/1.0/']],
   screens: [[144, 168, false], [180, 180, true], [200, 228, false], [260, 260, true]],
   slack: 20,
-  featured: ['2', '1'],
-  paintings: [
-    // Wide (2:1): Cover slides sideways; planned view 20 px into the crop.
-    ['1', 'aaaaa', 'Wide', 'A', '1650', 'SK-A-1', 2, 0, 2,
-      [0.25, 0, 0.5, 1, 20, 0.2, 0, 0.6, 1, 20, 0.25, 0, 0.5, 1, 20, 0.2, 0, 0.6, 1, 20]],
-    // Tall (1:2): Cover slides up and down, kept at the top.
-    ['2', 'bbbbb', 'Portrait of B', 'B', null, 'SK-C-5', 8, 0, 0.5,
-      [0, 0, 1, 0.7, 0, 0, 0, 1, 0.6, 0, 0, 0, 1, 0.7, 0, 0, 0, 1, 0.6, 0]],
+  files: [
+    { pool: 'featured', file: 'featured.json', count: 2 },
+    { pool: '1600s', file: '1600s.json', count: 1 },
+    { pool: '1800s', file: '1800s.json', count: 1 },
+    { pool: 'undated', file: 'undated.json', count: 0 },
   ],
 };
-const catalog = Catalog.create(data);
+// Wide (2:1): Cover slides sideways; planned view 20 px into the crop.
+const wide = ['1', 'aaaaa', 'Wide', 'A', '1650', 'SK-A-1', 2, 0, 2,
+  [0.25, 0, 0.5, 1, 20, 0.2, 0, 0.6, 1, 20, 0.25, 0, 0.5, 1, 20, 0.2, 0, 0.6, 1, 20]];
+// Tall (1:2): Cover slides up and down, kept at the top.
+const tall = ['2', 'bbbbb', 'Portrait of B', 'B', null, 'SK-C-5', 8, 0, 0.5,
+  [0, 0, 1, 0.7, 0, 0, 0, 1, 0.6, 0, 0, 0, 1, 0.7, 0, 0, 0, 1, 0.6, 0]];
+const files = {
+  featured: { version: 2, id: 'abc123', pool: 'featured', paintings: [tall, wide] },
+  '1600s': { version: 2, id: 'abc123', pool: '1600s', paintings: [wide] },
+  '1800s': { version: 2, id: 'abc123', pool: '1800s', paintings: [tall] },
+};
+
+/** A catalog with every file loaded. */
+function full() {
+  const cat = Catalog.create(manifest);
+  Object.values(files).forEach((f) => cat.add(f));
+  return cat;
+}
+const catalog = full();
 
 describe('catalog', () => {
   test('looks paintings up and builds their links', () => {
@@ -44,10 +60,38 @@ describe('catalog', () => {
     assert.equal(catalog.featured(3).key, '1');
   });
 
-  test('random by era', () => {
+  test('random from a pool', () => {
     assert.equal(catalog.random('1600s', () => 0.9).key, '1');
     assert.equal(catalog.random('1800s', () => 0).key, '2');
-    assert.equal(catalog.random('any', () => 0.99).key, '2');
+  });
+
+  test('picks the pool for an era, or one in proportion to its size for any', () => {
+    assert.equal(catalog.poolFor('1800s'), '1800s');
+    assert.equal(catalog.poolFor('any', () => 0), '1600s');
+    assert.equal(catalog.poolFor('any', () => 0.99), '1800s');
+    assert.equal(catalog.fileFor('1600s'), '1600s.json');
+  });
+
+  test('starts empty and loads only the files it is given', () => {
+    const cat = Catalog.create(manifest);
+    assert.equal(cat.featured(0), null);
+    assert.equal(cat.has('featured'), false);
+    assert.ok(cat.add(files.featured));
+    assert.equal(cat.featured(0).key, '2');
+    assert.equal(cat.random('1600s'), null); // its file isn't loaded
+  });
+
+  test('ignores files from another catalog version', () => {
+    const cat = Catalog.create(manifest);
+    assert.equal(cat.add({ ...files['1600s'], id: 'other' }), false);
+    assert.equal(cat.get('1'), null);
+  });
+
+  test('takes single rows, e.g. the painting on the watch', () => {
+    const cat = Catalog.create(manifest);
+    cat.addRow(full().row('2'));
+    assert.equal(cat.get('2').title, 'Portrait of B');
+    assert.ok(cat.cropRequest('2', { w: 200, h: 228, round: 0 }, 'fill'));
   });
 
   test('resolves object numbers, keys and links', () => {
@@ -87,7 +131,8 @@ describe('catalog', () => {
   });
 
   test('the work image is at most 1280 pixels long', () => {
-    const big = Catalog.create({ ...data, paintings: [['p', 'ppppp', 'Panorama', 'A', null, 'SK-A-9', 0, 0, 10, data.paintings[0][9]]] });
+    const big = Catalog.create(manifest);
+    big.addRow(['p', 'ppppp', 'Panorama', 'A', null, 'SK-A-9', 0, 0, 10, wide[9]]);
     assert.deepEqual(big.workImage('p', { w: 260, h: 260, round: 1 }, 200),
       { url: 'https://iiif.micr.io/ppppp/full/1280,128/0/default.png', width: 1280, height: 128 });
   });

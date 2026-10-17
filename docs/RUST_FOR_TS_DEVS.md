@@ -80,7 +80,8 @@ SQLite afterwards, one transaction per chunk.
 | Make crops favor faces more/less | `saliency.rs`, weights in `energy_map` (`edge`, `sat`, `skin`) |
 | Change how portraits are detected | `imaging.rs` `is_portrait_title`, `saliency.rs` `looks_like_portrait` |
 | Change which licenses are allowed | `rijks.rs`, `judge_license()` (and its tests) |
-| Change what goes into `catalog.json` | `bundle.rs` (and `docs/schema/catalog.schema.json`, `site/catalog.js`) |
+| Change what goes into the catalog files (`catalog/web/`) | `bundle.rs` (and `docs/schema/catalog.schema.json`, `site/catalog.js`) |
+| Change how a painting's era is found | `era.rs` (`Era::from_date` for dates the search pools miss) |
 | Change brightness/contrast/saturation | `site/render.js`, `tone` (JavaScript, not the generator) |
 | Change the settings page | `site/` (plain HTML/CSS/JS, no build step) |
 
@@ -101,4 +102,4 @@ RUST_LOG=debug cargo run --manifest-path generator/Cargo.toml -- --skip-fetch --
 ```
 
 The last line re-plans one painting from what's in `data/` (no network) and
-rewrites `catalog/catalog.json`.
+rewrites the catalog folder `catalog/web/`.

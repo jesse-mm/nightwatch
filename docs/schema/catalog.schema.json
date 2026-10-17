@@ -1,129 +1,182 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Treasure Trove catalog bundle (catalog.json)",
-  "description": "Written by the generator (--bundle, server/src/bundle.rs); read by site/catalog.js on the phone and the settings page.",
-  "type": "object",
-  "required": [
-    "version",
-    "iiifPrefix",
-    "webPrefix",
-    "eras",
-    "licenses",
-    "screens",
-    "slack",
-    "featured",
-    "paintings"
+  "title": "Treasure Trove catalog (catalog/web/, served as site/catalog/)",
+  "description": "Written by the generator (generator/src/bundle.rs); read by site/catalog.js on the phone and the settings page. manifest.json is the manifest; every other file (featured.json, one per era, undated.json) is a part.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/manifest"
+    },
+    {
+      "$ref": "#/$defs/part"
+    }
   ],
-  "properties": {
-    "version": {
-      "const": 1
-    },
-    "iiifPrefix": {
-      "type": "string",
-      "description": "IIIF image base = iiifPrefix + painting's iiif id"
-    },
-    "webPrefix": {
-      "type": "string",
-      "description": "rijksmuseum.nl page = webPrefix + object number"
-    },
-    "eras": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Era names; a painting's eraBits bit i = eras[i]"
-    },
-    "licenses": {
-      "type": "array",
-      "items": {
-        "type": "array",
-        "prefixItems": [
-          {
+  "$defs": {
+    "manifest": {
+      "type": "object",
+      "required": [
+        "version",
+        "id",
+        "iiifPrefix",
+        "webPrefix",
+        "eras",
+        "licenses",
+        "screens",
+        "slack",
+        "files"
+      ],
+      "properties": {
+        "version": {
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "description": "Hash of all parts: a part with another id is from another run"
+        },
+        "iiifPrefix": {
+          "type": "string",
+          "description": "IIIF image base = iiifPrefix + painting's iiif id"
+        },
+        "webPrefix": {
+          "type": "string",
+          "description": "rijksmuseum.nl page = webPrefix + object number"
+        },
+        "eras": {
+          "type": "array",
+          "items": {
             "type": "string"
           },
-          {
-            "type": "string"
-          }
-        ]
-      },
-      "description": "[label, url]"
-    },
-    "screens": {
-      "type": "array",
-      "items": {
-        "type": "array",
-        "prefixItems": [
-          {
-            "type": "integer"
-          },
-          {
-            "type": "integer"
-          },
-          {
-            "type": "boolean"
-          }
-        ]
-      },
-      "description": "[width, height, round], the order of each painting's crops"
-    },
-    "slack": {
-      "type": "integer",
-      "description": "Cover slack per side in screen pixels"
-    },
-    "featured": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Painting key per day of the year (0-based)"
-    },
-    "paintings": {
-      "type": "array",
-      "items": {
-        "type": "array",
-        "description": "[key, iiif, title, artist, date, objectNumber, eraBits, license, aspect, crops]",
-        "prefixItems": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "string"
-          },
-          {
-            "type": "string"
-          },
-          {
-            "type": "string"
-          },
-          {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          {
-            "type": "integer"
-          },
-          {
-            "type": "integer"
-          },
-          {
-            "type": "number"
-          },
-          {
+          "description": "Era names; a painting's eraBits bit i = eras[i]"
+        },
+        "licenses": {
+          "type": "array",
+          "items": {
             "type": "array",
-            "items": {
-              "type": "number"
-            },
-            "description": "Per screen: x, y, w, h (fractions of the image, slack included), window (screen px)"
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "description": "[label, url]"
+        },
+        "screens": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "description": "[width, height, round], the order of each painting's crops"
+        },
+        "slack": {
+          "type": "integer",
+          "description": "Cover slack per side in screen pixels"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "pool",
+              "file",
+              "count"
+            ],
+            "properties": {
+              "pool": {
+                "type": "string",
+                "description": "featured, an era name, or undated"
+              },
+              "file": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              }
+            }
           }
-        ]
+        }
+      }
+    },
+    "part": {
+      "type": "object",
+      "required": [
+        "version",
+        "id",
+        "pool",
+        "paintings"
+      ],
+      "properties": {
+        "version": {
+          "const": 2
+        },
+        "id": {
+          "type": "string"
+        },
+        "pool": {
+          "type": "string"
+        },
+        "paintings": {
+          "type": "array",
+          "description": "Rows; in featured.json one per day of the year, in order",
+          "items": {
+            "type": "array",
+            "description": "[key, iiif, title, artist, date, objectNumber, eraBits, license, aspect, crops]",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "description": "Per screen: x, y, w, h (fractions of the image, slack included), window (screen px)"
+              }
+            ]
+          }
+        }
       }
     }
   }

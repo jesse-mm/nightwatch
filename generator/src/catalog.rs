@@ -2,7 +2,7 @@
 //!
 //! What we know about each painting (metadata, license, era, image size) and
 //! its crop plans, each with the input hash it was made from, so a re-run only
-//! redoes work whose inputs changed. `bundle.rs` turns it into `catalog.json`.
+//! redoes work whose inputs changed. `bundle.rs` turns it into the catalog files.
 //!
 //! ```text
 //! <data>/catalog.sqlite
@@ -82,12 +82,12 @@ pub struct Stats {
     pub paintings: i64,
     pub eligible: i64,
     pub with_source: i64,
-    /// Eligible paintings with every crop planned (what goes in catalog.json).
+    /// Eligible paintings with every crop planned (what goes in the catalog).
     pub ready: i64,
     pub plans: i64,
 }
 
-/// One painting for catalog.json (see `Catalog::bundle_rows`).
+/// One painting for the catalog files (see `Catalog::bundle_rows`).
 pub struct BundleRow {
     pub meta: ArtMeta,
     /// Crop name → plan.
@@ -274,7 +274,7 @@ impl Catalog {
         Ok(())
     }
 
-    /// The master image's size (its aspect ratio goes into catalog.json).
+    /// The master image's size (its aspect ratio goes into the catalog).
     pub fn set_size(&self, key: &str, width: u32, height: u32) -> Result<()> {
         self.conn.execute(
             "UPDATE paintings SET width = ?2, height = ?3 WHERE key = ?1",
@@ -302,7 +302,7 @@ impl Catalog {
         Ok(())
     }
 
-    /// Everything catalog.json needs, for each ready painting in the pool:
+    /// Everything the catalog files need, for each ready painting in the pool:
     /// metadata, crop plans, image size and eras, sorted by key.
     pub fn bundle_rows(&self) -> Result<Vec<BundleRow>> {
         let mut eras: HashMap<String, Vec<Era>> = HashMap::new();

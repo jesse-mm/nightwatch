@@ -5,9 +5,9 @@ Used for docs/DEVICES.md. Each screen shows a painting the way the phone makes
 it: the planned Cover crop from the Rijksmuseum's IIIF server, toned and
 rendered by site/render.js (run with Node; Accurate colors, no frame) at its
 exact resolution, scaled 2x without smoothing so the dithered pixels stay
-visible. Needs Pillow, Node 18+ and catalog/catalog.json.
+visible. Needs Pillow, Node 18+ and the catalog folder (catalog/web).
 
-    python3 scripts/device-mockups.py catalog/catalog.json 200107756 docs/images/devices
+    python3 scripts/device-mockups.py catalog/web 200107756 docs/images/devices
 """
 
 import base64
@@ -42,7 +42,11 @@ const png = require(pngJs);
 let input = '';
 process.stdin.on('data', (d) => (input += d)).on('end', async () => {
   const o = JSON.parse(input);
-  const catalog = require(catalogJs).create(require(o.catalog));
+  const fs = require('fs');
+  const path = require('path');
+  const read = (f) => JSON.parse(fs.readFileSync(path.join(o.catalog, f), 'utf8'));
+  const catalog = require(catalogJs).create(read('manifest.json'));
+  for (const f of catalog.files) catalog.add(read(f.file));
   const screen = { w: o.w, h: o.h, round: o.round };
   const req = catalog.cropRequest(o.key, screen, 'fill');
   const file = new Uint8Array(await (await fetch(req.url)).arrayBuffer());

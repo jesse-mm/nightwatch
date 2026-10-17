@@ -25,7 +25,7 @@ WORKDIR /app
 COPY --from=build /app/target/release/treasure-trove-generator /usr/local/bin/treasure-trove-generator
 
 ENV DATA_DIR=/data \
-    BUNDLE_PATH=/catalog/catalog.json \
+    BUNDLE_DIR=/catalog/web \
     FEATURED_PATH=/catalog/featured.json \
     RUST_LOG=info
 USER trove

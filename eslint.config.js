@@ -6,7 +6,7 @@ import globals from 'globals';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['**/build/**', 'generator/target/**', 'node_modules/**', 'watchface/src/pkjs/catalog-data.js']),
+  globalIgnores(['**/build/**', 'generator/target/**', 'node_modules/**']),
 
   // Vendored libraries: not ours to restyle, but they must still parse as ES5.
   {

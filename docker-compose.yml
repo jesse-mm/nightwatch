@@ -1,11 +1,12 @@
-# Treasure Trove's generator: builds catalog/catalog.json, the painting catalog
-# the watchface (bundled into the app) and the settings page (site/) use. There
-# is no server: pictures come straight from the Rijksmuseum's IIIF server.
+# Treasure Trove's generator: builds catalog/web/, the painting catalog the
+# watchface and the settings page load from the static site (site/catalog/).
+# There is no server: pictures come straight from the Rijksmuseum's IIIF server.
 #
 #   docker compose run --rm generator        # monthly; resumable; polite
 #
 # Works in ./data (catalog.sqlite + master images, not in git) and writes
-# catalog/catalog.json, catalog/featured.json and catalog/paintings.jsonl.
+# catalog/web/ (manifest + one file per era), catalog/featured.json and
+# catalog/paintings.jsonl.
 # Then: node scripts/bundle-catalog.mjs (see docs/GENERATOR.md).
 
 services:

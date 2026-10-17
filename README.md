@@ -7,12 +7,12 @@ date that stay out of its way.
 ```
 ┌──────────────┐  once a day   ┌──────────────────┐  crop (PNG)   ┌──────────────────┐
 │ Pebble       │ ◀── bitmap ── │ Phone (PebbleKit │ ◀──────────── │ Rijksmuseum IIIF │
-│ watchface C  │ ─ screen info▶│ JS, catalog in   │               │ image server     │
-└──────────────┘               │ the app)         │  ┌─ picture ─ │ (iiif.micr.io)   │
-                               └──────────────────┘  ▼            └──────────────────┘
-                                         ▲    settings page (static files in site/)
+│ watchface C  │ ─ screen info▶│ JS)              │               │ image server     │
+└──────────────┘               └──────────────────┘  ┌─ picture ─ │ (iiif.micr.io)   │
+                                         ▲           ▼            └──────────────────┘
+                                         │    settings page (static files in site/)
                                          │           ▲
-                          catalog.json ──┴───────────┘
+                       catalog/web/ ─────┴───────────┘  (copied into site/catalog/)
                                 ▲
                    ┌────────────┴─────┐  monthly, ~1 request/s
                    │ generator (Rust) │ ◀── data.rijksmuseum.nl, iiif.micr.io, wikidata.org
@@ -24,10 +24,10 @@ date that stay out of its way.
 | Path | What it is |
 |---|---|
 | `watchface/` | The Pebble project: C watchface (`src/c/main.c`) and phone-side JS (`src/pkjs/`). |
-| `generator/` | Rust: the **generator** (fetches paintings politely, checks licenses, ranks Featured, plans a smart crop per screen, writes `catalog.json`). |
+| `generator/` | Rust: the **generator** (fetches paintings politely, checks licenses, ranks Featured, plans a smart crop per screen, writes the catalog folder `catalog/web/`). |
 | `site/` | The custom settings page (plain HTML/CSS/JS, no Clay), static files. Also holds the JS shared with the phone (`catalog.js`, `render.js`, `settings.js`, `looks.js`). |
-| `catalog/` | Generated: `catalog.json`, metadata and the Featured list. Not in git: `featured.json` and `paintings.jsonl` are published as a `catalog.tar.gz` release asset (see `scripts/catalog.sh`). |
-| `scripts/` | `bundle-catalog.mjs` (copies `catalog.json` into the app and `site/`), `catalog.sh`, `device-mockups.py`. |
+| `catalog/` | Generated: the catalog folder `web/` (a manifest, Featured and one file per era), metadata and the Featured list. Not in git: `featured.json` and `paintings.jsonl` are published as a `catalog.tar.gz` release asset (see `scripts/catalog.sh`). |
+| `scripts/` | `bundle-catalog.mjs` (copies `catalog/web/` to `site/catalog/`), `catalog.sh`, `device-mockups.py`. |
 | `docker-compose.yml` | Runs the generator. |
 | `docs/` | [Supported watches](docs/DEVICES.md), [architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [publishing](docs/DEPLOY.md), [Rust for TypeScript developers](docs/RUST_FOR_TS_DEVS.md). |
 
@@ -37,7 +37,8 @@ date that stay out of its way.
   exact screen: 144×168, 180×180 round, 200×228 or 260×260 round. Color watches
   only for now (Pebble Time, Time Steel, Time Round, Time 2, Round 2; see
   [Supported watches](docs/DEVICES.md)).
-- No server: the catalog is part of the app, and the phone asks the Rijksmuseum's
+- No server: the catalog is a few static JSON files next to the settings page
+  (the phone only loads the one it needs), and the phone asks the Rijksmuseum's
   IIIF image server for the crop at the screen's exact size, so no stretching.
   Color tuning and frames are applied on the phone, so changing them is instant
   and needs no download.
@@ -89,11 +90,12 @@ date that stay out of its way.
    cp .env.example .env                      # set CONTACT
    docker compose run --rm generator treasure-trove-generator --limit 20   # quick test run
    docker compose run --rm generator         # everything
-   node scripts/bundle-catalog.mjs           # into the app and site/
+   node scripts/bundle-catalog.mjs           # copy catalog/web/ to site/catalog/
    ```
 2. **Host the settings page** (see [docs/DEPLOY.md](docs/DEPLOY.md)): publish
-   `site/` (with its `catalog.json`) on any static host, e.g. GitHub Pages. To
-   test locally: `cd site && python3 -m http.server 8090`.
+   `site/` (with its generated `catalog/` folder) on any static host, e.g.
+   GitHub Pages. The phone loads the catalog from there too. To test locally:
+   `cd site && python3 -m http.server 8090`.
 3. **Point the watchface at it:** edit `watchface/src/pkjs/config.js` →
    `SETTINGS_URL` (e.g. `http://<your-mac>:8090` for testing).
 4. **Build and install the watchface** with the Pebble SDK

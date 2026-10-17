@@ -1,8 +1,14 @@
 /**
- * The painting catalog (catalog.json from the generator) and how to get a
+ * The painting catalog (the generator's catalog files) and how to get a
  * painting's picture straight from the Rijksmuseum: the planned crop is cut
  * by their IIIF image server (`region` + `size` in the URL), as a lossless PNG
- * (~140 KB), so no server of our own is involved. See docs/schema/catalog.schema.json for the file.
+ * (~140 KB), so no server of our own is involved.
+ *
+ * The catalog is a folder: manifest.json (shared fields and the files, with
+ * their painting counts) plus featured.json and one file per era. A reader
+ * starts from the manifest and loads only the files it needs (`fileFor`,
+ * `poolFor`, `add`); `addRow` takes a single painting, e.g. the one on the
+ * watch. See docs/schema/catalog.schema.json.
  *
  * Shared by the phone (PebbleKit JS) and the settings page, like render.js.
  * ES5 on purpose: PebbleKit JS is not a modern browser.
@@ -24,7 +30,7 @@
   var ARTIST = 3;
   var DATE = 4;
   var OBJECT_NUMBER = 5;
-  var ERA_BITS = 6;
+  // 6: eraBits (which era file a painting is in; the files group them)
   var LICENSE = 7;
   var ASPECT = 8;
   var CROPS = 9;
@@ -34,26 +40,26 @@
     return String(Math.round(v * 100000) / 1000);
   }
 
-  /** A catalog over the parsed catalog.json. */
+  /**
+   * A catalog over a parsed manifest.json. It starts empty: `add` the files
+   * you need (featured.json, an era file) or single rows with `addRow`.
+   */
   function create(data) {
-    var rows = data.paintings;
     var byKey = {};
     var byObjectNumber = {};
-    var byEra = {};
-    var i;
-    for (i = 0; i < data.eras.length; i++) {
-      byEra[data.eras[i]] = [];
+    var pools = {}; // pool name → rows, once its file is added
+    var counts = {};
+    var files = {};
+    var f;
+    for (f = 0; f < data.files.length; f++) {
+      counts[data.files[f].pool] = data.files[f].count;
+      files[data.files[f].pool] = data.files[f].file;
     }
-    for (i = 0; i < rows.length; i++) {
-      var row = rows[i];
+
+    function index(row) {
       byKey[row[KEY]] = row;
       if (row[OBJECT_NUMBER]) {
         byObjectNumber[String(row[OBJECT_NUMBER]).toLowerCase()] = row;
-      }
-      for (var e = 0; e < data.eras.length; e++) {
-        if (row[ERA_BITS] & (1 << e)) {
-          byEra[data.eras[e]].push(row);
-        }
       }
     }
 
@@ -203,26 +209,87 @@
     }
 
     function pick(list, random) {
-      return list.length ? list[Math.floor((random || Math.random)() * list.length)] : null;
+      return list && list.length ? list[Math.floor((random || Math.random)() * list.length)] : null;
+    }
+
+    /**
+     * The pool to pick a random painting from: the era, or for 'any' an era
+     * (or undated) chosen in proportion to its size, so every painting is
+     * equally likely while only one file is needed.
+     */
+    function poolFor(era, random) {
+      if (era && era !== 'any' && counts[era] !== undefined) {
+        return era;
+      }
+      var total = 0;
+      var p;
+      for (p in counts) {
+        if (Object.prototype.hasOwnProperty.call(counts, p) && p !== 'featured') {
+          total += counts[p];
+        }
+      }
+      var n = Math.floor((random || Math.random)() * total);
+      for (p in counts) {
+        if (Object.prototype.hasOwnProperty.call(counts, p) && p !== 'featured') {
+          if (n < counts[p]) {
+            return p;
+          }
+          n -= counts[p];
+        }
+      }
+      return null;
     }
 
     return {
       version: data.version,
-      size: rows.length,
-      /** Painting details by key, or null. */
+      /** Identifies this set of files; files with another id don't belong. */
+      id: data.id,
+      /** The manifest's file list: [{pool, file, count}]. */
+      files: data.files,
+      /** The file (e.g. '1600s.json') that holds a pool ('featured', an era, 'undated'). */
+      fileFor: function (pool) {
+        return files[pool] || null;
+      },
+      poolFor: poolFor,
+      /** Whether a pool's file has been added. */
+      has: function (pool) {
+        return Boolean(pools[pool]);
+      },
+      /** Add a parsed catalog file. Returns false (and ignores it) if it is from another set. */
+      add: function (part) {
+        if (!part || part.id !== data.id || !part.pool) {
+          return false;
+        }
+        pools[part.pool] = part.paintings;
+        for (var i = 0; i < part.paintings.length; i++) {
+          index(part.paintings[i]);
+        }
+        return true;
+      },
+      /** Add a single painting row (e.g. the one on the watch, from the cache). */
+      addRow: function (row) {
+        if (row && row[KEY]) {
+          index(row);
+        }
+      },
+      /** A painting's row, to hand over (e.g. to the phone with the settings). */
+      row: function (key) {
+        return byKey[key] || null;
+      },
+      /** Painting details by key, or null when not loaded. */
       get: function (key) {
         return painting(byKey[key]);
       },
-      /** The Featured painting for a day of the year (0-based). */
+      /** The Featured painting for a day of the year (0-based); needs featured.json. */
       featured: function (day) {
-        var keys = data.featured;
-        return keys.length ? painting(byKey[keys[((day % keys.length) + keys.length) % keys.length]]) : null;
+        var rows = pools.featured || [];
+        return rows.length ? painting(rows[((day % rows.length) + rows.length) % rows.length]) : null;
       },
-      /** A random painting, optionally from one era ('any' or e.g. '1600s'). */
-      random: function (era, random) {
-        return painting(pick(era && era !== 'any' && byEra[era] ? byEra[era] : rows, random));
+      /** A random painting from a pool (see poolFor); needs its file. */
+      random: function (pool, random) {
+        return painting(pick(pools[pool], random));
       },
-      /** A painting from an object number (SK-C-5), a key or a link to it. */
+      /** A painting from an object number (SK-C-5), a key or a link to it, among the loaded ones. */
       resolve: function (query) {
         // The last path segment of a link, without a query or "#…" fragment.
         var q = String(query || '').trim().replace(/\/+$/, '');

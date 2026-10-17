@@ -13,7 +13,7 @@
 //!    whose input hash changed: new image or a `PIPELINE_VERSION` bump.
 //!
 //! **Write**
-//! 5. `catalog.json` for the phone and the settings page (bundle.rs), and
+//! 5. The catalog files for the phone and the settings page (bundle.rs), and
 //!    `paintings.jsonl` (metadata and hashes, for diffs).
 //!
 //! Stopping at any point is safe: everything already written is recorded with
@@ -46,8 +46,8 @@ pub struct Options {
     pub data_dir: PathBuf,
     /// Write `paintings.jsonl` here after the run (metadata, for diffs).
     pub export: Option<PathBuf>,
-    /// Write `catalog.json` here: the catalog the phone (bundled into the app)
-    /// and the settings page use.
+    /// Write the catalog folder here (manifest.json, featured.json and one file
+    /// per era): what the phone and the settings page use.
     pub bundle: PathBuf,
     /// Requests per second to the Rijksmuseum/IIIF/Wikidata (fractional OK).
     pub requests_per_second: f64,
@@ -97,7 +97,7 @@ pub async fn run(opts: Options) -> Result<()> {
     let (year, _) = popularity::year_month(now_secs());
     let day_order = featured::day_order(&featured_keys, year);
     let n = crate::bundle::write(&catalog, &day_order, &opts.bundle)?;
-    tracing::info!(paintings = n, path = %opts.bundle.display(), "wrote catalog.json");
+    tracing::info!(paintings = n, dir = %opts.bundle.display(), "wrote the catalog");
     if let Some(path) = &opts.export {
         let n = catalog.export_jsonl(path)?;
         tracing::info!(paintings = n, path = %path.display(), "exported catalog");

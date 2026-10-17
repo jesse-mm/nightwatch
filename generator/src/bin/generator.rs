@@ -1,5 +1,5 @@
-//! `treasure-trove-generator`: builds `catalog.json`, the painting catalog the
-//! watchface and the settings page use.
+//! `treasure-trove-generator`: builds the painting catalog (`catalog/web/`)
+//! the watchface and the settings page use.
 //!
 //! Run it monthly (or whenever); it only redoes work whose inputs changed. See
 //! `--help` and docs/GENERATOR.md.
@@ -11,13 +11,13 @@ use tracing_subscriber::EnvFilter;
 use treasure_trove::generate::{self, Options};
 
 const HELP: &str = "\
-treasure-trove-generator: fetch paintings politely, plan their crops, write catalog.json
+treasure-trove-generator: fetch paintings politely, plan their crops, write the catalog
 
 USAGE: treasure-trove-generator [OPTIONS]
 
 OPTIONS (environment variable in brackets):
   --data DIR            working directory: catalog.sqlite + art/  [DATA_DIR, ./data]
-  --bundle FILE         where to write catalog.json                [BUNDLE_PATH, ./catalog/catalog.json]
+  --bundle DIR          where to write the catalog files           [BUNDLE_DIR, ./catalog/web]
   --export FILE         also write paintings.jsonl (for diffs)     [EXPORT_PATH]
   --rps N               requests per second to outside services   [REQUESTS_PER_SECOND, 1]
   --contact TEXT        your email or a URL, sent in the User-Agent [CONTACT]
@@ -48,7 +48,7 @@ fn parse_args() -> Result<Options> {
     let mut o = Options {
         data_dir: var("DATA_DIR", PathBuf::from("./data")),
         export: std::env::var("EXPORT_PATH").ok().map(PathBuf::from),
-        bundle: var("BUNDLE_PATH", PathBuf::from("./catalog/catalog.json")),
+        bundle: var("BUNDLE_DIR", PathBuf::from("./catalog/web")),
         requests_per_second: var("REQUESTS_PER_SECOND", 1.0),
         refresh_days: var("REFRESH_DAYS", 25),
         limit: None,
