@@ -88,7 +88,7 @@ on the watch:
 | `dither` | Dithering | `atkinson`, `checker` (50:50), `none` (Off) |
 | `brightness` | Brightness | −100…100 |
 | `contrast` | Contrast | −100…100 |
-| `textRow` | Time row | `top`, `bottom` |
+| `textRow` | Time row | `top`, `center`, `bottom` |
 | `textCol` | Time column | `auto`, `start` (left), `center`, `end` (right) |
 | `timeSize` | Time size | `s`, `m`, `l` |
 
@@ -228,7 +228,7 @@ fetching (and removes folders from the older layout).
 | `Hello` | watch → phone | 1 = launch, 2 = new day |
 | `ScreenW`, `ScreenH`, `RowStride`, `IsRound`, `ChunkSize`, `Is24h` | watch → phone | screen description |
 | `PhoneReady` | phone → watch | JS started; watch replies with Hello |
-| `ShowTime`, `ClockMode`, `HideAmPm`, `ShowDate`, `DateFormat`, `DateSep`, `HideUntilShake`, `RevealMinutes`, `BoxMode`, `TextPos`, `TimeSize`, `TextInset` | phone → watch | settings (ints; `TextPos` = row × 3 + column, round screens always centered; `TimeSize` 0–2 = S/M/L, default S; `TextInset` = frame width in pixels, so the text sits on the painting) |
+| `ShowTime`, `ClockMode`, `HideAmPm`, `ShowDate`, `DateFormat`, `DateSep`, `HideUntilShake`, `RevealMinutes`, `BoxMode`, `TextPos`, `TimeSize`, `TextInset` | phone → watch | settings (ints; `TextPos` = row × 3 + column (row 0 top, 1 bottom, 2 center), round screens always centered horizontally; `TimeSize` 0–2 = S/M/L, default S; `TextInset` = frame width in pixels, so the text sits on the painting) |
 | `ImgBegin`, `ImgOffset`, `ImgChunk`, `ImgEnd` | phone → watch | image transfer |
 
 ## HTTP API

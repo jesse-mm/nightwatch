@@ -57,7 +57,8 @@ typedef enum { DateDayMonth = 0, DateMonthDay = 1, DateDay = 2 } DateFormat;
 /* Separator between day and month: '-', '/' or '.'. */
 static const char DATE_SEPARATORS[] = { '-', '/', '.' };
 /* Where the time and date sit: row * 3 + column. */
-typedef enum { RowTop = 0, RowBottom = 1 } TextRow;
+/* Values are what the phone sends; RowCenter came later, hence 2. */
+typedef enum { RowTop = 0, RowBottom = 1, RowCenter = 2 } TextRow;
 typedef enum { ColLeft = 0, ColCenter = 1, ColRight = 2 } TextCol;
 /* 2 was a double-flick toggle; older saved settings with it now mean Off. */
 typedef enum { BoxOff = 0, BoxAlways = 1 } BoxMode;
@@ -280,7 +281,7 @@ static void inbox_received(DictionaryIterator *iter, void *ctx) {
   if (read_int(iter, MESSAGE_KEY_DateSep, &v)) { s_settings.date_sep = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_HideUntilShake, &v)) { s_settings.hide_until_shake = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_BoxMode, &v)) { s_settings.box_mode = v; changed = true; }
-  if (read_int(iter, MESSAGE_KEY_TextPos, &v) && v >= 0 && v < 6) { s_settings.text_pos = v; changed = true; }
+  if (read_int(iter, MESSAGE_KEY_TextPos, &v) && v >= 0 && v < 9) { s_settings.text_pos = v; changed = true; }
   if (read_int(iter, MESSAGE_KEY_TimeSize, &v) && v >= 0 && v < (int32_t)ARRAY_LENGTH(TEXT_SIZES)) {
     s_settings.time_size = v;
     changed = true;
@@ -421,8 +422,9 @@ static void text_update(Layer *layer, GContext *ctx) {
    * With a painting frame, the text sits inside it, on the painting. */
   int16_t margin = MARGIN + s_settings.text_inset;
   int16_t edge = margin + PBL_IF_ROUND_ELSE(8, 0);
-  int16_t top = row == RowTop ? area.origin.y + edge
-                              : area.origin.y + area.size.h - edge - block_h;
+  int16_t top = row == RowTop      ? area.origin.y + edge
+              : row == RowCenter ? area.origin.y + (area.size.h - block_h) / 2
+                                 : area.origin.y + area.size.h - edge - block_h;
   int16_t left = col == ColLeft    ? area.origin.x + margin
                : col == ColRight   ? area.origin.x + area.size.w - margin - block_w
                                    : area.origin.x + (area.size.w - block_w) / 2;

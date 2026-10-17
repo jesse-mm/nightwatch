@@ -32,7 +32,7 @@
     hideUntilShake: false,
     revealMinutes: 1,      // how long a flick shows the time (1-60)
     boxMode: 'off',        // off | always
-    textRow: 'bottom',     // top | bottom
+    textRow: 'bottom',     // top | center | bottom
     textCol: 'auto',       // start | center | end; auto = end (round screens: always center)
     timeSize: 's',         // s | m | l
     fit: 'fill',           // fill | whole

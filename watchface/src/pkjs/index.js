@@ -159,7 +159,10 @@ function sendSettings(s) {
 
 /** Row * 3 + column. Round screens are always centered; "auto" is the right on others. */
 function textPos(s) {
-  var row = s.textRow === 'top' ? 0 : 1;
+  var row = { top: 0, bottom: 1, center: 2 }[s.textRow];
+  if (row === undefined) {
+    row = 1;
+  }
   var col = ['start', 'center', 'end'].indexOf(s.textCol);
   if (watch && watch.round) {
     col = 1;

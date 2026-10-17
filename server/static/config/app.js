@@ -250,7 +250,7 @@ function placeOverlay(overlay, px) {
   const pad = settings.boxMode === 'always' ? 3 : 0;
   const blockW = overlay.offsetWidth / px - 2 * pad;
   const blockH = overlay.offsetHeight / px - 2 * pad;
-  const top = settings.textRow === 'top' ? edge : watch.h - edge - blockH;
+  const top = { top: edge, center: (watch.h - blockH) / 2 }[settings.textRow] ?? watch.h - edge - blockH;
   // Round screens only offer top or bottom, always centered.
   const col = round ? 'center' : settings.textCol;
   const left = col === 'start' ? margin : col === 'end' ? watch.w - margin - blockW : (watch.w - blockW) / 2;

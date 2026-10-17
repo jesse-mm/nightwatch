@@ -122,6 +122,7 @@
     "textRow": {
       "enum": [
         "top",
+        "center",
         "bottom"
       ],
       "description": "Time and date row",
