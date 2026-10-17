@@ -35,7 +35,7 @@ describe('looks', () => {
       { ...DEFAULTS, brightness: 100 },
     );
     assert.equal(looks.decode(undefined, DEFAULTS), null);
-    assert.equal(looks.decode('c,w,f,g', DEFAULTS), null); // an older string format
+    assert.equal(looks.decode('c,w,f,g', DEFAULTS), null);
   });
 
   test('saves and finds looks per painting', () => {
@@ -50,16 +50,10 @@ describe('looks', () => {
     assert.deepEqual(stored.looks['200108369'], { ...DEFAULTS, frame: 'gold', brightness: 10 });
   });
 
-  test('reads looks saved before versioning', () => {
+  test('ignores storage without a version', () => {
     const storage = memoryStorage();
-    storage.setItem('tt-looks', JSON.stringify({
-      200108369: { ...DEFAULTS, textCol: 'left' },
-      200107756: '0,2,0,2,40,60,0,2,0', // an early string format: dropped
-    }));
-    assert.equal(looks.get(storage, '200108369', DEFAULTS).textCol, 'start');
-    assert.equal(looks.get(storage, '200107756', DEFAULTS), null);
-    looks.save(storage, '1', DEFAULTS);
-    assert.deepEqual(Object.keys(JSON.parse(storage.getItem('tt-looks')).looks).sort(), ['1', '200108369']);
+    storage.setItem('tt-looks', JSON.stringify({ 200108369: DEFAULTS }));
+    assert.equal(looks.get(storage, '200108369', DEFAULTS), null);
   });
 
   test('ignores a missing painting key and unreadable storage', () => {

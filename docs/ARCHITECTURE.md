@@ -50,6 +50,7 @@ defaults. To change what a stored value means: bump `VERSION`, add a step to
 `MIGRATIONS`, and update the schema (`npm test` checks the schemas against the
 code). The page and the phone also tell each other their settings version, so
 a newer settings page works with an older phone app and the other way round.
+Version 1 is the first, so there are no migrations yet.
 
 **Looks per painting.** When the reader changes the crop, frame, color tuning
 or time placement and saves, the phone remembers that look for the painting

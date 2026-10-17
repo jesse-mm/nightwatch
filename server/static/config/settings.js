@@ -47,14 +47,10 @@
     pinned: ''             // key of a painting chosen by id; set = no rotation
   };
 
-  // MIGRATIONS[n] turns version n into version n + 1 (in place).
-  var MIGRATIONS = [
-    // 0 → 1: the time column was left/right; it is start/end now.
-    function (s) {
-      if (s.textCol === 'left') s.textCol = 'start';
-      if (s.textCol === 'right') s.textCol = 'end';
-    }
-  ];
+  // MIGRATIONS[n] turns version n into version n + 1 (in place), e.g.
+  //   function (s) { if (s.frame === 'oak') s.frame = 'wood'; }
+  // turns version 1 into 2. Version 1 is the first; nothing to migrate yet.
+  var MIGRATIONS = [];
 
   function has(obj, key) {
     return Object.prototype.hasOwnProperty.call(obj, key);
@@ -70,9 +66,9 @@
         s[key] = stored[key];
       }
     }
-    var version = typeof stored.version === 'number' ? stored.version : 0;
+    var version = typeof stored.version === 'number' ? stored.version : VERSION;
     for (var v = version; v < VERSION; v++) {
-      MIGRATIONS[v](s);
+      MIGRATIONS[v - 1](s);
     }
     var out = {};
     for (key in DEFAULTS) {

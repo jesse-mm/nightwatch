@@ -465,9 +465,9 @@ Pebble.addEventListener('webviewclosed', function (e) {
       return;
     }
   }
-  // The page says which settings version it speaks (none = before versioning).
+  // The page says which settings version it speaks.
   var sent = result.settings || {};
-  var stamped = { version: typeof result.version === 'number' ? result.version : 0 };
+  var stamped = { version: result.version };
   for (var key in sent) {
     if (Object.prototype.hasOwnProperty.call(sent, key)) {
       stamped[key] = sent[key];

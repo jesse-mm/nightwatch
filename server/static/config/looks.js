@@ -81,14 +81,9 @@
     return out;
   }
 
-  // MIGRATIONS[n] turns a version-n look into version n + 1 (in place).
-  var MIGRATIONS = [
-    // 0 (a bare map, before versioning) → 1: time column left/right → start/end.
-    function (look) {
-      if (look.textCol === 'left') look.textCol = 'start';
-      if (look.textCol === 'right') look.textCol = 'end';
-    }
-  ];
+  // MIGRATIONS[n] turns a look of version n into version n + 1 (in place),
+  // like settings.js. Version 1 is the first; nothing to migrate yet.
+  var MIGRATIONS = [];
 
   /** Every saved look at the current version, painting key → look. */
   function readAll(storage) {
@@ -98,18 +93,16 @@
     } catch (e) {
       return {}; // unreadable: start over rather than fail
     }
-    if (!stored || typeof stored !== 'object') {
+    if (!stored || typeof stored !== 'object' || typeof stored.version !== 'number') {
       return {};
     }
-    var version = typeof stored.version === 'number' ? stored.version : 0;
-    var map = version === 0 ? stored : stored.looks || {};
+    var map = stored.looks || {};
     var out = {};
     for (var key in map) {
-      // Skip anything that isn't a look object (e.g. an early string format).
       if (Object.prototype.hasOwnProperty.call(map, key) && map[key] && typeof map[key] === 'object') {
         out[key] = map[key];
-        for (var v = version; v < VERSION; v++) {
-          MIGRATIONS[v](out[key]);
+        for (var v = stored.version; v < VERSION; v++) {
+          MIGRATIONS[v - 1](out[key]);
         }
       }
     }

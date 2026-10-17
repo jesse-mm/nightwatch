@@ -45,12 +45,6 @@ describe('settings', () => {
     assert.equal('version' in s, false);
   });
 
-  test('migrates settings saved before versioning', () => {
-    assert.equal(settingsLib.load({ textCol: 'left' }).textCol, 'start');
-    assert.equal(settingsLib.load({ textCol: 'right' }).textCol, 'end');
-    assert.equal(settingsLib.load({ version: 1, textCol: 'center' }).textCol, 'center');
-  });
-
   test('stores the current version', () => {
     assert.equal(settingsLib.toStored({}).version, settingsLib.VERSION);
   });
