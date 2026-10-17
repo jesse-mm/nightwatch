@@ -61,7 +61,7 @@ a { color: inherit; text-underline-offset: 0.18em; }
 .wall {
   background:
     radial-gradient(120% 90% at 50% 20%, var(--wall-light), var(--wall) 70%);
-  padding: 2.5rem 1rem 1.75rem;
+  padding: 2.5rem 1rem 1.25rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -373,7 +373,7 @@ main {
 
 /* Frame + color tuning sit right under the preview so changes are visible
    without scrolling. */
-.group.look { padding-top: 0.5rem; }
+.group.look { padding-top: 1.25rem; }
 .group.look .row { padding: 0.65rem 0; }
 
 /* ---------------- paintings from (era) ---------------- */
@@ -534,6 +534,7 @@ main {
 .pin-field .text-button { margin-top: 0; }
 
 .backup-input {
+  box-sizing: border-box;
   width: 100%;
   padding: 0.55rem 0.7rem;
   font: 400 var(--step--1)/1.4 ui-monospace, Menlo, monospace;
@@ -975,5 +976,6 @@ canvas.draggable:active { cursor: grabbing; }
   padding-top: 1.25rem;
 }
 
-/* No empty line under the search field until there's something to say. */
-.pin-form .label-status:empty { display: none; }
+/* No empty status lines taking up room until there's something to say. */
+.group .label-status:empty,
+#status:empty { display: none; }

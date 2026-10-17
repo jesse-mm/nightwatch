@@ -135,6 +135,7 @@
   "showFor.unit": "{count, plural, one {minuut} other {minuten}}",
   "readability.title": "Betere leesbaarheid",
   "readability.help": "Een donker vlak achter de tijd en datum.",
+  "utilities.title": "Hulpmiddelen",
   "backup.title": "Back-up",
   "backup.copyTitle": "Maak een back-up",
   "backup.copyHelp": "Je instellingen en de weergaven die je per schilderij hebt bewaard, staan alleen op deze telefoon en zijn weg als je de watchface verwijdert. Kopieer ze en bewaar de tekst op een veilige plek, bijvoorbeeld in een notitie of een e-mail aan jezelf.",

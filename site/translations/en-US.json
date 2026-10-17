@@ -135,6 +135,7 @@
   "showFor.unit": "{count, plural, one {minute} other {minutes}}",
   "readability.title": "Improve readability",
   "readability.help": "A dark box behind the time and date.",
+  "utilities.title": "Utilities",
   "backup.title": "Backup",
   "backup.copyTitle": "Copy a backup",
   "backup.copyHelp": "Your settings and the looks you saved per painting live only on this phone, and are gone if you remove the watchface. Copy them and keep the text somewhere safe, for example in a note or an email to yourself.",
