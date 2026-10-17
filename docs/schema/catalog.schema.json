@@ -1,13 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Treasure Trove catalog (catalog/web/, served as site/catalog/)",
-  "description": "Written by the generator (generator/src/bundle.rs); read by site/catalog.js on the phone and the settings page. manifest.json is the manifest; every other file (featured.json, one per era, undated.json) is a part.",
+  "description": "Written by the generator (generator/src/bundle.rs); read by site/catalog.js on the phone and the settings page. manifest.json is the manifest; every other file (featured.json, one per era, undated.json) is a part, except search.json (the search entries).",
   "oneOf": [
     {
       "$ref": "#/$defs/manifest"
     },
     {
       "$ref": "#/$defs/part"
+    },
+    {
+      "$ref": "#/$defs/search"
     }
   ],
   "$defs": {
@@ -106,6 +109,22 @@
               }
             }
           }
+        },
+        "search": {
+          "type": "object",
+          "required": [
+            "file",
+            "count"
+          ],
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            }
+          },
+          "description": "The search file (search.json): loaded by the settings page only when someone searches"
         }
       }
     },
@@ -173,6 +192,55 @@
                   "type": "number"
                 },
                 "description": "Per screen: x, y, w, h (fractions of the image, slack included), window (screen px)"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "required": [
+        "version",
+        "id",
+        "entries"
+      ],
+      "properties": {
+        "version": {
+          "const": 2
+        },
+        "id": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "description": "[key, title, artist, date, objectNumber, pool] (pool: the file the painting is in)",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": "string"
               }
             ]
           }

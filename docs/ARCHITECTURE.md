@@ -282,6 +282,14 @@ The page is in English (`en-US`) and Dutch (`nl-NL`).
 - **Adding a language.** Copy `en-US.json` to `<lang>.json`, translate it,
   and teach `supported()` in `i18n.js` which tags map to it.
 
+
+**Search.** `search.json` (~570 KB, ~160 KB gzipped) lists every painting as
+`[key, title, artist, date, objectNumber, pool]`, with the same `id`. The
+settings page loads it only when someone types in the pin field, matches every
+typed word against title, artist, object number and date (ignoring case and
+accents, titles that start with the first word first) and suggests up to 8.
+Picking one loads just that painting's file (`pool`) and pins it.
+
 ## Picking a painting (generator)
 
 - The generator crawls the Rijksmuseum **Search API** for paintings that have an

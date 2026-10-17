@@ -525,10 +525,151 @@ async function pinPainting(q) {
   return meta;
 }
 
+// ---------------- search by title (pinning) ----------------
+// catalog/search.json (title, artist, date, object number and file of every
+// painting) is only loaded once someone types in the pin field.
+
+let searchReady = null;
+const searchBox = $('pin-input');
+const searchList = $('pin-results');
+let searchHits = [];
+let searchActive = -1;
+
+/** Lower case without accents, so "Hals" finds "Hals" and "Vermeer" "vermeer". */
+const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+function loadSearch() {
+  searchReady ??= Promise.all([catalogReady, fetch('catalog/search.json').then((res) => {
+    if (!res.ok) throw new Error(`search: HTTP ${res.status}`);
+    return res.json();
+  })]).then(([cat, data]) => {
+    if (data.id !== cat.id) throw new Error('the catalog changed; reopen the settings');
+    return data.entries.map(([key, title, artist, date, objectNumber, pool]) => ({
+      key, title, artist, date, objectNumber, pool,
+      text: fold(`${title} ${artist} ${objectNumber || ''} ${date || ''}`),
+      titleText: fold(title),
+    }));
+  });
+  searchReady.catch(() => {
+    searchReady = null; // try again next time
+  });
+  return searchReady;
+}
+
+/** Up to 8 paintings matching every word; titles that start with it first. */
+function searchEntries(entries, query) {
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  const hits = entries.filter((e) => words.every((w) => e.text.includes(w)));
+  const rank = (e) => (e.titleText.startsWith(words[0]) ? 0 : e.titleText.includes(words[0]) ? 1 : 2);
+  return hits.sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title)).slice(0, 8);
+}
+
+function showResults(items, note) {
+  searchList.replaceChildren();
+  searchHits = items;
+  searchActive = -1;
+  items.forEach((e, i) => {
+    const li = document.createElement('li');
+    li.id = `pin-result-${i}`;
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', 'false');
+    const title = document.createElement('span');
+    title.className = 'pin-result-title';
+    title.textContent = e.title;
+    const meta = document.createElement('span');
+    meta.className = 'pin-result-meta';
+    meta.textContent = [e.artist, e.date, e.objectNumber].filter(Boolean).join(' · ');
+    li.append(title, meta);
+    // pointerdown, not click: picking must win over the field losing focus.
+    li.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      pickResult(e);
+    });
+    searchList.append(li);
+  });
+  if (note) {
+    const li = document.createElement('li');
+    li.className = 'pin-result-note';
+    li.textContent = note;
+    searchList.append(li);
+  }
+  const open = items.length > 0 || Boolean(note);
+  searchList.hidden = !open;
+  searchBox.setAttribute('aria-expanded', String(open));
+  searchBox.removeAttribute('aria-activedescendant');
+}
+
+function hideResults() {
+  showResults([], '');
+}
+
+function highlight(i) {
+  searchActive = i;
+  searchList.querySelectorAll('[role=option]').forEach((li, n) => li.setAttribute('aria-selected', String(n === i)));
+  if (i >= 0) {
+    searchBox.setAttribute('aria-activedescendant', `pin-result-${i}`);
+    $(`pin-result-${i}`).scrollIntoView({ block: 'nearest' });
+  }
+}
+
+async function pickResult(entry) {
+  hideResults();
+  searchBox.value = entry.title;
+  try {
+    // Only the painting's own file is needed to pin it.
+    await loadPool(await catalogReady, entry.pool);
+    await pinPainting(entry.key);
+  } catch (err) {
+    $('pin-status').textContent = err.message;
+  }
+}
+
+let searchTimer = null;
+searchBox.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  const query = searchBox.value.trim();
+  if (query.length < 2) {
+    hideResults();
+    return;
+  }
+  searchTimer = setTimeout(async () => {
+    if (!searchReady) showResults([], t('pin.searchLoading'));
+    try {
+      const entries = await loadSearch();
+      if (searchBox.value.trim() !== query) return; // typed on meanwhile
+      const hits = searchEntries(entries, query);
+      showResults(hits, hits.length ? '' : t('pin.searchNone', { query }));
+    } catch {
+      showResults([], t('pin.searchFailed'));
+    }
+  }, 150);
+});
+
+searchBox.addEventListener('keydown', (e) => {
+  if (searchList.hidden || !searchHits.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const step = e.key === 'ArrowDown' ? 1 : -1;
+    highlight((searchActive + step + searchHits.length) % searchHits.length);
+  } else if (e.key === 'Enter' && searchActive >= 0) {
+    e.preventDefault();
+    pickResult(searchHits[searchActive]);
+  } else if (e.key === 'Escape') {
+    hideResults();
+  }
+});
+searchBox.addEventListener('blur', () => setTimeout(hideResults, 150));
+
 $('pin-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const q = $('pin-input').value.trim();
+  const q = searchBox.value.trim();
   if (!q) return;
+  // A title typed in full (or the only suggestion): pin that painting.
+  if (searchHits.length && (searchActive >= 0 || searchHits.length === 1)) {
+    pickResult(searchHits[Math.max(searchActive, 0)]);
+    return;
+  }
+  hideResults();
   try {
     await pinPainting(q);
   } catch (err) {

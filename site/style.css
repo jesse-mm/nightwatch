@@ -894,20 +894,50 @@ canvas.draggable:active { cursor: grabbing; }
   font-size: var(--step--1);
 }
 
-/* Debug pane (?debug=true). */
-.debug { border: 2px dashed color-mix(in srgb, var(--gilt) 70%, transparent); border-radius: 8px; padding: 0.75rem 1rem; }
-.debug-hint { margin: 0 0 0.6rem; color: var(--muted); font-size: var(--step--1); }
-.debug-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.debug-actions .text-button { margin-top: 0; }
+/* Debug pane (?debug=true): a small collapsed row at the bottom. */
+.debug { margin: 1.5rem 0 0; font-size: var(--step--1); color: var(--muted); }
+.debug summary { cursor: pointer; width: max-content; padding: 0.2rem 0; }
+.debug-hint { margin: 0.4rem 0; }
+.debug-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.debug-actions button {
+  padding: 0.25rem 0.55rem;
+  font: 500 var(--step--1) var(--sans);
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.debug-status { min-height: 1.2em; margin: 0.4rem 0 0; }
+.debug-state { margin-top: 0.3rem; }
 .debug-info {
-  max-height: 18rem;
+  max-height: 14rem;
   overflow: auto;
-  margin: 0.6rem 0 0;
-  padding: 0.6rem;
-  font: 400 0.75rem/1.4 ui-monospace, Menlo, monospace;
+  margin: 0.4rem 0 0;
+  padding: 0.5rem;
+  font: 400 0.7rem/1.35 ui-monospace, Menlo, monospace;
   background: var(--control);
   border: 1px solid var(--line);
   border-radius: 6px;
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* Search suggestions under the pin field. */
+.pin-form { position: relative; }
+.pin-results {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0.25rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+.pin-results li { padding: 0.45rem 0.55rem; border-radius: 6px; cursor: pointer; }
+.pin-results li[aria-selected="true"], .pin-results li:hover { background: var(--control); }
+.pin-results .pin-result-title { display: block; font-weight: 600; }
+.pin-results .pin-result-meta { display: block; color: var(--muted); font-size: var(--step--1); }
+.pin-results .pin-result-note { color: var(--muted); font-size: var(--step--1); cursor: default; }

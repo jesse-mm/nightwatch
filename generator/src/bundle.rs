@@ -8,6 +8,9 @@
 //! pre1600.json …    one file per era (1600s, 1700s, 1800s, 1900s)
 //! undated.json      paintings without a usable date (era from the search
 //!                   pools, or else from the painting's date)
+//! search.json       title, artist, date and object number of every painting
+//!                   and the file it's in: for searching by title on the
+//!                   settings page (loaded only when someone searches)
 //! ```
 //!
 //! Every painting is in exactly one era file (or undated), and Featured ones
@@ -131,6 +134,14 @@ pub fn write(catalog: &Catalog, featured: &[String], dir: &Path) -> Result<usize
         .iter()
         .filter_map(|k| by_key.get(k).cloned())
         .collect();
+    // For searching by title: [key, title, artist, date, objectNumber, pool].
+    let search: Vec<Value> = pools
+        .iter()
+        .flat_map(|(pool, rows)| {
+            rows.iter()
+                .map(move |r| json!([r[0], r[2], r[3], r[4], r[5], pool]))
+        })
+        .collect();
     let mut files: Vec<(String, Vec<Value>)> = vec![("featured".to_string(), featured_rows)];
     files.extend(pools);
 
@@ -148,6 +159,10 @@ pub fn write(catalog: &Catalog, featured: &[String], dir: &Path) -> Result<usize
             &json!({ "version": VERSION, "id": id, "pool": pool, "paintings": rows }),
         )?;
     }
+    write_json(
+        &dir.join("search.json"),
+        &json!({ "version": VERSION, "id": id, "entries": search }),
+    )?;
     let manifest = json!({
         "version": VERSION,
         "id": id,
@@ -161,6 +176,7 @@ pub fn write(catalog: &Catalog, featured: &[String], dir: &Path) -> Result<usize
             .iter()
             .map(|(pool, rows)| json!({ "pool": pool, "file": format!("{pool}.json"), "count": rows.len() }))
             .collect::<Vec<_>>(),
+        "search": { "file": "search.json", "count": search.len() },
     });
     // The manifest last: readers that see the new id find the new files.
     write_json(&dir.join("manifest.json"), &manifest)?;
@@ -225,5 +241,15 @@ mod tests {
             5 * variants::SCREENS.len()
         );
         assert_eq!(read(&out, "undated.json")["paintings"], json!([]));
+        assert_eq!(
+            manifest["search"],
+            json!({ "file": "search.json", "count": 1 })
+        );
+        let search = read(&out, "search.json");
+        assert_eq!(search["id"], manifest["id"]);
+        assert_eq!(
+            search["entries"][0],
+            json!(["1", "The Night Watch", "A", "1642", "SK-C-5", "1600s"])
+        );
     }
 }

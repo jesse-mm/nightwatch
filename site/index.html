@@ -91,22 +91,6 @@
   </div>
 
   <main>
-    <section class="group debug" id="debug" aria-labelledby="g-debug" hidden>
-      <h2 id="g-debug" data-i18n="debug.title">Debug</h2>
-      <p class="debug-hint" data-i18n="debug.hint">Actions run on the phone: the page closes and the phone does it.</p>
-      <div class="debug-actions">
-        <button type="button" class="text-button" id="debug-milkmaid" data-i18n="debug.milkmaid">Pin The Milkmaid</button>
-        <button type="button" class="text-button" data-debug="new-painting" data-i18n="debug.newPainting">New painting now</button>
-        <button type="button" class="text-button" data-debug="resend" data-i18n="debug.resend">Re-send image to watch</button>
-        <button type="button" class="text-button" data-debug="clear-catalog" data-i18n="debug.clearCatalog">Clear catalog cache</button>
-        <button type="button" class="text-button" data-debug="reset" data-i18n="debug.reset">Reset phone storage</button>
-        <button type="button" class="text-button" id="debug-page-storage" data-i18n="debug.pageStorage">Clear this page’s storage</button>
-        <button type="button" class="text-button" id="debug-copy" data-i18n="debug.copy">Copy debug info</button>
-      </div>
-      <p class="label-status" id="debug-status" role="status"></p>
-      <pre class="debug-info" id="debug-info"></pre>
-    </section>
-
     <section class="group look block" aria-labelledby="g-look">
       <h2 id="g-look" data-i18n="look.title">Painting</h2>
       <div class="row stacked">
@@ -213,11 +197,14 @@
       </div>
       <form class="row stacked pin-form" id="pin-form">
         <label class="row-text" for="pin-input"><span data-i18n="pin.title">Pin a specific painting</span>
-          <small data-i18n="pin.help">Its object number (SK-C-5), Rijksmuseum id or a link to it. Pinning turns rotation off.</small></label>
+          <small data-i18n="pin.help">Search by title or artist, or enter an object number (SK-C-5) or a link. Pinning turns rotation off.</small></label>
         <span class="pin-field">
-          <input type="text" id="pin-input" placeholder="SK-C-5" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+          <input type="text" id="pin-input" placeholder="Title, artist or SK-C-5" data-i18n-attr="placeholder:pin.placeholder"
+            autocomplete="off" spellcheck="false" enterkeyhint="search"
+            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="pin-results">
           <button type="submit" class="text-button" data-i18n="pin.button">Pin</button>
         </span>
+        <ul class="pin-results" id="pin-results" role="listbox" hidden></ul>
         <span class="label-status" id="pin-status" role="status"></span>
       </form>
     </section>
@@ -315,6 +302,25 @@
         </div>
       </details>
     </section>
+
+    <details class="debug" id="debug" hidden>
+      <summary data-i18n="debug.title">Debug</summary>
+      <p class="debug-hint" data-i18n="debug.hint">Actions run on the phone: the page closes and the phone does it.</p>
+      <div class="debug-actions">
+        <button type="button" id="debug-milkmaid" data-i18n="debug.milkmaid">Pin The Milkmaid</button>
+        <button type="button" data-debug="new-painting" data-i18n="debug.newPainting">New painting now</button>
+        <button type="button" data-debug="resend" data-i18n="debug.resend">Re-send image to watch</button>
+        <button type="button" data-debug="clear-catalog" data-i18n="debug.clearCatalog">Clear catalog cache</button>
+        <button type="button" data-debug="reset" data-i18n="debug.reset">Reset phone storage</button>
+        <button type="button" id="debug-page-storage" data-i18n="debug.pageStorage">Clear this page’s storage</button>
+        <button type="button" id="debug-copy" data-i18n="debug.copy">Copy debug info</button>
+      </div>
+      <p class="debug-status" id="debug-status" role="status"></p>
+      <details class="debug-state">
+        <summary data-i18n="debug.state">Phone state</summary>
+        <pre class="debug-info" id="debug-info"></pre>
+      </details>
+    </details>
 
     <aside class="visit">
       <p class="visit-kicker" data-i18n="visit.kicker">Enjoying these paintings?</p>
