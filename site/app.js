@@ -99,13 +99,9 @@ catalogReady.then((cat) => {
 
 const LIGHTS = ['room', 'sun'];
 
-// The page's own preferences (preview light, the pinned preview's time) are
-// kept by the phone too (state.page, sent back on save): the Pebble app's web
-// view doesn't always keep this page's localStorage between openings.
-const pagePrefs = state.page || {};
-
+// Page-level preferences (preview light, the pinned preview's time) live in
+// this page's localStorage, saved as soon as they change.
 function savedPreviewLight() {
-  if (LIGHTS.includes(pagePrefs.previewLight)) return pagePrefs.previewLight;
   try {
     const saved = localStorage.getItem('tt-preview-light');
     return LIGHTS.includes(saved) ? saved : 'room';
@@ -120,7 +116,6 @@ const miniScreen = $('mini-screen');
 miniScreen.classList.toggle('round', Boolean(watch.round));
 
 function savedMiniTime() {
-  if (typeof pagePrefs.miniTime === 'boolean') return pagePrefs.miniTime;
   try {
     return localStorage.getItem('tt-mini-time') !== '0';
   } catch {
@@ -1160,8 +1155,6 @@ function saveToWatch() {
     // can fetch them without loading their catalog file.
     rows: rowsFor([chosen?.key, settings.pinned]),
     saveLook: lookTouched,
-    // This page's own preferences, for the phone to hand back next time.
-    page: { previewLight, miniTime },
     // From a restored backup: replaces every saved look ({version, looks}).
     looks: restoredLooks || undefined,
   });

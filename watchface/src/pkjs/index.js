@@ -35,9 +35,6 @@ var ROWS_KEY = 'tt-rows';
 var SOURCE_KEY = 'tt-pinned-source';
 // A pinned painting we can no longer get: shown on the settings page.
 var UNAVAILABLE_KEY = 'tt-unavailable';
-// The settings page's own preferences (preview light, the pinned preview's
-// time switch), kept here because its web view may forget them.
-var PAGE_KEY = 'tt-page';
 
 var DEFAULTS = settingsLib.DEFAULTS;
 
@@ -819,7 +816,7 @@ function looksForPage() {
 
 /** Every localStorage key we use, with the cached catalog files. */
 function storageKeys() {
-  var keys = [SETTINGS_KEY, 'tt-looks', ART_KEY, CATALOG_KEY, ROWS_KEY, SOURCE_KEY, UNAVAILABLE_KEY, PAGE_KEY];
+  var keys = [SETTINGS_KEY, 'tt-looks', ART_KEY, CATALOG_KEY, ROWS_KEY, SOURCE_KEY, UNAVAILABLE_KEY];
   var manifest = readJson(CATALOG_KEY);
   ((manifest && manifest.files) || []).forEach(function (f) {
     keys.push(CATALOG_KEY + '-' + f.pool);
@@ -897,8 +894,7 @@ Pebble.addEventListener('showConfiguration', function () {
     looks: looksForPage(),
     rows: rows,
     // The pinned painting can't be fetched any more (shown as a notice).
-    unavailable: readJson(UNAVAILABLE_KEY),
-    page: readJson(PAGE_KEY)
+    unavailable: readJson(UNAVAILABLE_KEY)
   };
   if (CONFIG.DEBUG) {
     state.debug = debugInfo();
@@ -968,9 +964,6 @@ Pebble.addEventListener('webviewclosed', function (e) {
   var note = readJson(UNAVAILABLE_KEY);
   if (note && note.key !== settings.pinned) {
     clearUnavailable();
-  }
-  if (result.page && typeof result.page === 'object') {
-    localStorage.setItem(PAGE_KEY, JSON.stringify(result.page));
   }
   // A restored backup replaces every saved look.
   if (result.looks && typeof result.looks === 'object') {
