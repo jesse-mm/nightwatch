@@ -892,7 +892,18 @@ canvas.draggable { cursor: grab; }
 canvas.draggable:active { cursor: grabbing; }
 
 /* Arrow buttons that nudge a Cover view. */
-.nudge { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.nudge { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; }
+.nudge svg {
+  display: block;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .nudge .text-button { margin-top: 0; min-width: 2.6rem; }
 .nudge .text-button:disabled { opacity: 0.35; cursor: default; }
 

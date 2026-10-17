@@ -110,11 +110,12 @@
           </small></span>
         <label class="range-label view-zoom" for="zoom"><span data-i18n="zoom.title">Zoom</span> <output id="zoom-out">100%</output></label>
         <input type="range" class="range" data-key="zoom" id="zoom" min="100" max="200" step="5">
+        <!-- Icons: Lucide "arrow-left", "arrow-up", "arrow-down" and "arrow-right" (ISC license) -->
         <div class="nudge" role="group" aria-label="Move the painting" data-i18n-attr="aria-label:nudge.group">
-          <button type="button" class="text-button" data-nudge="-1,0" aria-label="Show more to the left" data-i18n-attr="aria-label:nudge.left">←</button>
-          <button type="button" class="text-button" data-nudge="0,-1" aria-label="Show more above" data-i18n-attr="aria-label:nudge.up">↑</button>
-          <button type="button" class="text-button" data-nudge="0,1" aria-label="Show more below" data-i18n-attr="aria-label:nudge.down">↓</button>
-          <button type="button" class="text-button" data-nudge="1,0" aria-label="Show more to the right" data-i18n-attr="aria-label:nudge.right">→</button>
+          <button type="button" class="text-button" data-nudge="-1,0" aria-label="Show more to the left" data-i18n-attr="aria-label:nudge.left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+          <button type="button" class="text-button" data-nudge="0,-1" aria-label="Show more above" data-i18n-attr="aria-label:nudge.up"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button>
+          <button type="button" class="text-button" data-nudge="0,1" aria-label="Show more below" data-i18n-attr="aria-label:nudge.down"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></button>
+          <button type="button" class="text-button" data-nudge="1,0" aria-label="Show more to the right" data-i18n-attr="aria-label:nudge.right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
           <button type="button" class="text-button" id="view-reset" data-i18n="view.reset">Reset</button>
         </div>
       </div>
