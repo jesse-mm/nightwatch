@@ -11,7 +11,8 @@
     "test": "node --test 'watchface/test/*.test.js'",
     "lint:fix": "eslint . --fix",
     "site": "npx --yes serve@14.2.4 -l 8090 site",
-    "emulator-images": "node scripts/emulator-images.mjs"
+    "emulator-images": "node scripts/emulator-images.mjs",
+    "dev": "npm run emulator-images & npm run site"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

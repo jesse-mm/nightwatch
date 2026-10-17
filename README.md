@@ -95,7 +95,8 @@ date that stay out of its way.
 2. **Host the settings page** (see [docs/DEPLOY.md](docs/DEPLOY.md)): publish
    `site/` (with its generated `catalog/` folder) on any static host, e.g.
    GitHub Pages. The phone loads the catalog from there too. To test locally:
-   `npm run site` (serves `site/` on port 8090).
+   `npm run dev` (serves `site/` on port 8090, plus the emulator's image
+   helper on 8092).
 3. **Point the watchface at it:** edit `watchface/src/pkjs/config.js` →
    `SETTINGS_URL` (e.g. `http://<your-mac>:8090` for testing).
 4. **Build and install the watchface** with the Pebble SDK

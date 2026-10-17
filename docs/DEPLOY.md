@@ -66,8 +66,9 @@ block plain HTTP, so use HTTPS for the published page.
 ### Testing locally
 
 ```sh
-npm run site               # serves site/ on :8090 (npx serve)
-npm run emulator-images    # only for the emulator, on :8092 (see below)
+npm run dev                # both of these:
+npm run site               #   serves site/ on :8090 (npx serve)
+npm run emulator-images    #   only for the emulator, on :8092 (see below)
 ```
 
 Set `SETTINGS_URL` to `http://<your-mac>:8090` in `watchface/src/pkjs/config.js`,
