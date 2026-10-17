@@ -983,3 +983,12 @@ canvas.draggable:active { cursor: grabbing; }
 /* No empty status lines taking up room until there's something to say. */
 .group .label-status:empty,
 #status:empty { display: none; }
+
+/* The Zoom & position hints stack in one cell; only the current one shows. */
+.view-hints { display: grid; }
+.view-hints > span { grid-area: 1 / 1; visibility: hidden; }
+.view-hints[data-show="both"] > [data-hint="both"],
+.view-hints[data-show="x"] > [data-hint="x"],
+.view-hints[data-show="y"] > [data-hint="y"],
+.view-hints[data-show="none"] > [data-hint="none"],
+.view-hints:not([data-show]) > [data-hint="both"] { visibility: visible; }

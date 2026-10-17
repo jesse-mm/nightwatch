@@ -918,11 +918,7 @@ function updateViewControls() {
   const v = currentView();
   const freeX = Boolean(v && v.w < 0.999);
   const freeY = Boolean(v && v.h < 0.999);
-  $('view-hint').textContent = freeX && freeY
-    ? t('view.hint.both')
-    : freeX ? t('view.hint.x')
-      : freeY ? t('view.hint.y')
-        : t('view.hint.none');
+  $('view-hint').dataset.show = freeX && freeY ? 'both' : freeX ? 'x' : freeY ? 'y' : 'none';
   document.querySelectorAll('[data-nudge]').forEach((b) => {
     const sideways = b.dataset.nudge.split(',')[0] !== '0';
     b.disabled = !(sideways ? freeX : freeY);

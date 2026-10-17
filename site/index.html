@@ -101,7 +101,13 @@
       </div>
       <div class="row stacked view-group" data-show-if="coverView">
         <span class="row-text"><span data-i18n="view.title">Zoom &amp; position</span>
-          <small id="view-hint" data-i18n="view.hint.both">Drag the preview to move the painting.</small></span>
+          <!-- All hints share one spot, so the slider below stays put when the hint changes. -->
+          <small class="view-hints" id="view-hint">
+            <span data-hint="both" data-i18n="view.hint.both">Drag the preview to move the painting.</span>
+            <span data-hint="x" data-i18n="view.hint.x">Drag the preview sideways, or zoom in to move it up and down too.</span>
+            <span data-hint="y" data-i18n="view.hint.y">Drag the preview up or down, or zoom in to move it sideways too.</span>
+            <span data-hint="none" data-i18n="view.hint.none">Zoom in to move the painting.</span>
+          </small></span>
         <label class="range-label view-zoom" for="zoom"><span data-i18n="zoom.title">Zoom</span> <output id="zoom-out">100%</output></label>
         <input type="range" class="range" data-key="zoom" id="zoom" min="100" max="200" step="5">
         <div class="nudge" role="group" aria-label="Move the painting" data-i18n-attr="aria-label:nudge.group">
