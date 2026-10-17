@@ -39,7 +39,7 @@ const savedLooks = state.looks || {};
 let restoredLooks = null; // a restored backup's looks, written by the phone on save
 let lookTouched = false;
 // The painting on the watch keeps its own colors, zoom and position when it's
-// shown again (Restore); others without a saved look start from the defaults.
+// shown again (Undo); others without a saved look start from the defaults.
 const initialFresh = Object.fromEntries(window.TreasureLooks.FRESH.map((k) => [k, settings[k]]));
 const freshDefaults = Object.fromEntries(window.TreasureLooks.FRESH.map((k) => [k, DEFAULTS[k]])); // the reader changed the look: the phone saves it with the painting
 // A painting picked on this page; only hung on the watch when saved.
@@ -389,6 +389,8 @@ const byKey = (key) => (cat) => cat.get(key);
  */
 async function loadPreview(choose, { pick = false, useLook = true } = {}) {
   const id = ++requestId;
+  // Picking another painting can be undone: remember the one shown now.
+  const before = pick && shown ? undoEntry() : null;
   screenEl.classList.add('loading');
   setStatus(pick ? t('status.hanging') : '');
   try {
@@ -415,6 +417,7 @@ async function loadPreview(choose, { pick = false, useLook = true } = {}) {
     if (pick) chosen = meta;
     await showPainting(meta);
     if (id !== requestId) return null;
+    if (before && before.key !== meta.key) undoStack.push(before);
     showLabel(meta);
     const hint = chosen ? t('status.chosen') : '';
     setStatus(look ? `${hint} ${t('status.usingLook')}`.trim() : hint);
@@ -465,20 +468,35 @@ const randomPick = async (cat) => {
 };
 
 function updateShuffle() {
-  $('keep').hidden = $('mini-keep').hidden = !(chosen && art);
+  $('keep').hidden = $('mini-keep').hidden = undoStack.length === 0;
 }
 
 $('shuffle').addEventListener('click', () => loadPreview(randomPick, { pick: true }));
 
-// Back to the painting the watch shows now, after swapping a few times.
-function restoreOriginal() {
-  chosen = null;
-  updateShuffle();
-  refreshPreview({ useLook: true });
+// Undo: each tap goes back one painting (as it looked then, and pinned or
+// not), until the painting on the watch.
+const undoStack = [];
+
+function undoEntry() {
+  const look = {};
+  for (const k of [...window.TreasureLooks.KEYS, 'pinned']) look[k] = settings[k];
+  return { key: shown.key, chosen, look };
 }
 
-$('keep').addEventListener('click', restoreOriginal);
-$('mini-keep').addEventListener('click', restoreOriginal);
+function undo() {
+  const entry = undoStack.pop();
+  if (!entry) return;
+  chosen = entry.chosen;
+  Object.assign(settings, entry.look);
+  if (settings.pinned) showPinned(entry.chosen?.title || shown?.title || '');
+  syncControls();
+  update();
+  updateShuffle();
+  loadPreview(byKey(entry.key), { useLook: false });
+}
+
+$('keep').addEventListener('click', undo);
+$('mini-keep').addEventListener('click', undo);
 
 // ---------------- pin a painting ----------------
 

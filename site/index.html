@@ -47,11 +47,11 @@
           <span data-i18n="label.discover">Discover</span>
         </a>
       </p>
-      <p class="label-actions" data-show-if="notPinned">
-        <button type="button" class="text-button" id="shuffle" data-i18n="label.shuffle">Hang a different painting</button>
+      <p class="label-actions">
+        <button type="button" class="text-button" id="shuffle" data-show-if="notPinned" data-i18n="label.shuffle">Hang a different painting</button>
         <button type="button" class="text-button icon-button" id="keep" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
-          <span data-i18n="label.restore">Restore original</span>
+          <span data-i18n="label.undo">Undo</span>
         </button>
       </p>
       <p class="label-status" id="status" role="status"></p>
@@ -73,7 +73,7 @@
         <button type="button" class="text-button" id="mini-shuffle" data-show-if="notPinned" data-i18n="mini.shuffle">Swap painting</button>
         <button type="button" class="text-button icon-button" id="mini-keep" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
-          <span data-i18n="mini.restore">Restore</span>
+          <span data-i18n="mini.undo">Undo</span>
         </button>
         <button type="button" class="text-button icon-button" id="mini-time" aria-pressed="false">
           <!-- Lucide "clock" (ISC license) -->
