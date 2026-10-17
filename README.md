@@ -114,15 +114,16 @@ cd server && cargo run                   # server on :8080, data in ./data
 
 ## Verify on first run
 
-Checked against the live services and the SDK 4.17 emulators (basalt, chalk, emery):
+Built with Pebble SDK 4.33.1 (`pebble sdk install latest`). Checked against the live
+services and the SDK emulators (basalt, chalk, emery, gabbro):
 
 - **Rijksmuseum API.** The search URL works as is. Object records must be requested
   with plain `Accept: application/ld+json`; adding `profile=` gets a 400. The image
   license is read from `subject_to` on the VisualItem (the CC0 under `subject_of` is
   the metadata license, not the artwork's).
 - **LECO glyphs.** `LECO_20_BOLD_NUMBERS` includes `-`, so the date renders as `15-10`.
-- **Text box insets.** `TIME_TOP_INSET 7` / `DATE_TOP_INSET 6` give the "Always" box
-  3 px of padding above and below the digits.
+- **Text box insets.** The per-size font insets in `TEXT_SIZES` (`main.c`) give the
+  readability box 3 px of padding above and below the digits.
 
 Still to check on a real watch:
 
