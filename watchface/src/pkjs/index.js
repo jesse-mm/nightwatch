@@ -316,7 +316,7 @@ function withCatalog(refresh, done, fail) {
     done(Catalog.create(cached));
     return;
   }
-  getText(PAGE_URL + '/catalog/manifest.json?t=' + Date.now(), function (text) {
+  getText(PAGE_URL + '/catalog/manifest.json', function (text) {
     var manifest;
     try {
       manifest = JSON.parse(text);
@@ -353,8 +353,7 @@ function withPool(cat, pool, done, fail) {
     fail('no catalog file for ' + pool);
     return;
   }
-  // ?id=: cached per catalog version, never a file from another run.
-  getText(PAGE_URL + '/catalog/' + file + '?id=' + cat.id, function (text) {
+  getText(PAGE_URL + '/catalog/' + file, function (text) {
     var part;
     try {
       part = JSON.parse(text);
@@ -900,8 +899,7 @@ Pebble.addEventListener('showConfiguration', function () {
   if (CONFIG.DEBUG) {
     state.debug = debugInfo();
   }
-  // ?v=<time>: a fresh page every time, never an old copy from a cache.
-  Pebble.openURL(PAGE_URL + '/?v=' + Date.now() + (CONFIG.DEBUG ? '&debug=true' : '') + '#' +
+  Pebble.openURL(PAGE_URL + '/' + (CONFIG.DEBUG ? '?debug=true' : '') + '#' +
     encodeURIComponent(JSON.stringify(state)));
 });
 
