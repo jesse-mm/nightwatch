@@ -96,7 +96,6 @@
   "pinned.goneKeep": "{hasTitle, select, yes {“{title}”} other {This painting}} is no longer available from the Rijksmuseum. Your watch keeps showing it as it is; unpin it to hang other paintings again.",
   "pin.title": "Pin a specific painting",
   "pin.help": "Search by title or artist, or enter an object number (SK-C-5) or a link. Pinning turns rotation off.",
-  "pin.button": "Pin",
   "pin.placeholder": "Title, artist or SK-C-5",
   "pin.searchLoading": "Loading the paintings…",
   "pin.searchNone": "No paintings match “{query}”.",

@@ -96,7 +96,6 @@
   "pinned.goneKeep": "{hasTitle, select, yes {“{title}”} other {Dit schilderij}} is niet meer beschikbaar bij het Rijksmuseum. Je horloge blijft het tonen zoals het is; maak het los om weer andere schilderijen op te hangen.",
   "pin.title": "Zet een bepaald schilderij vast",
   "pin.help": "Zoek op titel of kunstenaar, of vul een objectnummer (SK-C-5) of een link in. Vastzetten zet het wisselen uit.",
-  "pin.button": "Vastzetten",
   "pin.placeholder": "Titel, kunstenaar of SK-C-5",
   "pin.searchLoading": "De schilderijen worden geladen…",
   "pin.searchNone": "Geen schilderijen gevonden voor “{query}”.",
