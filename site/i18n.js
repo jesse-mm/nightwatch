@@ -160,6 +160,12 @@
     // Now the page logic, which needs the texts from the start.
     const script = document.createElement('script');
     script.src = 'app.js';
+    // The first-launch tour points at the page app.js has set up.
+    script.addEventListener('load', () => {
+      const tour = document.createElement('script');
+      tour.src = 'tour.js';
+      document.body.append(tour);
+    });
     document.body.append(script);
   });
 })();
