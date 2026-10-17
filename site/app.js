@@ -271,7 +271,9 @@ function renderPreview() {
   const anyText = settings.showTime || settings.showDate;
   // The pinned preview shows the time on request, as it looks after a shake.
   const overlays = [
-    [$('overlay'), !anyText || settings.hideUntilShake],
+    // Shown as after a flick even with Auto hide on: the preview is where the
+    // time's look (position, size, readability) is set.
+    [$('overlay'), !anyText],
     [$('mini-overlay'), !anyText || !miniTime],
   ];
   for (const [overlay, hidden] of overlays) {
