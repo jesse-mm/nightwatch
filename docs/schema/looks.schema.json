@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Treasure Trove looks per painting (localStorage tt-looks)",
+  "description": "The look a reader saved for each painting; written by server/static/config/looks.js.",
+  "type": "object",
+  "required": [
+    "version",
+    "looks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "Storage version; see MIGRATIONS in looks.js"
+    },
+    "looks": {
+      "type": "object",
+      "description": "Painting key (Rijksmuseum id) → look",
+      "propertyNames": {
+        "pattern": "^[0-9A-Za-z_-]+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/look"
+      }
+    }
+  },
+  "$defs": {
+    "look": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fit": {
+          "enum": [
+            "fill",
+            "whole"
+          ],
+          "description": "Crop: fill = Cover, whole = Contain"
+        },
+        "frame": {
+          "enum": [
+            "none",
+            "gold",
+            "wood",
+            "gallery"
+          ],
+          "description": "Frame drawn around the painting"
+        },
+        "palette": {
+          "enum": [
+            "defined",
+            "sun",
+            "room",
+            "backlight"
+          ],
+          "description": "Color tuning: Accurate, Daylight, Indoors, Backlight"
+        },
+        "dither": {
+          "enum": [
+            "atkinson",
+            "checker",
+            "none"
+          ],
+          "description": "Dithering: Atkinson, 50:50, Off"
+        },
+        "brightness": {
+          "type": "integer",
+          "minimum": -100,
+          "maximum": 100,
+          "description": "Brightness adjustment"
+        },
+        "contrast": {
+          "type": "integer",
+          "minimum": -100,
+          "maximum": 100,
+          "description": "Contrast adjustment"
+        },
+        "textRow": {
+          "enum": [
+            "top",
+            "bottom"
+          ],
+          "description": "Time and date row"
+        },
+        "textCol": {
+          "enum": [
+            "auto",
+            "start",
+            "center",
+            "end"
+          ],
+          "description": "Time and date column: start = left, end = right, auto = end (round screens are always centered)"
+        },
+        "timeSize": {
+          "enum": [
+            "s",
+            "m",
+            "l"
+          ],
+          "description": "Time size"
+        }
+      }
+    }
+  }
+}

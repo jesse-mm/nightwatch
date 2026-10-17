@@ -16,34 +16,12 @@ var base64 = require('./base64');
 var rotation = require('./rotation');
 var render = require('./render');
 var looks = require('./looks');
+var settingsLib = require('./settings');
 
 var SETTINGS_KEY = 'tt-settings';
 var ART_KEY = 'tt-art';
 
-var DEFAULTS = {
-  showTime: true,
-  clockMode: 'auto',     // auto | 12 | 24
-  hideAmPm: false,
-  showDate: true,
-  dateFormat: 'dd-mm',   // dd-mm | mm-dd | dd
-  dateSep: '-',          // - | / | .
-  hideUntilShake: false,
-  revealMinutes: 1,      // how long a flick shows the time (1-60)
-  boxMode: 'off',        // off | always
-  textRow: 'bottom',     // top | bottom
-  textCol: 'auto',       // left | center | right; auto = right (round screens: always center)
-  timeSize: 's',         // s | m | l
-  fit: 'fill',           // fill | whole
-  palette: 'defined',    // defined | sun | room | backlight
-  dither: 'atkinson',    // atkinson | checker | none (applied here, render.js)
-  brightness: 0,         // -100..100
-  contrast: 0,           // -100..100
-  frame: 'none',         // none | gold | wood | gallery
-  selection: 'featured', // featured (365 most-read) | random
-  era: 'any',            // for random: any | pre1600 | 1600s | 1700s | 1800s | 1900s
-  rotation: 'daily',     // daily | weekly | monthly | off
-  pinned: ''             // key of a painting chosen by id; set = no rotation
-};
+var DEFAULTS = settingsLib.DEFAULTS;
 
 var watch = null;        // screen info from the watch's Hello
 var fetching = false;
@@ -67,14 +45,11 @@ function readJson(key) {
 }
 
 function loadSettings() {
-  var saved = readJson(SETTINGS_KEY) || {};
-  var s = {};
-  for (var k in DEFAULTS) {
-    if (Object.prototype.hasOwnProperty.call(DEFAULTS, k)) {
-      s[k] = Object.prototype.hasOwnProperty.call(saved, k) ? saved[k] : DEFAULTS[k];
-    }
-  }
-  return s;
+  return settingsLib.load(readJson(SETTINGS_KEY));
+}
+
+function storeSettings(settings) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsLib.toStored(settings)));
 }
 
 function pad(n) {
@@ -182,7 +157,7 @@ function sendSettings(s) {
 /** Row * 3 + column. Round screens are always centered; "auto" is the right on others. */
 function textPos(s) {
   var row = s.textRow === 'top' ? 0 : 1;
-  var col = ['left', 'center', 'right'].indexOf(s.textCol);
+  var col = ['start', 'center', 'end'].indexOf(s.textCol);
   if (watch && watch.round) {
     col = 1;
   } else if (col < 0) {
@@ -326,7 +301,7 @@ function applyLook(settings, look) {
     }
   }
   if (changed) {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    storeSettings(settings);
     sendSettings(settings);
   }
   return changed;
@@ -453,13 +428,23 @@ Pebble.addEventListener('appmessage', function (e) {
   ensureArt(); // Hello 2 = new day; the date check picks a new painting.
 });
 
+/**
+ * The saved looks, for previews on the settings page. They travel in the
+ * page's URL, so past ~100 KB (hundreds of looks) the page goes without them;
+ * the phone still applies them when it hangs a painting.
+ */
+function looksForPage() {
+  var saved = looks.all(localStorage);
+  return JSON.stringify(saved).length > 100000 ? {} : saved;
+}
+
 Pebble.addEventListener('showConfiguration', function () {
   var art = readJson(ART_KEY);
   var state = {
-    settings: loadSettings(),
+    settings: settingsLib.toStored(loadSettings()),
     art: art ? art.meta : null,
     watch: watch,
-    looks: looks.all(localStorage)
+    looks: looksForPage()
   };
   Pebble.openURL(CONFIG.SERVER_URL + '/config/#' + encodeURIComponent(JSON.stringify(state)));
 });
@@ -480,13 +465,22 @@ Pebble.addEventListener('webviewclosed', function (e) {
       return;
     }
   }
-  var settings = loadSettings();
-  for (var k in DEFAULTS) {
-    if (Object.prototype.hasOwnProperty.call(result.settings || {}, k)) {
-      settings[k] = result.settings[k];
+  // The page says which settings version it speaks (none = before versioning).
+  var sent = result.settings || {};
+  var stamped = { version: typeof result.version === 'number' ? result.version : 0 };
+  for (var key in sent) {
+    if (Object.prototype.hasOwnProperty.call(sent, key)) {
+      stamped[key] = sent[key];
     }
   }
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  var incoming = settingsLib.load(stamped);
+  var settings = loadSettings();
+  for (var k in DEFAULTS) {
+    if (Object.prototype.hasOwnProperty.call(sent, k)) {
+      settings[k] = incoming[k];
+    }
+  }
+  storeSettings(settings);
   sendSettings(settings);
   // The reader changed the look: remember it for the painting that ends up on
   // the watch, so it comes back whenever that painting is hung again.

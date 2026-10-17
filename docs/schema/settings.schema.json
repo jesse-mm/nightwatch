@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Treasure Trove settings (localStorage tt-settings)",
+  "description": "The watchface settings as stored by the phone; defaults and migrations live in server/static/config/settings.js.",
+  "type": "object",
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "Storage version; see MIGRATIONS in settings.js"
+    },
+    "showTime": {
+      "type": "boolean",
+      "default": true
+    },
+    "clockMode": {
+      "enum": [
+        "auto",
+        "12",
+        "24"
+      ],
+      "default": "auto",
+      "description": "auto follows the watch"
+    },
+    "hideAmPm": {
+      "type": "boolean",
+      "default": false
+    },
+    "showDate": {
+      "type": "boolean",
+      "default": true
+    },
+    "dateFormat": {
+      "enum": [
+        "dd-mm",
+        "mm-dd",
+        "dd"
+      ],
+      "default": "dd-mm"
+    },
+    "dateSep": {
+      "enum": [
+        "-",
+        "/",
+        "."
+      ],
+      "default": "-"
+    },
+    "hideUntilShake": {
+      "type": "boolean",
+      "default": false,
+      "description": "Auto hide: show the time after a flick"
+    },
+    "revealMinutes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 60,
+      "default": 1
+    },
+    "boxMode": {
+      "enum": [
+        "off",
+        "always"
+      ],
+      "default": "off",
+      "description": "Improve readability: a dark box behind the time"
+    },
+    "fit": {
+      "enum": [
+        "fill",
+        "whole"
+      ],
+      "description": "Crop: fill = Cover, whole = Contain",
+      "default": "fill"
+    },
+    "frame": {
+      "enum": [
+        "none",
+        "gold",
+        "wood",
+        "gallery"
+      ],
+      "description": "Frame drawn around the painting",
+      "default": "none"
+    },
+    "palette": {
+      "enum": [
+        "defined",
+        "sun",
+        "room",
+        "backlight"
+      ],
+      "description": "Color tuning: Accurate, Daylight, Indoors, Backlight",
+      "default": "defined"
+    },
+    "dither": {
+      "enum": [
+        "atkinson",
+        "checker",
+        "none"
+      ],
+      "description": "Dithering: Atkinson, 50:50, Off",
+      "default": "atkinson"
+    },
+    "brightness": {
+      "type": "integer",
+      "minimum": -100,
+      "maximum": 100,
+      "description": "Brightness adjustment",
+      "default": 0
+    },
+    "contrast": {
+      "type": "integer",
+      "minimum": -100,
+      "maximum": 100,
+      "description": "Contrast adjustment",
+      "default": 0
+    },
+    "textRow": {
+      "enum": [
+        "top",
+        "bottom"
+      ],
+      "description": "Time and date row",
+      "default": "bottom"
+    },
+    "textCol": {
+      "enum": [
+        "auto",
+        "start",
+        "center",
+        "end"
+      ],
+      "description": "Time and date column: start = left, end = right, auto = end (round screens are always centered)",
+      "default": "auto"
+    },
+    "timeSize": {
+      "enum": [
+        "s",
+        "m",
+        "l"
+      ],
+      "description": "Time size",
+      "default": "s"
+    },
+    "selection": {
+      "enum": [
+        "featured",
+        "random"
+      ],
+      "default": "featured",
+      "description": "Collection: Featured (365 most read) or Selection (any)"
+    },
+    "era": {
+      "enum": [
+        "any",
+        "pre1600",
+        "1600s",
+        "1700s",
+        "1800s",
+        "1900s"
+      ],
+      "default": "any",
+      "description": "Paintings from, for Selection"
+    },
+    "rotation": {
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly",
+        "off"
+      ],
+      "default": "daily",
+      "description": "How often to swap the painting"
+    },
+    "pinned": {
+      "type": "string",
+      "default": "",
+      "description": "Key of a pinned painting; empty = not pinned"
+    }
+  }
+}

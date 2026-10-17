@@ -39,7 +39,7 @@ export default defineConfig([
   // The shared renderer runs in PebbleKit JS too, so it's held to ES5 (with the
   // typed arrays every runtime has). Loaded as CommonJS or a plain <script>.
   {
-    files: ['server/static/config/render.js', 'server/static/config/looks.js'],
+    files: ['server/static/config/render.js', 'server/static/config/looks.js', 'server/static/config/settings.js'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 5,
@@ -62,7 +62,7 @@ export default defineConfig([
   // Settings page: a modern phone webview.
   {
     files: ['server/static/**/*.js'],
-    ignores: ['server/static/config/render.js', 'server/static/config/looks.js'],
+    ignores: ['server/static/config/render.js', 'server/static/config/looks.js', 'server/static/config/settings.js'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,

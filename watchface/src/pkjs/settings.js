@@ -1,0 +1,1 @@
+../../../server/static/config/settings.js

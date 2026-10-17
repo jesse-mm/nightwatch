@@ -2,30 +2,7 @@
 // Opened by the phone app with the current state in the URL hash, and closed by
 // navigating to `return_to` (emulator) or `pebblejs://close#` with the result.
 
-const DEFAULTS = {
-  showTime: true,
-  clockMode: 'auto',
-  hideAmPm: false,
-  showDate: true,
-  dateFormat: 'dd-mm',
-  dateSep: '-',
-  hideUntilShake: false,
-  revealMinutes: 1,
-  boxMode: 'off',
-  textRow: 'bottom',
-  textCol: 'auto',
-  timeSize: 's',
-  fit: 'fill',
-  palette: 'defined',
-  frame: 'none',
-  dither: 'atkinson',
-  brightness: 0,
-  contrast: 0,
-  selection: 'featured',
-  era: 'any',
-  rotation: 'daily',
-  pinned: '',
-};
+const DEFAULTS = window.TreasureSettings.DEFAULTS;
 
 // Settings the preview reacts to: a new fit needs another crop from the server;
 // tuning and frame are applied right here (render.js, the same code as the phone).
@@ -44,13 +21,14 @@ function readState() {
 }
 
 const state = readState();
-const settings = { ...DEFAULTS, ...(state.settings || {}) };
+// Migrated to this page's settings version (the phone may be older or newer).
+const settings = window.TreasureSettings.load(state.settings);
 // The double-flick box toggle was removed; treat older saved values as off.
 if (settings.boxMode !== 'always') settings.boxMode = 'off';
 const art = state.art || null;
 const watch = state.watch || { w: 144, h: 168, round: 0 };
 // "auto" is where the watch puts the time by default.
-if (settings.textCol === 'auto') settings.textCol = watch.round ? 'center' : 'right';
+if (settings.textCol === 'auto') settings.textCol = watch.round ? 'center' : 'end';
 
 // Looks saved per painting on the phone (looks.js): crop, frame, color tuning
 // and time placement. A painting shown here gets its saved look back.
@@ -274,10 +252,10 @@ function placeOverlay(overlay, px) {
   const top = settings.textRow === 'top' ? edge : watch.h - edge - blockH;
   // Round screens only offer top or bottom, always centered.
   const col = round ? 'center' : settings.textCol;
-  const left = col === 'left' ? margin : col === 'right' ? watch.w - margin - blockW : (watch.w - blockW) / 2;
+  const left = col === 'start' ? margin : col === 'end' ? watch.w - margin - blockW : (watch.w - blockW) / 2;
   overlay.style.left = `${(left - pad) * px}px`;
   overlay.style.top = `${(top - pad) * px}px`;
-  overlay.style.alignItems = { left: 'flex-start', right: 'flex-end' }[col] || 'center';
+  overlay.style.alignItems = { start: 'flex-start', end: 'flex-end' }[col] || 'center';
 }
 
 // ---------------- wall label ----------------
@@ -329,9 +307,9 @@ function setStatus(text) {
 
 /** The painting's saved look, or null. */
 function savedLook(key) {
-  if (!Object.hasOwn(savedLooks, key)) return null;
   const look = window.TreasureLooks.decode(savedLooks[key], settings);
-  if (look.textCol === 'auto') look.textCol = watch.round ? 'center' : 'right';
+  if (!look) return null;
+  if (look.textCol === 'auto') look.textCol = watch.round ? 'center' : 'end';
   return look;
 }
 
@@ -717,6 +695,11 @@ function returnTo() {
 }
 
 $('save').addEventListener('click', () => {
-  const result = { settings, artKey: chosen ? chosen.key : null, saveLook: lookTouched };
+  const result = {
+    version: window.TreasureSettings.VERSION,
+    settings,
+    artKey: chosen ? chosen.key : null,
+    saveLook: lookTouched,
+  };
   document.location = returnTo() + encodeURIComponent(JSON.stringify(result));
 });

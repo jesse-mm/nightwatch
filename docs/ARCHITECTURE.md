@@ -33,16 +33,51 @@ Two programs share one Rust library (`server/src/lib.rs`):
 6. At midnight the watch's tick handler sends Hello again with reason 2, and the
    date check on the phone fetches a new painting.
 
-### Looks per painting (phone, `looks.js`)
+### Settings and looks on the phone (`settings.js`, `looks.js`)
 
-When the reader changes the crop, frame, color tuning or time placement and
-saves, the phone remembers that look for the painting on the watch, in
-`localStorage` (`tt-looks`): one compact string per painting key, e.g.
-`"200108369": "0,1,0,2,10,-5,1,0,0"` (option indexes and numbers, in a fixed
-order). A painting with a saved look gets it back whenever it is hung again,
-by rotation, a swap or a pin; others keep the current settings. The settings
-page gets the saved looks too, so a swapped-in painting previews with its own
-look. `looks.js` lives next to `render.js` and is shared the same way.
+The phone keeps two things in `localStorage`, both versioned JSON described by
+a JSON Schema in [`docs/schema/`](schema/):
+
+| Key | What | Schema | Code |
+|---|---|---|---|
+| `tt-settings` | The watchface settings plus `version` | [`settings.schema.json`](schema/settings.schema.json) | `settings.js`: `DEFAULTS`, `VERSION`, `MIGRATIONS` |
+| `tt-looks` | `{version, looks}`: a look per painting | [`looks.schema.json`](schema/looks.schema.json) | `looks.js`: `FIELDS`, `VERSION`, `MIGRATIONS` |
+
+Both modules live next to `render.js` and are shared the same way (the phone
+and the settings page load the same file). Reading runs every migration from
+the stored version up, keeps only known fields and fills the rest from the
+defaults. To change what a stored value means: bump `VERSION`, add a step to
+`MIGRATIONS`, and update the schema (`npm test` checks the schemas against the
+code). The page and the phone also tell each other their settings version, so
+a newer settings page works with an older phone app and the other way round.
+
+**Looks per painting.** When the reader changes the crop, frame, color tuning
+or time placement and saves, the phone remembers that look for the painting
+on the watch:
+
+```json
+{"version": 1, "looks": {"200108369": {"fit": "fill", "frame": "gold",
+  "palette": "defined", "dither": "atkinson", "brightness": 10, "contrast": -5,
+  "textRow": "bottom", "textCol": "end", "timeSize": "s"}}}
+```
+
+| Field | Setting | Values |
+|---|---|---|
+| `fit` | Crop | `fill` (Cover), `whole` (Contain) |
+| `frame` | Frame | `none`, `gold`, `wood`, `gallery` |
+| `palette` | Color tuning | `defined` (Accurate), `sun` (Daylight), `room` (Indoors), `backlight` |
+| `dither` | Dithering | `atkinson`, `checker` (50:50), `none` (Off) |
+| `brightness` | Brightness | −100…100 |
+| `contrast` | Contrast | −100…100 |
+| `textRow` | Time row | `top`, `bottom` |
+| `textCol` | Time column | `auto`, `start` (left), `center`, `end` (right) |
+| `timeSize` | Time size | `s`, `m`, `l` |
+
+A look is about 160 bytes, so even one for every painting (~0.8 MB) fits the
+~5 MB storage. A painting with a saved look gets it back whenever it is hung
+again, by rotation, a swap or a pin; others keep the current settings. The
+settings page gets the saved looks too (in its URL, so only up to ~100 KB of
+them), so a swapped-in painting previews with its own look.
 
 ### Rotation, Featured and pinning (phone, `rotation.js`)
 

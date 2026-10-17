@@ -2,10 +2,19 @@
  * Per-painting looks: the crop, frame, color tuning and time placement a
  * reader saved for a painting, so they come back whenever it is hung again.
  *
- * Stored in localStorage as one small map, painting key → compact string:
- * the LOOK fields in order, joined by commas, each an option index or a
- * number, e.g. "0,1,0,2,10,-5,1,0,0". Unknown or missing parts fall back to
- * the defaults passed in, so the format can grow at the end.
+ * Stored in localStorage ("tt-looks") as readable JSON with a version, looks
+ * keyed by painting:
+ *
+ *   {"version": 1, "looks": {"200108369": {"fit": "fill", "frame": "gold",
+ *     "palette": "defined", "dither": "atkinson", "brightness": 10,
+ *     "contrast": -5, "textRow": "bottom", "textCol": "end", "timeSize": "s"}}}
+ *
+ * The shape is described by docs/schema/looks.schema.json; the fields and
+ * their values are in FIELDS below. When a field changes meaning, bump VERSION
+ * and add a step to MIGRATIONS.
+ * Unknown fields or values are skipped and missing ones fall back to the
+ * defaults, so fields can be added or dropped later without breaking saved
+ * looks. About 160 bytes per painting.
  *
  * Shared by the phone (PebbleKit JS) and the settings page, like render.js.
  * ES5 on purpose: PebbleKit JS is not a modern browser.
@@ -21,55 +30,90 @@
   'use strict';
 
   var STORE_KEY = 'tt-looks';
+  var VERSION = 1;
 
-  // Order matters: it is the storage format. Only append.
-  var LOOK = [
-    { key: 'fit', options: ['fill', 'whole'] },
-    { key: 'frame', options: ['none', 'gold', 'wood', 'gallery'] },
-    { key: 'palette', options: ['defined', 'sun', 'room', 'backlight'] },
-    { key: 'dither', options: ['atkinson', 'checker', 'none'] },
-    { key: 'brightness' },
-    { key: 'contrast' },
-    { key: 'textRow', options: ['bottom', 'top'] },
-    { key: 'textCol', options: ['auto', 'left', 'center', 'right'] },
-    { key: 'timeSize', options: ['s', 'm', 'l'] }
-  ];
+  // Setting → allowed values; null = a number from -100 to 100.
+  var FIELDS = {
+    fit: ['fill', 'whole'],
+    frame: ['none', 'gold', 'wood', 'gallery'],
+    palette: ['defined', 'sun', 'room', 'backlight'],
+    dither: ['atkinson', 'checker', 'none'],
+    brightness: null,
+    contrast: null,
+    textRow: ['top', 'bottom'],
+    textCol: ['auto', 'start', 'center', 'end'],
+    timeSize: ['s', 'm', 'l']
+  };
 
-  /** The look in `settings` as a compact string. */
-  function encode(settings) {
-    return LOOK.map(function (field) {
-      var value = settings[field.key];
-      if (!field.options) {
-        return String(Math.round(Number(value) || 0));
-      }
-      return String(Math.max(0, field.options.indexOf(value)));
-    }).join(',');
+  var KEYS = Object.keys(FIELDS);
+
+  function clampNumber(value) {
+    return Math.min(100, Math.max(-100, Math.round(Number(value) || 0)));
   }
 
-  /** The settings a compact string stands for; missing parts come from `defaults`. */
-  function decode(text, defaults) {
-    var parts = String(text || '').split(',');
+  /** The look fields of `settings`. */
+  function encode(settings) {
+    var look = {};
+    KEYS.forEach(function (key) {
+      look[key] = FIELDS[key] ? settings[key] : clampNumber(settings[key]);
+    });
+    return look;
+  }
+
+  /**
+   * A stored look as settings; missing or unknown values come from `defaults`.
+   * Null when there is no usable look.
+   */
+  function decode(look, defaults) {
+    if (!look || typeof look !== 'object') {
+      return null;
+    }
     var out = {};
-    LOOK.forEach(function (field, i) {
-      var part = parts[i];
-      var n = Number(part);
-      if (part === undefined || part === '' || isNaN(n)) {
-        out[field.key] = defaults[field.key];
-      } else if (field.options) {
-        out[field.key] = field.options[n] !== undefined ? field.options[n] : defaults[field.key];
+    KEYS.forEach(function (key) {
+      var value = look[key];
+      var allowed = FIELDS[key];
+      if (allowed) {
+        out[key] = allowed.indexOf(value) >= 0 ? value : defaults[key];
       } else {
-        out[field.key] = Math.min(100, Math.max(-100, Math.round(n)));
+        out[key] = typeof value === 'number' && isFinite(value) ? clampNumber(value) : defaults[key];
       }
     });
     return out;
   }
 
+  // MIGRATIONS[n] turns a version-n look into version n + 1 (in place).
+  var MIGRATIONS = [
+    // 0 (a bare map, before versioning) → 1: time column left/right → start/end.
+    function (look) {
+      if (look.textCol === 'left') look.textCol = 'start';
+      if (look.textCol === 'right') look.textCol = 'end';
+    }
+  ];
+
+  /** Every saved look at the current version, painting key → look. */
   function readAll(storage) {
+    var stored;
     try {
-      return JSON.parse(storage.getItem(STORE_KEY)) || {};
+      stored = JSON.parse(storage.getItem(STORE_KEY));
     } catch (e) {
       return {}; // unreadable: start over rather than fail
     }
+    if (!stored || typeof stored !== 'object') {
+      return {};
+    }
+    var version = typeof stored.version === 'number' ? stored.version : 0;
+    var map = version === 0 ? stored : stored.looks || {};
+    var out = {};
+    for (var key in map) {
+      // Skip anything that isn't a look object (e.g. an early string format).
+      if (Object.prototype.hasOwnProperty.call(map, key) && map[key] && typeof map[key] === 'object') {
+        out[key] = map[key];
+        for (var v = version; v < VERSION; v++) {
+          MIGRATIONS[v](out[key]);
+        }
+      }
+    }
+    return out;
   }
 
   /** The saved look for a painting, or null. */
@@ -86,19 +130,21 @@
     var all = readAll(storage);
     all[paintingKey] = encode(settings);
     try {
-      storage.setItem(STORE_KEY, JSON.stringify(all));
+      storage.setItem(STORE_KEY, JSON.stringify({ version: VERSION, looks: all }));
     } catch (e) {
       // Storage full or unavailable: the look just isn't remembered.
     }
   }
 
-  /** Every saved look, painting key → compact string (for the settings page). */
+  /** Every saved look, painting key → look (for the settings page). */
   function all(storage) {
     return readAll(storage);
   }
 
   return {
-    KEYS: LOOK.map(function (field) { return field.key; }),
+    VERSION: VERSION,
+    FIELDS: FIELDS,
+    KEYS: KEYS,
     encode: encode,
     decode: decode,
     get: get,
