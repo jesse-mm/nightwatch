@@ -43,3 +43,21 @@ warranty of any kind.
 (https://github.com/foliojs/tiny-inflate), unchanged. Copyright (c) 2015-present
 Devon Govett, MIT License. It inflates the PNG crops the phone downloads from the
 Rijksmuseum's IIIF server.
+
+## intl-messageformat (BSD-3-Clause)
+`site/vendor/intl-messageformat-11.2.0.iife.js` is FormatJS intl-messageformat
+11.2.0 (https://github.com/formatjs/formatjs), unmodified, from
+https://cdn.jsdelivr.net/npm/intl-messageformat@11.2.0/intl-messageformat.iife.js.
+It formats the settings page's translations. Its license is in
+`site/vendor/intl-messageformat-11.2.0.LICENSE.txt`: Copyright (c) 2023, Oath
+Inc., New BSD license (BSD-3-Clause).
+
+## OpenSeadragon (BSD-3-Clause)
+`site/vendor/openseadragon-4.1.0.min.js` is OpenSeadragon 4.1.0
+(https://openseadragon.github.io, from the npm package), unchanged, for the
+Zoom detailed view. License: `site/vendor/openseadragon-4.1.0.LICENSE.txt`.
+
+## Fonts (SIL Open Font License 1.1)
+`site/fonts/` holds Figtree, Source Serif 4 and Barlow Semi Condensed (latin
+and latin-ext subsets, WOFF2, as served by Google Fonts), self-hosted. Each
+font's license is next to it as `*.OFL.txt`.

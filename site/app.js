@@ -3,6 +3,9 @@
 // navigating to `return_to` (emulator) or `pebblejs://close#` with the result.
 
 const DEFAULTS = window.TreasureSettings.DEFAULTS;
+// Translated text (i18n.js, translations/*.json). i18n.js loads this file once
+// the texts are in.
+const t = (key, vars) => window.TreasureI18n.t(key, vars);
 
 // Settings the preview reacts to: a new fit needs another crop from the server;
 // tuning and frame are applied right here (render.js, the same code as the phone).
@@ -79,7 +82,7 @@ async function loadPool(cat, pool) {
   if (!file) throw new Error(`no catalog file for ${pool}`);
   const res = await fetch(`catalog/${file}`);
   if (!res.ok) throw new Error(`catalog: HTTP ${res.status}`);
-  if (!cat.add(await res.json())) throw new Error('the catalog changed; reopen the settings');
+  if (!cat.add(await res.json())) throw new Error(t('error.catalogChanged'));
 }
 // The catalog once loaded (draw() needs it synchronously for Cover views).
 let catalog = null;
@@ -199,7 +202,7 @@ function loadCrop(url) {
       }
       resolve({ rgb, w: c.width, h: c.height });
     };
-    img.onerror = () => reject(new Error('could not load the painting'));
+    img.onerror = () => reject(new Error(t('error.paintingLoad')));
     img.crossOrigin = 'anonymous'; // the IIIF server allows reading the pixels
     img.src = url;
   });
@@ -213,12 +216,12 @@ async function showPainting(meta) {
   // Contain: the whole painting fitted inside the screen, toned once.
   const cover = settings.fit !== 'whole';
   const req = cover ? cat.workImage(meta.key, watch, 200) : cat.cropRequest(meta.key, watch, 'whole');
-  if (!req) throw new Error('no picture for this watch');
+  if (!req) throw new Error(t('error.noPicture'));
   const loaded = await loadCrop(req.url);
   if (!cover) loaded.rgb = window.TreasureRender.tone(loaded.rgb);
   crop = { ...loaded, kind: cover ? 'work' : 'contain', key: meta.key };
   updateViewControls();
-  canvas.setAttribute('aria-label', `${meta.title} by ${meta.artist}, as shown on the watch`);
+  canvas.setAttribute('aria-label', t('preview.ariaLabel', { title: meta.title || t('art.untitled'), artist: meta.artist || t('art.unknownArtist') }));
   draw();
   screenEl.classList.remove('loading');
 }
@@ -313,17 +316,17 @@ function placeOverlay(overlay, px) {
 
 // ---------------- wall label ----------------
 
-const dutch = (navigator.language || '').toLowerCase().startsWith('nl');
+const dutch = window.TreasureI18n.lang === 'nl-NL';
 
 function showLabel(meta) {
   $('label').hidden = false;
-  $('art-title').textContent = meta.title || 'Untitled';
+  $('art-title').textContent = meta.title || t('art.untitled');
   $('mini-title').textContent = meta.title || '';
-  $('art-artist').textContent = meta.artist || 'Unknown artist';
+  $('art-artist').textContent = meta.artist || t('art.unknownArtist');
   $('art-meta').textContent = [meta.date, meta.objectNumber].filter(Boolean).join(', ');
   // Credit line: source + license, linked to the license when we know it.
   const license = $('art-license');
-  license.textContent = meta.license || 'Public domain';
+  license.textContent = meta.license || t('art.publicDomain');
   if (meta.licenseUrl) {
     license.href = meta.licenseUrl;
   } else {
@@ -384,11 +387,11 @@ const byKey = (key) => (cat) => cat.get(key);
 async function loadPreview(choose, { pick = false, useLook = true } = {}) {
   const id = ++requestId;
   screenEl.classList.add('loading');
-  setStatus(pick ? 'Hanging a new painting…' : '');
+  setStatus(pick ? t('status.hanging') : '');
   try {
     const cat = await catalogReady;
     const painting = await choose(cat);
-    if (!painting) throw new Error('not in the catalog');
+    if (!painting) throw new Error(t('error.notInCatalog'));
     const meta = painting;
     if (id !== requestId) return null;
     const look = useLook ? savedLook(meta.key) : null;
@@ -409,14 +412,14 @@ async function loadPreview(choose, { pick = false, useLook = true } = {}) {
     await showPainting(meta);
     if (id !== requestId) return null;
     showLabel(meta);
-    const hint = chosen ? 'Preview: this painting is hung when you save.' : '';
-    setStatus(look ? `${hint} Using the look you saved for it.`.trim() : hint);
+    const hint = chosen ? t('status.chosen') : '';
+    setStatus(look ? `${hint} ${t('status.usingLook')}`.trim() : hint);
     updateShuffle();
     return meta;
   } catch (err) {
     if (id !== requestId) return null;
     screenEl.classList.remove('loading');
-    setStatus(`Couldn’t load a preview (${err.message}).`);
+    setStatus(t('status.previewFailed', { error: err.message }));
     hideLoader();
     return null;
   }
@@ -435,7 +438,7 @@ function refreshPreview({ useLook = false } = {}) {
 // First paint: the painting on the watch (from the phone).
 if (art?.key) {
   showPainting(art).catch((err) => {
-    setStatus(`Couldn’t load a preview (${err.message}).`);
+    setStatus(t('status.previewFailed', { error: err.message }));
     hideLoader();
   });
 }
@@ -476,26 +479,26 @@ $('mini-keep').addEventListener('click', restoreOriginal);
 // ---------------- pin a painting ----------------
 
 function showPinned(title) {
-  $('pinned-title').textContent = title || 'this painting';
+  $('pinned-title').textContent = title || t('pinned.defaultTitle');
 }
 
 /** Find a painting by object number, key or link, preview it and pin it. */
 async function pinPainting(q) {
-  $('pin-status').textContent = 'Looking it up…';
+  $('pin-status').textContent = t('pin.lookingUp');
   const cat = await catalogReady;
   // Look among what's loaded first; otherwise load every era file (rare).
   let found = cat.resolve(q);
   if (!found) {
-    $('pin-status').textContent = 'Searching the whole collection…';
+    $('pin-status').textContent = t('pin.searchingAll');
     await Promise.all(cat.files.map((f) => loadPool(cat, f.pool)));
     found = cat.resolve(q);
   }
-  if (!found) throw new Error('No painting found for that number or link.');
+  if (!found) throw new Error(t('pin.notFound'));
   const meta = await loadPreview(byKey(found.key), { pick: true });
-  if (!meta) throw new Error('could not load it');
+  if (!meta) throw new Error(t('pin.loadFailed'));
   settings.pinned = meta.key;
   showPinned(meta.title);
-  $('pin-status').textContent = `Pinned “${meta.title}”. Save to hang it.`;
+  $('pin-status').textContent = t('pin.done', { title: meta.title || t('art.untitled') });
   update();
   return meta;
 }
@@ -519,17 +522,15 @@ if (settings.pinned) {
 // catalog, or its image from the Rijksmuseum). It doesn't keep trying.
 const gone = state.unavailable;
 if (gone && gone.key === settings.pinned) {
-  const name = gone.title ? `“${gone.title}”` : 'This painting';
+  const vars = { hasTitle: gone.title ? 'yes' : 'no', title: gone.title || '' };
   $('pinned-gone').hidden = false;
-  $('pinned-gone').textContent = gone.usingCopy
-    ? `${name} is no longer available from the Rijksmuseum. Your watch uses the copy your phone kept, so colors, crop and zoom still work.`
-    : `${name} is no longer available from the Rijksmuseum. Your watch keeps showing it as it is; unpin it to hang other paintings again.`;
+  $('pinned-gone').textContent = t(gone.usingCopy ? 'pinned.goneCopy' : 'pinned.goneKeep', vars);
 }
 
 $('unpin').addEventListener('click', () => {
   settings.pinned = '';
   $('pin-status').textContent = '';
-  setStatus('Unpinned: rotation continues after you save.');
+  setStatus(t('pinned.unpinned'));
   update();
 });
 
@@ -537,7 +538,8 @@ $('unpin').addEventListener('click', () => {
 // The Rijksmuseum's IIIF image server allows cross-origin requests, so
 // OpenSeadragon can stream the full-resolution tiles straight from it.
 
-const OSD = 'https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/';
+// OpenSeadragon 4.1.0, self-hosted (vendor/, BSD-3-Clause; see NOTICE.md).
+const OSD = 'vendor/openseadragon-4.1.0.min.js';
 let osdLoading = null;
 let viewer = null;
 
@@ -552,9 +554,9 @@ function iiifBaseOf(meta) {
 function loadOpenSeadragon() {
   osdLoading ??= new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = `${OSD}openseadragon.min.js`;
+    script.src = OSD;
     script.onload = resolve;
-    script.onerror = () => reject(new Error('could not load the viewer'));
+    script.onerror = () => reject(new Error(t('viewer.loadError')));
     document.head.append(script);
   });
   return osdLoading;
@@ -563,15 +565,14 @@ function loadOpenSeadragon() {
 $('explore').addEventListener('click', async () => {
   const base = iiifBaseOf(shown);
   if (!base) return;
-  $('viewer-title').textContent = `${shown.title || 'Untitled'} · ${shown.artist || ''}`;
-  $('viewer-hint').textContent = 'Loading…';
+  $('viewer-title').textContent = `${shown.title || t('art.untitled')} · ${shown.artist || ''}`;
+  $('viewer-hint').textContent = t('viewer.loading');
   $('viewer').showModal();
   try {
     await loadOpenSeadragon();
     viewer?.destroy();
     viewer = window.OpenSeadragon({
       element: $('viewer-canvas'),
-      prefixUrl: `${OSD}images/`,
       tileSources: `${base}/info.json`,
       crossOriginPolicy: 'Anonymous',
       showNavigationControl: false,
@@ -585,14 +586,14 @@ $('explore').addEventListener('click', async () => {
       maxZoomPixelRatio: 2,
       gestureSettingsTouch: { pinchRotate: false },
     });
-    $('viewer-hint').textContent = 'Pinch or scroll to zoom, drag to move. The map in the corner shows where you are.';
+    $('viewer-hint').textContent = t('viewer.hint');
   } catch (err) {
-    $('viewer-hint').textContent = `Couldn’t open the viewer (${err.message}).`;
+    $('viewer-hint').textContent = t('viewer.failed', { error: err.message });
   }
 });
 
-$('zoom-in').addEventListener('click', () => viewer?.viewport.zoomBy(1.6));
-$('zoom-out').addEventListener('click', () => {
+$('viewer-zoom-in').addEventListener('click', () => viewer?.viewport.zoomBy(1.6));
+$('viewer-zoom-out').addEventListener('click', () => {
   viewer?.viewport.zoomBy(1 / 1.6);
   viewer?.viewport.applyConstraints();
 });
@@ -608,7 +609,6 @@ $('viewer').addEventListener('close', () => {
 // Dutch visitors get the Dutch donation page.
 if (dutch) {
   $('donate-link').href = 'https://www.rijksmuseum.nl/nl/steun/doneer';
-  $('donate-link').textContent = 'Doneer';
 }
 
 // ---------------- controls ----------------
@@ -656,13 +656,13 @@ document.querySelectorAll('input.number[data-key]').forEach((input) => {
   settings[key] = clampMinutes(settings[key]);
   const show = () => {
     input.value = settings[key];
-    $('minutes-unit').textContent = settings[key] === 1 ? 'minute' : 'minutes';
+    $('minutes-unit').textContent = t('showFor.unit', { count: settings[key] });
   };
   show();
   // Accept typing freely; tidy the value up when the field is left.
   input.addEventListener('input', () => {
     if (input.value !== '') settings[key] = clampMinutes(input.value);
-    $('minutes-unit').textContent = settings[key] === 1 ? 'minute' : 'minutes';
+    $('minutes-unit').textContent = t('showFor.unit', { count: settings[key] });
   });
   input.addEventListener('change', show);
 });
@@ -740,10 +740,10 @@ function updateViewControls() {
   const freeX = Boolean(v && v.w < 0.999);
   const freeY = Boolean(v && v.h < 0.999);
   $('view-hint').textContent = freeX && freeY
-    ? 'Drag the preview to move the painting.'
-    : freeX ? 'Drag the preview sideways, or zoom in to move it up and down too.'
-      : freeY ? 'Drag the preview up or down, or zoom in to move it sideways too.'
-        : 'Zoom in to move the painting.';
+    ? t('view.hint.both')
+    : freeX ? t('view.hint.x')
+      : freeY ? t('view.hint.y')
+        : t('view.hint.none');
   document.querySelectorAll('[data-nudge]').forEach((b) => {
     const sideways = b.dataset.nudge.split(',')[0] !== '0';
     b.disabled = !(sideways ? freeX : freeY);
@@ -851,10 +851,9 @@ async function copyText(text) {
 
 $('backup-copy').addEventListener('click', async () => {
   const count = Object.keys(savedLooks).length;
-  const what = `Your settings and ${count} saved ${count === 1 ? 'look' : 'looks'}`;
   $('backup-status').textContent = (await copyText(backupText()))
-    ? `${what} are copied. Paste them into a note or an email to yourself.`
-    : 'Couldn’t copy automatically: the backup is in the box below. Select it all and copy it.';
+    ? t('backup.copied', { count })
+    : t('backup.copyFailed');
 });
 
 $('backup-restore').addEventListener('click', () => {
@@ -863,11 +862,11 @@ $('backup-restore').addEventListener('click', () => {
   try {
     backup = JSON.parse($('backup-input').value);
   } catch {
-    status.textContent = 'That isn’t a backup: paste the whole text you copied.';
+    status.textContent = t('restore.notJson');
     return;
   }
   if (!backup || backup.backup !== 1 || typeof backup.settings !== 'object') {
-    status.textContent = 'That isn’t a Treasure Trove backup.';
+    status.textContent = t('restore.notBackup');
     return;
   }
   Object.assign(settings, window.TreasureSettings.load(backup.settings));
@@ -880,7 +879,7 @@ $('backup-restore').addEventListener('click', () => {
   update();
   refreshPreview();
   const count = Object.keys(looks).length;
-  status.textContent = `Restored your settings and ${count} saved ${count === 1 ? 'look' : 'looks'}. Save to your watch to keep them.`;
+  status.textContent = t('restore.done', { count });
 });
 
 // ---------------- loader + sticky mini preview ----------------
@@ -901,7 +900,7 @@ function hideLoader() {
 $('mini-size').addEventListener('click', (e) => {
   const large = $('mini').classList.toggle('large');
   e.currentTarget.setAttribute('aria-pressed', String(large));
-  e.currentTarget.querySelector('span').textContent = large ? 'Shrink' : 'Expand';
+  e.currentTarget.querySelector('span').textContent = large ? t('mini.shrink') : t('mini.expand');
 });
 $('mini-time').addEventListener('click', () => {
   miniTime = !miniTime;
@@ -987,7 +986,7 @@ if (new URLSearchParams(location.search).get('debug') === 'true') {
     $('debug-info').textContent = JSON.stringify(info, null, 2);
   };
   const info = {
-    phone: state.debug || '(open the settings from a debug build to see the phone)',
+    phone: state.debug || t('debug.noPhone'),
     page: { watch, settings, pinned: settings.pinned || null, painting: art?.key || null },
   };
   show(info);
@@ -1006,13 +1005,13 @@ if (new URLSearchParams(location.search).get('debug') === 'true') {
   pane.querySelectorAll('[data-debug]').forEach((button) => {
     button.addEventListener('click', () => {
       const action = button.dataset.debug;
-      if (action === 'reset' && !window.confirm('Remove everything Treasure Trove stored on the phone?')) return;
+      if (action === 'reset' && !window.confirm(t('debug.confirmReset'))) return;
       sendToPhone({ debug: action });
     });
   });
   $('debug-milkmaid').addEventListener('click', async () => {
     try {
-      status('Pinning The Milkmaid…');
+      status(t('debug.pinning'));
       await pinPainting('SK-A-2344');
       saveToWatch();
     } catch (err) {
@@ -1022,12 +1021,12 @@ if (new URLSearchParams(location.search).get('debug') === 'true') {
   $('debug-page-storage').addEventListener('click', () => {
     try {
       localStorage.clear();
-      status('This page’s storage is cleared (Indoors/Daylight, pinned preview time).');
+      status(t('debug.pageStorageCleared'));
     } catch (err) {
       status(String(err.message || err));
     }
   });
   $('debug-copy').addEventListener('click', async () => {
-    status((await copyText(JSON.stringify(info, null, 2))) ? 'Debug info copied.' : 'Couldn’t copy; select the text above.');
+    status((await copyText(JSON.stringify(info, null, 2))) ? t('debug.copied') : t('debug.copyFailed'));
   });
 }

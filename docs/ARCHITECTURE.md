@@ -248,6 +248,39 @@ all files only when pinning by object number a painting that isn't among the
 loaded ones (rare). On save it sends back the `rows` of the hung or pinned
 painting.
 
+### Translations (settings page)
+
+The page is in English (`en-US`) and Dutch (`nl-NL`).
+
+- **Files.** `site/translations/<lang>.json`: flat objects of keys
+  (`"pin.done"`, `"backup.copied"`) to ICU MessageFormat messages:
+  `{title}` placeholders, `{count, plural, one {# look} other {# looks}}` and
+  `select`. Every language has the same keys. Messages contain no HTML; a
+  sentence around a link or a `<strong>` is split into separate keys. Use
+  typographic apostrophes (’): a plain `'` is an escape character in ICU.
+- **Library.** `site/vendor/intl-messageformat-11.2.0.iife.js` (FormatJS,
+  BSD-3-Clause, unmodified; see NOTICE.md), formatting with the active locale so
+  plural rules fit the language. Compiled messages are cached per key. Without
+  it, `i18n.js` falls back to plain `{name}` substitution with simple
+  plural/select.
+- **Language.** `?lang=` wins (`nl`, `nl-NL`, `en-US`, …); otherwise the
+  browser's first preferred language. Anything starting with `nl` is Dutch,
+  everything else English. `document.documentElement.lang` is set to it.
+- **Fallback.** `en-US.json` is always loaded, plus the reader's file if
+  different. A key is looked up in the reader's language, then English, then
+  the key itself is shown.
+- **Loading.** `index.html` loads `i18n.js` instead of `app.js`. `i18n.js`
+  fetches the translation files, fills the static markup (`data-i18n="key"`
+  sets the text; `data-i18n-attr="aria-label:key;placeholder:key"` sets
+  attributes), and only then appends `app.js`, which uses
+  `TreasureI18n.t(key, vars)` from its first line. If loading fails, it still
+  loads `app.js`; the English text in the HTML stays as it is.
+- **Adding a key.** Put it in every `translations/*.json`; in HTML add
+  `data-i18n`/`data-i18n-attr` and keep the English text as the default
+  content; in `app.js` use `t('key', { vars })`.
+- **Adding a language.** Copy `en-US.json` to `<lang>.json`, translate it,
+  and teach `supported()` in `i18n.js` which tags map to it.
+
 ## Picking a painting (generator)
 
 - The generator crawls the Rijksmuseum **Search API** for paintings that have an

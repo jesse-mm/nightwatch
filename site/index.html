@@ -4,33 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <title>Treasure Trove settings</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@1,8..60,400;1,8..60,500&family=Barlow+Semi+Condensed:wght@600&display=swap">
+  <title data-i18n="page.title">Treasure Trove settings</title>
+  <link rel="stylesheet" href="fonts/fonts.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="loader" id="loader" role="status" aria-live="polite">
     <div class="loader-frame" aria-hidden="true"></div>
-    <p>Hanging your painting…</p>
+    <p data-i18n="loader.text">Hanging your painting…</p>
   </div>
 
   <header class="wall" id="wall">
-    <p class="wall-kicker">Watch preview</p>
+    <p class="wall-kicker" data-i18n="preview.kicker">Watch preview</p>
     <figure class="frame" id="frame">
       <div class="screen" id="screen">
         <canvas id="art" role="img" aria-label="" hidden></canvas>
-        <p class="screen-empty" id="screen-empty">Today’s painting appears here once your watch has loaded it.</p>
+        <p class="screen-empty" id="screen-empty" data-i18n="preview.empty">Today’s painting appears here once your watch has loaded it.</p>
         <div class="overlay" id="overlay" aria-hidden="true">
           <span class="ov-date" id="ov-date"></span>
           <span class="ov-time" id="ov-time"></span>
         </div>
       </div>
     </figure>
-    <div class="preview-light" role="radiogroup" aria-label="Show the preview as on the watch">
-      <label><input type="radio" name="previewLight" value="room"><span>Indoors</span></label>
-      <label><input type="radio" name="previewLight" value="sun"><span>Daylight</span></label>
+    <div class="preview-light" role="radiogroup" aria-label="Show the preview as on the watch" data-i18n-attr="aria-label:preview.light">
+      <label><input type="radio" name="previewLight" value="room"><span data-i18n="light.room">Indoors</span></label>
+      <label><input type="radio" name="previewLight" value="sun"><span data-i18n="light.sun">Daylight</span></label>
     </div>
 
     <article class="label" id="label" hidden>
@@ -42,18 +40,18 @@
         <!-- Icons: Lucide "zoom-in", "external-link" and "undo-2" (ISC license) -->
         <button type="button" class="cta primary" id="explore" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/></svg>
-          <span>Zoom detailed view</span>
+          <span data-i18n="label.explore">Zoom detailed view</span>
         </button>
         <a class="cta" id="art-web" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-          <span>Discover</span>
+          <span data-i18n="label.discover">Discover</span>
         </a>
       </p>
       <p class="label-actions" data-show-if="notPinned">
-        <button type="button" class="text-button" id="shuffle">Hang a different painting</button>
+        <button type="button" class="text-button" id="shuffle" data-i18n="label.shuffle">Hang a different painting</button>
         <button type="button" class="text-button icon-button" id="keep" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
-          <span>Restore original</span>
+          <span data-i18n="label.restore">Restore original</span>
         </button>
       </p>
       <p class="label-status" id="status" role="status"></p>
@@ -63,7 +61,7 @@
   <!-- Pinned to the top once the big preview scrolls away. -->
   <div class="mini" id="mini">
     <div class="mini-screen" id="mini-screen">
-      <canvas id="mini-art" role="img" aria-label="Watch preview"></canvas>
+      <canvas id="mini-art" role="img" aria-label="Watch preview" data-i18n-attr="aria-label:mini.preview"></canvas>
       <div class="overlay hidden" id="mini-overlay" aria-hidden="true">
         <span class="ov-date"></span>
         <span class="ov-time"></span>
@@ -72,21 +70,21 @@
     <div class="mini-side">
       <p class="mini-title" id="mini-title"></p>
       <p class="mini-actions">
-        <button type="button" class="text-button" id="mini-shuffle" data-show-if="notPinned">Swap painting</button>
+        <button type="button" class="text-button" id="mini-shuffle" data-show-if="notPinned" data-i18n="mini.shuffle">Swap painting</button>
         <button type="button" class="text-button icon-button" id="mini-keep" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
-          <span>Restore</span>
+          <span data-i18n="mini.restore">Restore</span>
         </button>
         <button type="button" class="text-button icon-button" id="mini-time" aria-pressed="false">
           <!-- Lucide "clock" (ISC license) -->
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          <span>Time</span>
+          <span data-i18n="mini.time">Time</span>
         </button>
         <button type="button" class="text-button icon-button" id="mini-size" aria-pressed="false">
           <!-- Lucide "expand" and "shrink" (ISC license) -->
           <svg class="when-small" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 15 6 6"/><path d="m15 9 6-6"/><path d="M21 16v5h-5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="m3 21 6-6"/><path d="M3 8V3h5"/><path d="M9 9 3 3"/></svg>
           <svg class="when-large" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 15 6 6m-6-6v4.8m0-4.8h4.8"/><path d="M9 19.8V15m0 0H4.2M9 15l-6 6"/><path d="M15 4.2V9m0 0h4.8M15 9l6-6"/><path d="M9 4.2V9m0 0H4.2M9 9 3 3"/></svg>
-          <span>Expand</span>
+          <span data-i18n="mini.expand">Expand</span>
         </button>
       </p>
     </div>
@@ -94,119 +92,119 @@
 
   <main>
     <section class="group debug" id="debug" aria-labelledby="g-debug" hidden>
-      <h2 id="g-debug">Debug</h2>
-      <p class="debug-hint">Actions run on the phone: the page closes and the phone does it.</p>
+      <h2 id="g-debug" data-i18n="debug.title">Debug</h2>
+      <p class="debug-hint" data-i18n="debug.hint">Actions run on the phone: the page closes and the phone does it.</p>
       <div class="debug-actions">
-        <button type="button" class="text-button" id="debug-milkmaid">Pin The Milkmaid</button>
-        <button type="button" class="text-button" data-debug="new-painting">New painting now</button>
-        <button type="button" class="text-button" data-debug="resend">Re-send image to watch</button>
-        <button type="button" class="text-button" data-debug="clear-catalog">Clear catalog cache</button>
-        <button type="button" class="text-button" data-debug="reset">Reset phone storage</button>
-        <button type="button" class="text-button" id="debug-page-storage">Clear this page’s storage</button>
-        <button type="button" class="text-button" id="debug-copy">Copy debug info</button>
+        <button type="button" class="text-button" id="debug-milkmaid" data-i18n="debug.milkmaid">Pin The Milkmaid</button>
+        <button type="button" class="text-button" data-debug="new-painting" data-i18n="debug.newPainting">New painting now</button>
+        <button type="button" class="text-button" data-debug="resend" data-i18n="debug.resend">Re-send image to watch</button>
+        <button type="button" class="text-button" data-debug="clear-catalog" data-i18n="debug.clearCatalog">Clear catalog cache</button>
+        <button type="button" class="text-button" data-debug="reset" data-i18n="debug.reset">Reset phone storage</button>
+        <button type="button" class="text-button" id="debug-page-storage" data-i18n="debug.pageStorage">Clear this page’s storage</button>
+        <button type="button" class="text-button" id="debug-copy" data-i18n="debug.copy">Copy debug info</button>
       </div>
       <p class="label-status" id="debug-status" role="status"></p>
       <pre class="debug-info" id="debug-info"></pre>
     </section>
 
     <section class="group look block" aria-labelledby="g-look">
-      <h2 id="g-look">Painting</h2>
+      <h2 id="g-look" data-i18n="look.title">Painting</h2>
       <div class="row stacked">
-        <span class="row-text">Crop</span>
-        <div class="segmented" role="radiogroup" aria-label="Crop" data-key="fit">
-          <label><input type="radio" name="fit" value="fill"><span>Cover</span></label>
-          <label><input type="radio" name="fit" value="whole"><span>Contain</span></label>
+        <span class="row-text" data-i18n="crop.title">Crop</span>
+        <div class="segmented" role="radiogroup" aria-label="Crop" data-i18n-attr="aria-label:crop.title" data-key="fit">
+          <label><input type="radio" name="fit" value="fill"><span data-i18n="crop.cover">Cover</span></label>
+          <label><input type="radio" name="fit" value="whole"><span data-i18n="crop.contain">Contain</span></label>
         </div>
       </div>
       <label class="row stacked" data-show-if="coverView">
-        <span class="row-text range-label">Zoom <output id="zoom-out">100%</output></span>
+        <span class="row-text range-label"><span data-i18n="zoom.title">Zoom</span> <output id="zoom-out">100%</output></span>
         <input type="range" class="range" data-key="zoom" id="zoom" min="100" max="200" step="5">
       </label>
       <div class="row stacked" data-show-if="coverView">
-        <span class="row-text">Position
-          <small id="view-hint">Drag the preview to move the painting.</small></span>
-        <div class="nudge" role="group" aria-label="Move the painting">
-          <button type="button" class="text-button" data-nudge="-1,0" aria-label="Show more to the left">←</button>
-          <button type="button" class="text-button" data-nudge="0,-1" aria-label="Show more above">↑</button>
-          <button type="button" class="text-button" data-nudge="0,1" aria-label="Show more below">↓</button>
-          <button type="button" class="text-button" data-nudge="1,0" aria-label="Show more to the right">→</button>
-          <button type="button" class="text-button" id="view-reset">Reset</button>
+        <span class="row-text"><span data-i18n="position.title">Position</span>
+          <small id="view-hint" data-i18n="view.hint.both">Drag the preview to move the painting.</small></span>
+        <div class="nudge" role="group" aria-label="Move the painting" data-i18n-attr="aria-label:nudge.group">
+          <button type="button" class="text-button" data-nudge="-1,0" aria-label="Show more to the left" data-i18n-attr="aria-label:nudge.left">←</button>
+          <button type="button" class="text-button" data-nudge="0,-1" aria-label="Show more above" data-i18n-attr="aria-label:nudge.up">↑</button>
+          <button type="button" class="text-button" data-nudge="0,1" aria-label="Show more below" data-i18n-attr="aria-label:nudge.down">↓</button>
+          <button type="button" class="text-button" data-nudge="1,0" aria-label="Show more to the right" data-i18n-attr="aria-label:nudge.right">→</button>
+          <button type="button" class="text-button" id="view-reset" data-i18n="view.reset">Reset</button>
         </div>
       </div>
       <div class="row stacked">
-        <span class="row-text">Frame</span>
-        <div class="segmented" role="radiogroup" aria-label="Frame" data-key="frame">
-          <label><input type="radio" name="frame" value="none"><span>None</span></label>
-          <label><input type="radio" name="frame" value="gold"><span>Gold</span></label>
-          <label><input type="radio" name="frame" value="wood"><span>Wood</span></label>
-          <label><input type="radio" name="frame" value="gallery"><span>Gallery</span></label>
+        <span class="row-text" data-i18n="frame.title">Frame</span>
+        <div class="segmented" role="radiogroup" aria-label="Frame" data-i18n-attr="aria-label:frame.title" data-key="frame">
+          <label><input type="radio" name="frame" value="none"><span data-i18n="frame.none">None</span></label>
+          <label><input type="radio" name="frame" value="gold"><span data-i18n="frame.gold">Gold</span></label>
+          <label><input type="radio" name="frame" value="wood"><span data-i18n="frame.wood">Wood</span></label>
+          <label><input type="radio" name="frame" value="gallery"><span data-i18n="frame.gallery">Gallery</span></label>
         </div>
       </div>
       <div class="row stacked">
-        <span class="row-text">Color tuning
-          <small>Adjusts colors for how the watch screen looks in that light.</small></span>
-        <div class="segmented" role="radiogroup" aria-label="Color tuning" data-key="palette">
-          <label><input type="radio" name="palette" value="defined"><span>Accurate</span></label>
-          <label><input type="radio" name="palette" value="sun"><span>Daylight</span></label>
-          <label><input type="radio" name="palette" value="room"><span>Indoors</span></label>
-          <label><input type="radio" name="palette" value="backlight"><span>Backlight</span></label>
+        <span class="row-text"><span data-i18n="tuning.title">Color tuning</span>
+          <small data-i18n="tuning.help">Adjusts colors for how the watch screen looks in that light.</small></span>
+        <div class="segmented" role="radiogroup" aria-label="Color tuning" data-i18n-attr="aria-label:tuning.title" data-key="palette">
+          <label><input type="radio" name="palette" value="defined"><span data-i18n="tuning.defined">Accurate</span></label>
+          <label><input type="radio" name="palette" value="sun"><span data-i18n="light.sun">Daylight</span></label>
+          <label><input type="radio" name="palette" value="room"><span data-i18n="light.room">Indoors</span></label>
+          <label><input type="radio" name="palette" value="backlight"><span data-i18n="tuning.backlight">Backlight</span></label>
         </div>
       </div>
       <details class="advanced nested">
-        <summary>Advanced color settings</summary>
+        <summary data-i18n="advanced.title">Advanced color settings</summary>
         <div class="row stacked">
-          <span class="row-text">Dithering
-            <small>How the 64 watch colors are mixed to show the painting’s shades.</small></span>
-          <div class="segmented" role="radiogroup" aria-label="Dithering" data-key="dither">
+          <span class="row-text"><span data-i18n="dither.title">Dithering</span>
+            <small data-i18n="dither.help">How the 64 watch colors are mixed to show the painting’s shades.</small></span>
+          <div class="segmented" role="radiogroup" aria-label="Dithering" data-i18n-attr="aria-label:dither.title" data-key="dither">
             <label><input type="radio" name="dither" value="atkinson"><span>Atkinson</span></label>
             <label><input type="radio" name="dither" value="checker"><span>50:50</span></label>
-            <label><input type="radio" name="dither" value="none"><span>Off</span></label>
+            <label><input type="radio" name="dither" value="none"><span data-i18n="dither.off">Off</span></label>
           </div>
         </div>
         <label class="row stacked">
-          <span class="row-text range-label">Brightness <output id="brightness-out">0</output></span>
+          <span class="row-text range-label"><span data-i18n="brightness.title">Brightness</span> <output id="brightness-out">0</output></span>
           <input type="range" class="range" data-key="brightness" min="-100" max="100" step="5">
         </label>
         <label class="row stacked">
-          <span class="row-text range-label">Contrast <output id="contrast-out">0</output></span>
+          <span class="row-text range-label"><span data-i18n="contrast.title">Contrast</span> <output id="contrast-out">0</output></span>
           <input type="range" class="range" data-key="contrast" min="-100" max="100" step="5">
         </label>
         <p class="reset-row">
-          <button type="button" class="text-button" id="color-reset">Reset to defaults</button>
+          <button type="button" class="text-button" id="color-reset" data-i18n="color.reset">Reset to defaults</button>
         </p>
       </details>
     </section>
 
     <section class="group" aria-labelledby="g-rotation">
-      <h2 id="g-rotation">Swap painting</h2>
+      <h2 id="g-rotation" data-i18n="rotation.title">Swap painting</h2>
       <div class="pinned" id="pinned" data-show-if="pinned">
-        <p>Pinned: <strong id="pinned-title">this painting</strong>. It stays on your watch until you unpin it.</p>
+        <p><span data-i18n="pinned.before">Pinned:</span> <strong id="pinned-title" data-i18n="pinned.defaultTitle">this painting</strong><span data-i18n="pinned.after">. It stays on your watch until you unpin it.</span></p>
         <p class="pinned-gone" id="pinned-gone" role="status" hidden></p>
-        <button type="button" class="text-button" id="unpin">Unpin</button>
+        <button type="button" class="text-button" id="unpin" data-i18n="pinned.unpin">Unpin</button>
       </div>
       <div class="row stacked" data-show-if="notPinned">
-        <span class="row-text">How often
-          <small>Off keeps the current painting until you hang another one.</small></span>
-        <div class="segmented" role="radiogroup" aria-label="Swap painting" data-key="rotation">
-          <label><input type="radio" name="rotation" value="off"><span>Off</span></label>
-          <label><input type="radio" name="rotation" value="daily"><span>Daily</span></label>
-          <label><input type="radio" name="rotation" value="weekly"><span>Weekly</span></label>
-          <label><input type="radio" name="rotation" value="monthly"><span>Monthly</span></label>
+        <span class="row-text"><span data-i18n="rotation.howOften">How often</span>
+          <small data-i18n="rotation.help">Off keeps the current painting until you hang another one.</small></span>
+        <div class="segmented" role="radiogroup" aria-label="Swap painting" data-i18n-attr="aria-label:rotation.title" data-key="rotation">
+          <label><input type="radio" name="rotation" value="off"><span data-i18n="rotation.off">Off</span></label>
+          <label><input type="radio" name="rotation" value="daily"><span data-i18n="rotation.daily">Daily</span></label>
+          <label><input type="radio" name="rotation" value="weekly"><span data-i18n="rotation.weekly">Weekly</span></label>
+          <label><input type="radio" name="rotation" value="monthly"><span data-i18n="rotation.monthly">Monthly</span></label>
         </div>
       </div>
       <div class="row stacked" data-show-if="notPinned">
-        <span class="row-text">Collection
-          <small id="selection-note">Featured: the 365 Rijksmuseum paintings most read about on Wikipedia, one for each day of the year. Selection: any painting, optionally from one century.</small></span>
-        <div class="segmented" role="radiogroup" aria-label="Collection" data-key="selection">
-          <label><input type="radio" name="selection" value="featured"><span>Featured</span></label>
-          <label><input type="radio" name="selection" value="random"><span>Selection</span></label>
+        <span class="row-text"><span data-i18n="collection.title">Collection</span>
+          <small id="selection-note" data-i18n="collection.help">Featured: the 365 Rijksmuseum paintings most read about on Wikipedia, one for each day of the year. Selection: any painting, optionally from one century.</small></span>
+        <div class="segmented" role="radiogroup" aria-label="Collection" data-i18n-attr="aria-label:collection.title" data-key="selection">
+          <label><input type="radio" name="selection" value="featured"><span data-i18n="collection.featured">Featured</span></label>
+          <label><input type="radio" name="selection" value="random"><span data-i18n="collection.random">Selection</span></label>
         </div>
       </div>
       <div class="row stacked" data-show-if="randomSelection">
-        <span class="row-text" id="era-title">Paintings from</span>
+        <span class="row-text" id="era-title" data-i18n="era.title">Paintings from</span>
         <div class="segmented compact" role="radiogroup" aria-labelledby="era-title" data-key="era">
-          <label><input type="radio" name="era" value="any"><span>Any</span></label>
-          <label><input type="radio" name="era" value="pre1600"><span aria-label="Before 1600">&lt;1600</span></label>
+          <label><input type="radio" name="era" value="any"><span data-i18n="era.any">Any</span></label>
+          <label><input type="radio" name="era" value="pre1600"><span aria-label="Before 1600" data-i18n-attr="aria-label:era.pre1600">&lt;1600</span></label>
           <label><input type="radio" name="era" value="1600s"><span>1600s</span></label>
           <label><input type="radio" name="era" value="1700s"><span>1700s</span></label>
           <label><input type="radio" name="era" value="1800s"><span>1800s</span></label>
@@ -214,123 +212,123 @@
         </div>
       </div>
       <form class="row stacked pin-form" id="pin-form">
-        <label class="row-text" for="pin-input">Pin a specific painting
-          <small>Its object number (SK-C-5), Rijksmuseum id or a link to it. Pinning turns rotation off.</small></label>
+        <label class="row-text" for="pin-input"><span data-i18n="pin.title">Pin a specific painting</span>
+          <small data-i18n="pin.help">Its object number (SK-C-5), Rijksmuseum id or a link to it. Pinning turns rotation off.</small></label>
         <span class="pin-field">
           <input type="text" id="pin-input" placeholder="SK-C-5" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
-          <button type="submit" class="text-button">Pin</button>
+          <button type="submit" class="text-button" data-i18n="pin.button">Pin</button>
         </span>
         <span class="label-status" id="pin-status" role="status"></span>
       </form>
     </section>
 
     <section class="group block" aria-labelledby="g-datetime">
-      <h2 id="g-datetime">Date &amp; time</h2>
+      <h2 id="g-datetime" data-i18n="datetime.title">Date &amp; time</h2>
       <label class="row">
-        <span class="row-text">Show time</span>
+        <span class="row-text" data-i18n="showTime.title">Show time</span>
         <input type="checkbox" class="switch" data-key="showTime">
       </label>
       <div class="row stacked" data-show-if="showTime">
-        <span class="row-text">Clock format</span>
-        <div class="segmented" role="radiogroup" aria-label="Clock format" data-key="clockMode">
-          <label><input type="radio" name="clockMode" value="auto"><span>Auto</span></label>
-          <label><input type="radio" name="clockMode" value="12"><span>12-hour</span></label>
-          <label><input type="radio" name="clockMode" value="24"><span>24-hour</span></label>
+        <span class="row-text" data-i18n="clock.title">Clock format</span>
+        <div class="segmented" role="radiogroup" aria-label="Clock format" data-i18n-attr="aria-label:clock.title" data-key="clockMode">
+          <label><input type="radio" name="clockMode" value="auto"><span data-i18n="clock.auto">Auto</span></label>
+          <label><input type="radio" name="clockMode" value="12"><span data-i18n="clock.12">12-hour</span></label>
+          <label><input type="radio" name="clockMode" value="24"><span data-i18n="clock.24">24-hour</span></label>
         </div>
       </div>
       <label class="row" data-show-if="ampm">
-        <span class="row-text">Hide AM/PM</span>
+        <span class="row-text" data-i18n="hideAmPm.title">Hide AM/PM</span>
         <input type="checkbox" class="switch" data-key="hideAmPm">
       </label>
       <label class="row">
-        <span class="row-text">Show date</span>
+        <span class="row-text" data-i18n="showDate.title">Show date</span>
         <input type="checkbox" class="switch" data-key="showDate">
       </label>
       <div class="row stacked" data-show-if="showDate">
-        <span class="row-text">Date format</span>
-        <div class="segmented" role="radiogroup" aria-label="Date format" data-key="dateFormat">
+        <span class="row-text" data-i18n="dateFormat.title">Date format</span>
+        <div class="segmented" role="radiogroup" aria-label="Date format" data-i18n-attr="aria-label:dateFormat.title" data-key="dateFormat">
           <label><input type="radio" name="dateFormat" value="dd"><span id="fmt-d">Day</span></label>
           <label><input type="radio" name="dateFormat" value="dd-mm"><span id="fmt-dm">Day first</span></label>
           <label><input type="radio" name="dateFormat" value="mm-dd"><span id="fmt-md">Month first</span></label>
         </div>
       </div>
       <div class="row stacked" data-show-if="dateSeparator">
-        <span class="row-text">Separator</span>
-        <div class="segmented" role="radiogroup" aria-label="Date separator" data-key="dateSep">
-          <label><input type="radio" name="dateSep" value="-"><span>Hyphen (-)</span></label>
-          <label><input type="radio" name="dateSep" value="/"><span>Slash (/)</span></label>
-          <label><input type="radio" name="dateSep" value="."><span>Dot (.)</span></label>
+        <span class="row-text" data-i18n="dateSep.title">Separator</span>
+        <div class="segmented" role="radiogroup" aria-label="Date separator" data-i18n-attr="aria-label:dateSep.label" data-key="dateSep">
+          <label><input type="radio" name="dateSep" value="-"><span data-i18n="dateSep.hyphen">Hyphen (-)</span></label>
+          <label><input type="radio" name="dateSep" value="/"><span data-i18n="dateSep.slash">Slash (/)</span></label>
+          <label><input type="radio" name="dateSep" value="."><span data-i18n="dateSep.dot">Dot (.)</span></label>
         </div>
       </div>
       <div class="row stacked" data-show-if="anyText">
-        <span class="row-text" id="position-title">Position &amp; size</span>
+        <span class="row-text" id="position-title" data-i18n="textPos.title">Position &amp; size</span>
         <div class="segmented" role="radiogroup" aria-labelledby="position-title" data-key="textRow">
-          <label><input type="radio" name="textRow" value="top"><span>Top</span></label>
-          <label><input type="radio" name="textRow" value="center"><span>Center</span></label>
-          <label><input type="radio" name="textRow" value="bottom"><span>Bottom</span></label>
+          <label><input type="radio" name="textRow" value="top"><span data-i18n="textPos.top">Top</span></label>
+          <label><input type="radio" name="textRow" value="center"><span data-i18n="textPos.center">Center</span></label>
+          <label><input type="radio" name="textRow" value="bottom"><span data-i18n="textPos.bottom">Bottom</span></label>
         </div>
         <div class="segmented" role="radiogroup" aria-labelledby="position-title" data-key="textCol" data-show-if="textColumn">
-          <label><input type="radio" name="textCol" value="start"><span>Left</span></label>
-          <label><input type="radio" name="textCol" value="center"><span>Center</span></label>
-          <label><input type="radio" name="textCol" value="end"><span>Right</span></label>
+          <label><input type="radio" name="textCol" value="start"><span data-i18n="textPos.left">Left</span></label>
+          <label><input type="radio" name="textCol" value="center"><span data-i18n="textPos.center">Center</span></label>
+          <label><input type="radio" name="textCol" value="end"><span data-i18n="textPos.right">Right</span></label>
         </div>
-        <div class="segmented" role="radiogroup" aria-label="Time size" data-key="timeSize" data-show-if="showTime">
-          <label><input type="radio" name="timeSize" value="s"><span aria-label="Small">S</span></label>
-          <label><input type="radio" name="timeSize" value="m"><span aria-label="Medium">M</span></label>
-          <label><input type="radio" name="timeSize" value="l"><span aria-label="Large">L</span></label>
+        <div class="segmented" role="radiogroup" aria-label="Time size" data-i18n-attr="aria-label:timeSize.label" data-key="timeSize" data-show-if="showTime">
+          <label><input type="radio" name="timeSize" value="s"><span aria-label="Small" data-i18n-attr="aria-label:timeSize.s">S</span></label>
+          <label><input type="radio" name="timeSize" value="m"><span aria-label="Medium" data-i18n-attr="aria-label:timeSize.m">M</span></label>
+          <label><input type="radio" name="timeSize" value="l"><span aria-label="Large" data-i18n-attr="aria-label:timeSize.l">L</span></label>
         </div>
       </div>
       <label class="row" data-show-if="anyText">
-        <span class="row-text">Auto hide
-          <small>The painting stays clear; flick your wrist to show the time.</small></span>
+        <span class="row-text"><span data-i18n="autoHide.title">Auto hide</span>
+          <small data-i18n="autoHide.help">The painting stays clear; flick your wrist to show the time.</small></span>
         <input type="checkbox" class="switch" data-key="hideUntilShake">
       </label>
       <label class="row" data-show-if="revealMinutes">
-        <span class="row-text">Show for</span>
+        <span class="row-text" data-i18n="showFor.title">Show for</span>
         <span class="minutes">
           <input type="number" class="number" data-key="revealMinutes" min="1" max="60" step="1" inputmode="numeric">
           <span class="minutes-unit" id="minutes-unit">minute</span>
         </span>
       </label>
       <label class="row" data-show-if="anyText">
-        <span class="row-text">Improve readability
-          <small>A dark box behind the time and date.</small></span>
+        <span class="row-text"><span data-i18n="readability.title">Improve readability</span>
+          <small data-i18n="readability.help">A dark box behind the time and date.</small></span>
         <input type="checkbox" class="switch" id="readability">
       </label>
     </section>
 
-    <section class="group" aria-label="Backup">
+    <section class="group" aria-label="Backup" data-i18n-attr="aria-label:backup.title">
       <details class="advanced">
-        <summary>Backup</summary>
+        <summary data-i18n="backup.title">Backup</summary>
         <div class="row stacked">
-          <span class="row-text">Copy a backup
-            <small>Your settings and the looks you saved per painting live only on this phone, and are gone if you remove the watchface. Copy them and keep the text somewhere safe, for example in a note or an email to yourself.</small></span>
-          <button type="button" class="text-button" id="backup-copy">Copy backup</button>
+          <span class="row-text"><span data-i18n="backup.copyTitle">Copy a backup</span>
+            <small data-i18n="backup.copyHelp">Your settings and the looks you saved per painting live only on this phone, and are gone if you remove the watchface. Copy them and keep the text somewhere safe, for example in a note or an email to yourself.</small></span>
+          <button type="button" class="text-button" id="backup-copy" data-i18n="backup.copyButton">Copy backup</button>
           <span class="label-status" id="backup-status" role="status"></span>
         </div>
         <div class="row stacked">
-          <label class="row-text" for="backup-input">Restore a backup
-            <small>Paste a backup here, check the preview, then save to your watch.</small></label>
+          <label class="row-text" for="backup-input"><span data-i18n="restore.title">Restore a backup</span>
+            <small data-i18n="restore.help">Paste a backup here, check the preview, then save to your watch.</small></label>
           <textarea class="backup-input" id="backup-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder='{"backup": 1, …}'></textarea>
-          <button type="button" class="text-button" id="backup-restore">Restore</button>
+          <button type="button" class="text-button" id="backup-restore" data-i18n="restore.button">Restore</button>
           <span class="label-status" id="restore-status" role="status"></span>
         </div>
       </details>
     </section>
 
     <aside class="visit">
-      <p class="visit-kicker">Enjoying these paintings?</p>
-      <p class="visit-title">Support the Rijksmuseum</p>
-      <p class="visit-text">Every painting here comes from the collection the Rijksmuseum shares openly with the world.</p>
-      <a class="visit-link" id="donate-link" href="https://www.rijksmuseum.nl/en/support/donate" target="_blank" rel="noopener">Donate</a>
+      <p class="visit-kicker" data-i18n="visit.kicker">Enjoying these paintings?</p>
+      <p class="visit-title" data-i18n="visit.title">Support the Rijksmuseum</p>
+      <p class="visit-text" data-i18n="visit.text">Every painting here comes from the collection the Rijksmuseum shares openly with the world.</p>
+      <a class="visit-link" id="donate-link" href="https://www.rijksmuseum.nl/en/support/donate" target="_blank" rel="noopener" data-i18n="visit.donate">Donate</a>
     </aside>
 
     <footer class="credits">
-      <p>Paintings, images and data: Rijksmuseum, Amsterdam, through the
-        <a href="https://data.rijksmuseum.nl/about/" target="_blank" rel="noopener">Rijksmuseum data services</a>.
-        Only works in the public domain or under an open Creative Commons license are shown, following the museum’s
-        <a href="https://data.rijksmuseum.nl/policy/" target="_blank" rel="noopener">information and data policy</a>.</p>
-      <p>Treasure Trove is an independent project and is not affiliated with or endorsed by the Rijksmuseum.</p>
+      <p><span data-i18n="credits.source">Paintings, images and data: Rijksmuseum, Amsterdam, through the</span>
+        <a href="https://data.rijksmuseum.nl/about/" target="_blank" rel="noopener" data-i18n="credits.dataServices">Rijksmuseum data services</a>.
+        <span data-i18n="credits.license">Only works in the public domain or under an open Creative Commons license are shown, following the museum’s</span>
+        <a href="https://data.rijksmuseum.nl/policy/" target="_blank" rel="noopener" data-i18n="credits.policy">information and data policy</a>.</p>
+      <p data-i18n="credits.independent">Treasure Trove is an independent project and is not affiliated with or endorsed by the Rijksmuseum.</p>
     </footer>
   </main>
 
@@ -338,24 +336,26 @@
     <header class="viewer-bar">
       <p class="viewer-title" id="viewer-title"></p>
       <div class="viewer-tools">
-        <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
-        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
-        <button type="button" id="zoom-home" aria-label="Show the whole painting">⤢</button>
-        <button type="button" id="viewer-close" aria-label="Close">✕</button>
+        <button type="button" id="viewer-zoom-out" aria-label="Zoom out" data-i18n-attr="aria-label:viewer.zoomOut">−</button>
+        <button type="button" id="viewer-zoom-in" aria-label="Zoom in" data-i18n-attr="aria-label:viewer.zoomIn">+</button>
+        <button type="button" id="zoom-home" aria-label="Show the whole painting" data-i18n-attr="aria-label:viewer.home">⤢</button>
+        <button type="button" id="viewer-close" aria-label="Close" data-i18n-attr="aria-label:viewer.close">✕</button>
       </div>
     </header>
     <div class="viewer-canvas" id="viewer-canvas"></div>
-    <p class="viewer-hint" id="viewer-hint">Pinch or scroll to zoom, drag to move. The map in the corner shows where you are.</p>
+    <p class="viewer-hint" id="viewer-hint" data-i18n="viewer.hint">Pinch or scroll to zoom, drag to move. The map in the corner shows where you are.</p>
   </dialog>
 
   <div class="savebar">
-    <button type="button" class="save" id="save">Save to watch</button>
+    <button type="button" class="save" id="save" data-i18n="save.button">Save to watch</button>
   </div>
 
   <script src="settings.js"></script>
   <script src="render.js"></script>
   <script src="looks.js"></script>
   <script src="catalog.js"></script>
-  <script src="app.js"></script>
+  <!-- ICU MessageFormat for the translations (FormatJS intl-messageformat 11.2.0, BSD-3-Clause). -->
+  <script src="vendor/intl-messageformat-11.2.0.iife.js"></script>
+  <script src="i18n.js"></script>
 </body>
 </html>
