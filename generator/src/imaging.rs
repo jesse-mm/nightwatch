@@ -1,11 +1,11 @@
-//! Turning a painting into the crop a Pebble screen shows.
+//! Planning the crop a Pebble screen shows.
 //!
-//! Pipeline (generator):  plan crop  →  cut it from the local master at the
-//! screen's exact size  →  tone adjustments  →  lossless PNG. Color tuning,
-//! dithering and frames happen on the phone and in the settings page
-//! (`server/static/config/render.js`), so one crop serves every combination.
+//! The generator plans each Cover crop from the local master image (smart crop,
+//! see saliency.rs) and stores the plan in catalog.json. The phone and the
+//! settings page ask the Rijksmuseum's IIIF server for exactly that region,
+//! then tone, dither and frame it (`site/render.js`).
 
-use image::{imageops::FilterType, Rgb, RgbImage};
+use image::RgbImage;
 use serde::{Deserialize, Serialize};
 
 use crate::saliency::best_window;
@@ -200,76 +200,10 @@ fn frac(
     }
 }
 
-/// Cut the planned crop out of the master image and resize it to the opening
-/// (Lanczos3). Everything is rendered from the local master, never re-fetched.
-pub fn crop_locally(src: &RgbImage, plan: &CropPlan) -> RgbImage {
-    let (iw, ih) = src.dimensions();
-    let x = (plan.x * iw as f64).round() as u32;
-    let y = (plan.y * ih as f64).round() as u32;
-    let w = ((plan.w * iw as f64).round() as u32).clamp(1, iw - x.min(iw - 1));
-    let h = ((plan.h * ih as f64).round() as u32).clamp(1, ih - y.min(ih - 1));
-    let view = image::imageops::crop_imm(src, x, y, w, h).to_image();
-    image::imageops::resize(&view, plan.inner_w, plan.inner_h, FilterType::Lanczos3)
-}
-
-const SHADOW_GAMMA: f32 = 0.8;
-
-/// Old master paintings are dark and brown under varnish, and the Pebble screen
-/// is dim. Stretch the tones (ignoring the extreme 0.5%) and add a touch of color.
-fn tone(img: &RgbImage) -> Vec<[f32; 3]> {
-    let mut hist = [0u32; 256];
-    for p in img.pixels() {
-        let [r, g, b] = p.0;
-        let l = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32) as usize;
-        hist[l.min(255)] += 1;
-    }
-    let total: u32 = hist.iter().sum();
-    let cut = (total as f32 * 0.005) as u32;
-    let (mut lo, mut hi, mut acc) = (0usize, 255usize, 0u32);
-    for (i, &c) in hist.iter().enumerate() {
-        acc += c;
-        if acc > cut {
-            lo = i;
-            break;
-        }
-    }
-    acc = 0;
-    for i in (0..256).rev() {
-        acc += hist[i];
-        if acc > cut {
-            hi = i;
-            break;
-        }
-    }
-    let span = (hi.saturating_sub(lo)).max(1) as f32;
-    let gain = (255.0 / span).min(2.5);
-    let saturation = 1.1;
-    // Lift shadows: the reflective screen crushes dark tones into one blob.
-    let lift: [f32; 256] = std::array::from_fn(|i| 255.0 * (i as f32 / 255.0).powf(SHADOW_GAMMA));
-
-    img.pixels()
-        .map(|p| {
-            let c =
-                p.0.map(|v| lift[((v as f32 - lo as f32) * gain).clamp(0.0, 255.0) as usize]);
-            let l = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
-            c.map(|v| (l + (v - l) * saturation).clamp(0.0, 255.0))
-        })
-        .collect()
-}
-
-/// Tone a crop for the screen (see `tone`), rounded back to 8-bit RGB.
-pub fn tone_image(img: &RgbImage) -> RgbImage {
-    let toned = tone(img);
-    let mut out = RgbImage::new(img.width(), img.height());
-    for (px, c) in out.pixels_mut().zip(toned) {
-        *px = Rgb(c.map(|v| v.round().clamp(0.0, 255.0) as u8));
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::Rgb;
 
     fn target(w: u32, h: u32) -> Target {
         Target {
@@ -313,16 +247,6 @@ mod tests {
     }
 
     #[test]
-    fn crop_locally_makes_the_planned_size() {
-        let img = RgbImage::from_pixel(1200, 400, Rgb([100, 50, 20]));
-        let plan = plan_crop(&img, &target(144, 168), 20, CropHints::default());
-        assert_eq!(
-            crop_locally(&img, &plan).dimensions(),
-            (plan.inner_w, plan.inner_h)
-        );
-    }
-
-    #[test]
     fn fill_crops_keep_slack_on_the_free_axis() {
         // Uniform image: the smart window lands in the middle, so there's
         // room on both sides.
@@ -361,24 +285,5 @@ mod tests {
         };
         let plan = plan_crop(&img, &t, 20, CropHints::default());
         assert_eq!((plan.inner_w, plan.inner_h, plan.window_x), (144, 168, 0));
-    }
-
-    #[test]
-    fn tone_image_keeps_the_size() {
-        let img = RgbImage::from_fn(30, 20, |x, y| Rgb([(x * 8) as u8, (y * 12) as u8, 90]));
-        assert_eq!(tone_image(&img).dimensions(), (30, 20));
-    }
-
-    #[test]
-    fn tone_image_stretches_a_dull_image_to_full_range() {
-        let img = RgbImage::from_fn(64, 1, |x, _| {
-            // 60..186: a span the 2.5x gain cap can stretch to the full range.
-            let v = 60 + 2 * x as u8;
-            Rgb([v, v, v])
-        });
-        let toned = tone_image(&img);
-        let lo = toned.pixels().map(|p| p.0[0]).min().unwrap();
-        let hi = toned.pixels().map(|p| p.0[0]).max().unwrap();
-        assert!(lo < 20 && hi > 235, "range {lo}..{hi}");
     }
 }

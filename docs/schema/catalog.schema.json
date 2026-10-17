@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Treasure Trove catalog bundle (catalog.json)",
-  "description": "Written by the generator (--bundle, server/src/bundle.rs); read by server/static/config/catalog.js on the phone and the settings page.",
+  "description": "Written by the generator (--bundle, server/src/bundle.rs); read by site/catalog.js on the phone and the settings page.",
   "type": "object",
   "required": [
     "version",

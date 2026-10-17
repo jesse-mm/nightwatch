@@ -1,1 +1,1 @@
-../../../server/static/config/render.js
+../../../site/render.js

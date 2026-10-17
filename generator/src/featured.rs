@@ -1,5 +1,5 @@
 //! The Featured list: 365 paintings, one per day of the year, kept in
-//! `catalog/featured.json` (in git).
+//! `catalog/featured.json` (shared as a release artifact, see scripts/catalog.sh).
 //!
 //! Wikipedia readership barely changes month to month, so the list is built
 //! once (or with `--refresh-featured`, e.g. yearly) and then simply read: no

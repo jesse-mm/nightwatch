@@ -1,4 +1,4 @@
-// Tests for the shared renderer (server/static/config/render.js), run with
+// Tests for the shared renderer (site/render.js), run with
 // `npm test`. Golden fixtures come from the Rust generator's original
 // implementation (imaging.rs `write_js_fixtures`), so the port must match it.
 import { createHash } from 'node:crypto';

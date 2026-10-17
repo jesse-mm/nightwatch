@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """Draw a simple mockup of each supported watch showing what it really displays.
 
-Used for docs/DEVICES.md. Each screen shows a generated crop rendered by the
-same code as the phone (server/static/config/render.js, run with Node; Accurate
-colors, no frame) at its exact resolution, scaled 2x without smoothing so the
-dithered pixels stay visible. Needs Pillow, Node and a generator run
-(data/art/<key>/c/*.png).
+Used for docs/DEVICES.md. Each screen shows a painting the way the phone makes
+it: the planned Cover crop from the Rijksmuseum's IIIF server, toned and
+rendered by site/render.js (run with Node; Accurate colors, no frame) at its
+exact resolution, scaled 2x without smoothing so the dithered pixels stay
+visible. Needs Pillow, Node 18+ and catalog/catalog.json.
 
-    python3 scripts/device-mockups.py data 200107756 docs/images/devices
+    python3 scripts/device-mockups.py catalog/catalog.json 200107756 docs/images/devices
 """
 
 import base64
 import json
-import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -32,44 +31,35 @@ BEZEL = (24, 25, 27)
 BAND = (40, 42, 46)
 PAD = 18  # bezel around the screen, in mockup pixels
 
+ROOT = Path(__file__).resolve().parent.parent
 
-RENDER = Path(__file__).resolve().parent.parent / "server" / "static" / "config" / "render.js"
-
-# Reads {w, h, round, cw, ch, rgb} on stdin, prints the watch bytes as base64.
+# Reads {catalog, key, w, h, round} on stdin, prints the watch bytes as base64:
+# the same steps as the phone (watchface/src/pkjs/index.js).
 NODE = """
-const render = require(process.argv[1]);
+const [catalogJs, renderJs, pngJs] = process.argv.slice(1);
+const render = require(renderJs);
+const png = require(pngJs);
 let input = '';
-process.stdin.on('data', (d) => (input += d)).on('end', () => {
+process.stdin.on('data', (d) => (input += d)).on('end', async () => {
   const o = JSON.parse(input);
-  const bytes = render.compose(Buffer.from(o.rgb, 'base64'), o.cw, o.ch, {
+  const catalog = require(catalogJs).create(require(o.catalog));
+  const screen = { w: o.w, h: o.h, round: o.round };
+  const req = catalog.cropRequest(o.key, screen, 'fill');
+  const file = new Uint8Array(await (await fetch(req.url)).arrayBuffer());
+  const image = png.decode(file);
+  const bytes = render.compose(render.tone(image.data), image.width, image.height, {
     w: o.w, h: o.h, stride: o.w, round: o.round, fit: 'fill', frame: 'none', palette: 'defined',
-    windowX: o.windowX, windowY: o.windowY,
   });
   process.stdout.write(Buffer.from(bytes).toString('base64'));
 });
 """
 
 
-def planned_window(data: Path, key: str, name: str) -> tuple[int, int]:
-    """Where the planned view sits in a Cover crop with slack (serve.sqlite)."""
-    db = sqlite3.connect(f"file:{data / 'serve.sqlite'}?mode=ro", uri=True)
-    row = db.execute("SELECT plans FROM paintings WHERE key = ?", (key,)).fetchone()
-    plan = json.loads(row[0]).get(name, {}) if row and row[0] else {}
-    return plan.get("windowX", 0), plan.get("windowY", 0)
-
-
-def screen_image(data: Path, key: str, w: int, h: int, round_: bool) -> Image.Image:
-    shape = "round" if round_ else "rect"
-    name = f"{w}x{h}-{shape}-fill"
-    crop = Image.open(data / "art" / key / "c" / f"{name}.png").convert("RGB")
-    window_x, window_y = planned_window(data, key, name)
-    request = {
-        "w": w, "h": h, "round": round_, "cw": crop.width, "ch": crop.height,
-        "windowX": window_x, "windowY": window_y,
-        "rgb": base64.b64encode(crop.tobytes()).decode(),
-    }
+def screen_image(catalog: Path, key: str, w: int, h: int, round_: bool) -> Image.Image:
+    request = {"catalog": str(catalog.resolve()), "key": key, "w": w, "h": h, "round": round_}
     out = subprocess.run(
-        ["node", "-e", NODE, str(RENDER)],
+        ["node", "-e", NODE, str(ROOT / "site" / "catalog.js"), str(ROOT / "site" / "render.js"),
+         str(ROOT / "watchface" / "src" / "pkjs" / "png.js")],
         input=json.dumps(request), capture_output=True, text=True, check=True,
     )
     # GColor8 bytes (0b11RRGGBB) to RGB.
@@ -114,11 +104,11 @@ def mockup(screen: Image.Image, round_: bool) -> Image.Image:
 def main() -> None:
     if len(sys.argv) != 4:
         sys.exit(__doc__)
-    data, key, out_dir = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
+    catalog, key, out_dir = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
     out_dir.mkdir(parents=True, exist_ok=True)
     for _, name, w, h, round_ in SCREENS:
         path = out_dir / f"{name}.png"
-        mockup(screen_image(data, key, w, h, round_), round_).save(path, optimize=True)
+        mockup(screen_image(catalog, key, w, h, round_), round_).save(path, optimize=True)
         print(path)
 
 

@@ -1,22 +1,19 @@
-//! The crops the generator produces, their names, and the input hashes that
-//! decide whether a file is still up to date.
+//! The crops the generator plans, their names, and the input hashes that
+//! decide whether a plan is still up to date.
 //!
-//! Per painting: 4 screens × 2 fits = 8 **crops**, the painting cut to the
-//! screen's exact size and toned, stored as lossless PNG. Everything else, the
-//! color tuning (dithering) and the frame, is applied on the phone and in the
-//! settings page (`server/static/config/render.js`), so one crop serves all
-//! 16 combinations of frame and tuning.
+//! Per painting: one Cover crop plan per screen (4). Contain needs no plan: it
+//! is the whole painting, sized from its aspect ratio on the phone.
 //!
-//! Everything is rendered from the painting's local master image, so a pipeline
-//! change never touches the network.
+//! Plans come from the painting's local master image, so a planning change
+//! never touches the network.
 
 use sha2::{Digest, Sha256};
 
 use crate::imaging::{Fit, Target};
 
-/// Bump when the crop or tone code changes output: every crop whose hash
-/// includes it is then rebuilt from the local master images.
-pub const PIPELINE_VERSION: &str = "2026-10-17.3-portraits";
+/// Bump when the planning code changes output: every plan whose hash includes
+/// it is then redone from the local master images.
+pub const PIPELINE_VERSION: &str = "2026-10-17.4-plans";
 
 /// The color screens we support: (width, height, round). See docs/DEVICES.md.
 pub const SCREENS: [(u32, u32, bool); 4] = [
@@ -31,12 +28,9 @@ pub fn target(screen: (u32, u32, bool), fit: Fit) -> Target {
     Target { w, h, round, fit }
 }
 
-/// Every crop a painting gets.
-pub fn all() -> Vec<Target> {
-    SCREENS
-        .iter()
-        .flat_map(|&s| Fit::ALL.iter().map(move |&fit| target(s, fit)))
-        .collect()
+/// Every crop a painting gets a plan for: Cover on each screen.
+pub fn cover() -> Vec<Target> {
+    SCREENS.iter().map(|&s| target(s, Fit::Fill)).collect()
 }
 
 /// e.g. `200x228-rect-fill`; the file is `art/<key>/c/<name>.png`.
@@ -95,11 +89,12 @@ mod tests {
     }
 
     #[test]
-    fn all_is_8_distinct_crops() {
-        let mut names: Vec<String> = all().iter().map(crop_name).collect();
+    fn cover_is_one_distinct_plan_per_screen() {
+        let mut names: Vec<String> = cover().iter().map(crop_name).collect();
         names.sort();
         names.dedup();
-        assert_eq!(names.len(), 8);
+        assert_eq!(names.len(), SCREENS.len());
+        assert!(names.iter().all(|n| n.ends_with("-fill")));
     }
 
     #[test]

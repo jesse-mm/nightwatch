@@ -1,7 +1,6 @@
 node_modules/
 watchface/build/
-server/target/
-server/data/
+generator/target/
 data/
 .env
 *.pbw
@@ -13,4 +12,4 @@ catalog.tar.gz.sha256
 
 # Generated from catalog/catalog.json by scripts/bundle-catalog.mjs
 watchface/src/pkjs/catalog-data.js
-server/static/config/catalog.json
+site/catalog.json

@@ -1,36 +1,19 @@
-# Treasure Trove: a generator that pre-renders everything, and a server that
-# only serves those files.
+# Treasure Trove's generator: builds catalog/catalog.json, the painting catalog
+# the watchface (bundled into the app) and the settings page (site/) use. There
+# is no server: pictures come straight from the Rijksmuseum's IIIF server.
 #
-#   Generate (monthly; resumable; polite):  docker compose run --rm generator
-#   Serve, LAN only:                         docker compose up -d --build
-#   Serve + public HTTPS URL:                docker compose --profile tailscale up -d --build
+#   docker compose run --rm generator        # monthly; resumable; polite
 #
-# Both use ./data (catalog.sqlite + art/, not in git). The generator also writes
-# catalog/paintings.jsonl (metadata, in git). The tailscale profile publishes the
-# server through Tailscale Funnel at https://<TS_HOSTNAME>.<your-tailnet>.ts.net.
-# See docs/GENERATOR.md and docs/DEPLOY.md.
+# Works in ./data (catalog.sqlite + master images, not in git) and writes
+# catalog/catalog.json, catalog/featured.json and catalog/paintings.jsonl.
+# Then: node scripts/bundle-catalog.mjs (see docs/GENERATOR.md).
 
 services:
-  server:
-    build: ./server
-    image: treasure-trove:latest
-    restart: unless-stopped
-    ports:
-      - "${SERVER_PORT:-8080}:8080"
-    environment:
-      RUST_LOG: ${RUST_LOG:-info}
-    volumes:
-      - ${DATA_DIR:-./data}:/data:ro
-
   generator:
-    profiles: ["generate"]
-    image: treasure-trove:latest
-    build: ./server
+    build: ./generator
+    image: treasure-trove-generator:latest
     restart: "no"
-    # The image's HEALTHCHECK probes the web server, which the generator doesn't run.
-    healthcheck:
-      disable: true
-    command: ["treasure-trove-generator", "--export", "/catalog/paintings.jsonl", "--featured", "/catalog/featured.json"]
+    command: ["treasure-trove-generator", "--export", "/catalog/paintings.jsonl"]
     environment:
       RUST_LOG: ${RUST_LOG:-info}
       REQUESTS_PER_SECOND: ${REQUESTS_PER_SECOND:-1}
@@ -39,27 +22,7 @@ services:
       SAFE_CROP_PX: ${SAFE_CROP_PX:-20}
       PD_FALLBACK_YEAR: ${PD_FALLBACK_YEAR:-1850}
       POOL_MAX_PAGES: ${POOL_MAX_PAGES:-80}
+      SOURCE_SIZE: ${SOURCE_SIZE:-1200}
     volumes:
       - ${DATA_DIR:-./data}:/data
       - ./catalog:/catalog
-
-  tailscale:
-    profiles: ["tailscale"]
-    image: tailscale/tailscale:stable
-    hostname: ${TS_HOSTNAME:-treasure-trove}
-    restart: unless-stopped
-    environment:
-      TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY in .env}
-      TS_STATE_DIR: /var/lib/tailscale
-      TS_SERVE_CONFIG: /config/serve.json
-      # Userspace networking: no /dev/net/tun needed, which keeps this working
-      # inside an unprivileged Proxmox LXC container.
-      TS_USERSPACE: "true"
-    volumes:
-      - ts-state:/var/lib/tailscale
-      - ./tailscale:/config:ro
-    depends_on:
-      - server
-
-volumes:
-  ts-state:

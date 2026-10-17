@@ -1,4 +1,4 @@
-// Settings storage (server/static/config/settings.js) and the JSON Schemas in
+// Settings storage (site/settings.js) and the JSON Schemas in
 // docs/schema, which must stay in step with the code.
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';

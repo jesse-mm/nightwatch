@@ -3,9 +3,10 @@
  *
  * Responsibilities:
  *  1. Learn the watch's screen (size, color, row stride, shape) from its Hello.
- *  2. Once per day, ask the server for a random painting rendered for that
- *     screen, and keep it in localStorage so relaunching the face is instant
- *     and works offline.
+ *  2. When a new painting is due, pick it from the bundled catalog, download
+ *     its planned crop from the Rijksmuseum's IIIF server, tone and dither it,
+ *     and keep it in localStorage so relaunching the face is instant and works
+ *     offline.
  *  3. Stream the bytes to the watch in chunks.
  *  4. Open the custom settings page and forward the choices to the watch.
  *
@@ -21,7 +22,7 @@ var png = require('./png');
 // The painting catalog, bundled with the app (generated from catalog.json).
 var catalog = require('./catalog').create(require('./catalog-data'));
 // Where the settings page is hosted (static files; no server of our own).
-var PAGE_URL = CONFIG.SETTINGS_URL || CONFIG.SERVER_URL;
+var PAGE_URL = CONFIG.SETTINGS_URL;
 
 var SETTINGS_KEY = 'tt-settings';
 var ART_KEY = 'tt-art';
@@ -520,7 +521,7 @@ Pebble.addEventListener('showConfiguration', function () {
     watch: watch,
     looks: looksForPage()
   };
-  Pebble.openURL(PAGE_URL + '/config/#' + encodeURIComponent(JSON.stringify(state)));
+  Pebble.openURL(PAGE_URL + '/#' + encodeURIComponent(JSON.stringify(state)));
 });
 
 Pebble.addEventListener('webviewclosed', function (e) {

@@ -1,1 +1,1 @@
-../../../server/static/config/catalog.js
+../../../site/catalog.js

@@ -1,4 +1,5 @@
-//! `treasure-trove-generator`: builds everything the server serves.
+//! `treasure-trove-generator`: builds `catalog.json`, the painting catalog the
+//! watchface and the settings page use.
 //!
 //! Run it monthly (or whenever); it only redoes work whose inputs changed. See
 //! `--help` and docs/GENERATOR.md.
@@ -10,26 +11,26 @@ use tracing_subscriber::EnvFilter;
 use treasure_trove::generate::{self, Options};
 
 const HELP: &str = "\
-treasure-trove-generator: fetch paintings politely, render every variant, export metadata
+treasure-trove-generator: fetch paintings politely, plan their crops, write catalog.json
 
 USAGE: treasure-trove-generator [OPTIONS]
 
 OPTIONS (environment variable in brackets):
-  --data DIR            output directory: catalog.sqlite + art/   [DATA_DIR, ./data]
-  --export FILE         write the git-friendly catalog here        [EXPORT_PATH]
-  --bundle FILE         write catalog.json for the phone and page  [BUNDLE_PATH]
+  --data DIR            working directory: catalog.sqlite + art/  [DATA_DIR, ./data]
+  --bundle FILE         where to write catalog.json                [BUNDLE_PATH, ./catalog/catalog.json]
+  --export FILE         also write paintings.jsonl (for diffs)     [EXPORT_PATH]
   --rps N               requests per second to outside services   [REQUESTS_PER_SECOND, 1]
   --contact TEXT        your email or a URL, sent in the User-Agent [CONTACT]
                         (Wikimedia requires it for Wikipedia pageviews; without it
                         Featured is ranked by number of Wikipedia articles)
   --refresh-days N      re-check metadata/pools older than this   [REFRESH_DAYS, 25]
-  --featured FILE       the Featured list, kept in git; built only when missing
+  --featured FILE       the Featured list (a release artifact); built only when missing
                         [FEATURED_PATH, ./catalog/featured.json]
   --refresh-featured    rebuild the Featured list (e.g. once a year, ~20 min)
   --limit N             only N paintings (test runs)
   --only KEY            only this painting (repeatable), e.g. 200107928
-  --skip-fetch          render from what's on disk, no network
-  --skip-render         fetch only
+  --skip-fetch          plan from what's on disk, no network
+  --skip-plan           fetch only
   -h, --help            this text
 
 Other settings: RIJKS_SEARCH_URL, POOL_MAX_PAGES (80), PD_FALLBACK_YEAR (1850),
@@ -47,13 +48,13 @@ fn parse_args() -> Result<Options> {
     let mut o = Options {
         data_dir: var("DATA_DIR", PathBuf::from("./data")),
         export: std::env::var("EXPORT_PATH").ok().map(PathBuf::from),
-        bundle: std::env::var("BUNDLE_PATH").ok().map(PathBuf::from),
+        bundle: var("BUNDLE_PATH", PathBuf::from("./catalog/catalog.json")),
         requests_per_second: var("REQUESTS_PER_SECOND", 1.0),
         refresh_days: var("REFRESH_DAYS", 25),
         limit: None,
         only: Vec::new(),
         skip_fetch: false,
-        skip_render: false,
+        skip_plan: false,
         search_url: var(
             "RIJKS_SEARCH_URL",
             "https://data.rijksmuseum.nl/search/collection?type=painting&imageAvailable=true"
@@ -79,7 +80,7 @@ fn parse_args() -> Result<Options> {
         match a.as_str() {
             "--data" => o.data_dir = value("--data")?.into(),
             "--export" => o.export = Some(value("--export")?.into()),
-            "--bundle" => o.bundle = Some(value("--bundle")?.into()),
+            "--bundle" => o.bundle = value("--bundle")?.into(),
             "--rps" => o.requests_per_second = value("--rps")?.parse()?,
             "--contact" => o.contact = Some(value("--contact")?),
             "--featured" => o.featured_path = value("--featured")?.into(),
@@ -88,7 +89,7 @@ fn parse_args() -> Result<Options> {
             "--limit" => o.limit = Some(value("--limit")?.parse()?),
             "--only" => o.only.push(value("--only")?),
             "--skip-fetch" => o.skip_fetch = true,
-            "--skip-render" => o.skip_render = true,
+            "--skip-plan" => o.skip_plan = true,
             "-h" | "--help" => {
                 print!("{HELP}");
                 std::process::exit(0);

@@ -27,7 +27,7 @@ The Featured list is ranked using Wikidata (https://www.wikidata.org, CC0) and
 Wikipedia pageview statistics from the Wikimedia REST API.
 
 ## pebble-color-optimizer (MIT)
-`server/static/config/render.js` contains color tables extracted from the
+`site/render.js` contains color tables extracted from the
 palette swatches of https://github.com/czmanix/pebble-color-optimizer and ports
 its matching + Atkinson dithering approach.
 

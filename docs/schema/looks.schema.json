@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Treasure Trove looks per painting (localStorage tt-looks)",
-  "description": "The look a reader saved for each painting; written by server/static/config/looks.js.",
+  "description": "The look a reader saved for each painting; written by site/looks.js.",
   "type": "object",
   "required": [
     "version",

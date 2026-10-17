@@ -1,1 +1,1 @@
-../../../server/static/config/looks.js
+../../../site/looks.js

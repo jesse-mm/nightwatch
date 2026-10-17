@@ -1,19 +1,20 @@
-//! The generator: fetch what changed, render what's outdated, export metadata.
+//! The generator: fetch what changed, plan what's outdated, write the catalog.
 //!
 //! **Fetch** (network, throttled, resumable)
-//! 1. Wikidata link table (one query) and the painting pool + era pools (search
-//!    pages), when older than `refresh_days`.
+//! 1. The painting pool + era pools (search pages), when older than
+//!    `refresh_days`.
 //! 2. Metadata for every pool painting not checked within `refresh_days`. A
 //!    master image is downloaded only when the painting has none yet or its
 //!    IIIF URL changed (IIIF images are immutable).
+//! 3. The Featured list (Wikipedia readership), only when missing or asked for.
 //!
-//! **Render** (local only, parallel)
-//! 3. For each eligible painting with a master image, rebuild only the crops and
-//!    variants whose input hash changed: new painting, new image, new frame or
-//!    tuning, or a `PIPELINE_VERSION` bump. Never touches the network.
+//! **Plan** (local only, parallel)
+//! 4. For each eligible painting with a master image, redo only the crop plans
+//!    whose input hash changed: new image or a `PIPELINE_VERSION` bump.
 //!
-//! **Export**
-//! 4. `paintings.jsonl` for git: metadata and hashes, no binaries.
+//! **Write**
+//! 5. `catalog.json` for the phone and the settings page (bundle.rs), and
+//!    `paintings.jsonl` (metadata and hashes, for diffs).
 //!
 //! Stopping at any point is safe: everything already written is recorded with
 //! its hash and is skipped next time.
@@ -43,22 +44,22 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Options {
     pub data_dir: PathBuf,
-    /// Write `paintings.jsonl` here after the run (for git).
+    /// Write `paintings.jsonl` here after the run (metadata, for diffs).
     pub export: Option<PathBuf>,
-    /// Write `catalog.json` here: the catalog for the phone and settings page
-    /// when they show paintings straight from the Rijksmuseum (no server).
-    pub bundle: Option<PathBuf>,
+    /// Write `catalog.json` here: the catalog the phone (bundled into the app)
+    /// and the settings page use.
+    pub bundle: PathBuf,
     /// Requests per second to the Rijksmuseum/IIIF/Wikidata (fractional OK).
     pub requests_per_second: f64,
     /// Re-check metadata, pools and Wikidata older than this.
     pub refresh_days: u64,
-    /// Fetch at most this many paintings' metadata, and render at most this
+    /// Fetch at most this many paintings' metadata, and plan at most this
     /// many paintings (for test runs).
     pub limit: Option<usize>,
-    /// Only these painting keys (fetch + render), e.g. for testing.
+    /// Only these painting keys (fetch + plan), e.g. for testing.
     pub only: Vec<String>,
     pub skip_fetch: bool,
-    pub skip_render: bool,
+    pub skip_plan: bool,
     pub search_url: String,
     pub pool_max_pages: usize,
     pub pd_fallback_year: i32,
@@ -68,7 +69,7 @@ pub struct Options {
     pub user_agent: String,
     /// Email or URL in the User-Agent; Wikimedia requires it for pageviews.
     pub contact: Option<String>,
-    /// The Featured list (in git). Built only when missing or when
+    /// The Featured list (a release artifact). Built only when missing or when
     /// `refresh_featured` is set; otherwise just read.
     pub featured_path: PathBuf,
     pub refresh_featured: bool,
@@ -90,19 +91,13 @@ pub async fn run(opts: Options) -> Result<()> {
             featured_keys = build_featured(&catalog, &rijks, &opts).await?;
         }
     }
+    if !opts.skip_plan {
+        plan_all(&mut catalog, &opts)?;
+    }
     let (year, _) = popularity::year_month(now_secs());
     let day_order = featured::day_order(&featured_keys, year);
-    catalog.publish(&day_order)?;
-    if !opts.skip_render {
-        render_all(&mut catalog, &opts, &day_order)?;
-    }
-    catalog.publish(&day_order)?;
-    tracing::info!("published serve.sqlite for the server");
-    if let Some(path) = &opts.bundle {
-        let snap = crate::snapshot::Snapshot::load(&opts.data_dir)?;
-        let n = crate::bundle::write(&snap, &opts.data_dir, path)?;
-        tracing::info!(paintings = n, path = %path.display(), "wrote the catalog bundle");
-    }
+    let n = crate::bundle::write(&catalog, &day_order, &opts.bundle)?;
+    tracing::info!(paintings = n, path = %opts.bundle.display(), "wrote catalog.json");
     if let Some(path) = &opts.export {
         let n = catalog.export_jsonl(path)?;
         tracing::info!(paintings = n, path = %path.display(), "exported catalog");
@@ -335,7 +330,7 @@ async fn fetch_one(
     Ok((changed, true))
 }
 
-// ---------------------------------------------------------------- render
+// ---------------------------------------------------------------- plan
 
 fn source_path(root: &Path, key: &str) -> PathBuf {
     root.join("art").join(key).join("source.jpg")
@@ -359,88 +354,93 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// What a worker produced for one painting; written to SQLite by the caller.
-struct Rendered {
-    key: String,
-    crops: Vec<(String, String, CropPlan, String, usize)>,
-}
-
-fn render_all(catalog: &mut Catalog, opts: &Options, featured_days: &[String]) -> Result<()> {
-    let mut work = catalog.renderable()?;
+fn plan_all(catalog: &mut Catalog, opts: &Options) -> Result<()> {
+    let mut work = catalog.plannable()?;
     if !opts.only.is_empty() {
         work.retain(|(k, _, _)| opts.only.iter().any(|o| key_of(o) == k));
     }
     if let Some(n) = opts.limit {
         work.truncate(n);
     }
-    let targets = variants::all();
+    let targets = variants::cover();
     let names: Vec<String> = targets.iter().map(variants::crop_name).collect();
     let total = work.len();
     tracing::info!(
         paintings = total,
         threads = rayon::current_num_threads(),
-        "rendering"
+        "planning crops"
     );
     let started = Instant::now();
-    let (mut crops_done, mut failed) = (0, 0);
+    let (mut planned, mut failed) = (0, 0);
 
     // Chunks keep memory flat and give regular progress + commits.
-    for (n, chunk) in work.chunks(16).enumerate() {
+    for (n, chunk) in work.chunks(32).enumerate() {
         let existing: Vec<HashMap<String, String>> = chunk
             .iter()
-            .map(|(k, _, _)| catalog.crop_hashes(k))
+            .map(|(k, _, _)| catalog.plan_hashes(k))
             .collect::<Result<_>>()?;
-        let results: Vec<Result<Rendered>> = chunk
+        let results: Vec<Result<Planned>> = chunk
             .par_iter()
             .zip(existing.par_iter())
             .map(|((key, sha, title), have)| {
                 let hints = imaging::CropHints {
                     portrait: imaging::is_portrait_title(title),
                 };
-                render_painting(&opts.data_dir, key, sha, hints, have, &targets, opts)
+                plan_painting(&opts.data_dir, key, sha, hints, have, &targets, opts)
             })
             .collect();
         catalog.transaction(|c| {
             for r in results {
                 match r {
                     Ok(r) => {
-                        for (name, hash, plan, path, bytes) in &r.crops {
-                            c.put_crop(&r.key, name, hash, plan, path, *bytes)?;
+                        for (name, hash, plan) in &r.plans {
+                            c.put_plan(&r.key, name, hash, plan)?;
+                        }
+                        if let Some((w, h)) = r.size {
+                            c.set_size(&r.key, w, h)?;
                         }
                         c.finish_painting(&r.key, &names)?;
-                        crops_done += r.crops.len();
+                        planned += r.plans.len();
                     }
                     Err(e) => {
                         failed += 1;
-                        tracing::warn!(error = %e, "render failed");
+                        tracing::warn!(error = %e, "planning failed");
                     }
                 }
             }
             Ok(())
         })?;
-        // Let the server offer finished paintings during long runs.
-        if (n + 1) % 50 == 0 {
-            catalog.publish(featured_days)?;
+        let done = ((n + 1) * 32).min(total);
+        if (n + 1) % 20 == 0 || done == total {
+            let per = started.elapsed().as_secs_f64() / done.max(1) as f64;
+            tracing::info!(
+                done,
+                total,
+                planned,
+                failed,
+                eta_min = (per * (total - done) as f64 / 60.0).round(),
+                "plan progress"
+            );
         }
-        let done = ((n + 1) * 16).min(total);
-        let per = started.elapsed().as_secs_f64() / done.max(1) as f64;
-        tracing::info!(
-            done,
-            total,
-            crops_done,
-            failed,
-            eta_min = (per * (total - done) as f64 / 60.0).round(),
-            "render progress"
-        );
     }
     Ok(())
 }
 
-/// Folders from the old layout (pre-dithered variants and WebP crops), removed
-/// the first time a painting is rendered with the current one.
+/// Folders from older layouts (pre-dithered variants, WebP crops), removed the
+/// first time a painting is planned. The rendered PNG crops (`c/`) are left
+/// alone; delete them by hand once nothing serves them (see docs/GENERATOR.md).
 const OLD_LAYOUT: [&str; 2] = ["v", "crops"];
 
-fn render_painting(
+/// What a worker produced for one painting; written to SQLite by the caller.
+struct Planned {
+    key: String,
+    /// (crop name, input hash, plan) for the plans that were redone.
+    plans: Vec<(String, String, CropPlan)>,
+    /// The master image size, when it was decoded.
+    size: Option<(u32, u32)>,
+}
+
+fn plan_painting(
     root: &Path,
     key: &str,
     source_sha: &str,
@@ -448,10 +448,11 @@ fn render_painting(
     have: &HashMap<String, String>,
     targets: &[Target],
     opts: &Options,
-) -> Result<Rendered> {
-    let mut out = Rendered {
+) -> Result<Planned> {
+    let mut out = Planned {
         key: key.to_string(),
-        crops: Vec::new(),
+        plans: Vec::new(),
+        size: None,
     };
     for old in OLD_LAYOUT {
         let dir = root.join("art").join(key).join(old);
@@ -463,37 +464,19 @@ fn render_painting(
     for t in targets {
         let name = variants::crop_name(t);
         let hash = variants::crop_hash(source_sha, t, opts.safe_crop_px);
-        let rel = format!("art/{key}/c/{name}.png");
-        if have.get(&name) == Some(&hash) && root.join(&rel).exists() {
+        if have.get(&name) == Some(&hash) {
             continue;
         }
         let src = match &src {
             Some(img) => img,
             None => src.insert(load_source(root, key)?),
         };
-        // Always from the master image, never from a stored crop.
-        let plan = imaging::plan_crop(src, t, opts.safe_crop_px, hints);
-        let art = imaging::tone_image(&imaging::crop_locally(src, &plan));
-        let png = encode_png(&art)?;
-        write_atomic(&root.join(&rel), &png)?;
-        out.crops.push((name, hash, plan, rel, png.len()));
+        out.size = Some(src.dimensions());
+        out.plans.push((
+            name,
+            hash,
+            imaging::plan_crop(src, t, opts.safe_crop_px, hints),
+        ));
     }
-    Ok(out)
-}
-
-/// Lossless PNG with the strongest compression (crops are written once).
-fn encode_png(img: &RgbImage) -> Result<Vec<u8>> {
-    use image::{
-        codecs::png::{CompressionType, FilterType, PngEncoder},
-        ImageEncoder,
-    };
-    let mut out = Vec::new();
-    PngEncoder::new_with_quality(&mut out, CompressionType::Best, FilterType::Adaptive)
-        .write_image(
-            img.as_raw(),
-            img.width(),
-            img.height(),
-            image::ExtendedColorType::Rgb8,
-        )?;
     Ok(out)
 }

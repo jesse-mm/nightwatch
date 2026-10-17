@@ -5,12 +5,18 @@ painting from the Rijksmuseum on your wrist every day, with a small LECO time an
 date that stay out of its way.
 
 ```
-                                                                     monthly, ~1 request/s
-┌──────────────┐  once a day   ┌──────────────────┐   JSON + bytes   ┌─────────┐  reads   ┌───────────┐ ◀── data.rijksmuseum.nl
-│ Pebble       │ ◀── bitmap ── │ Phone (PebbleKit │ ◀─────────────── │ server  │ ◀─────── │ generator │ ◀── iiif.micr.io
-│ watchface C  │ ─ screen info▶│ JS, caches today)│ ── screen info ─▶│ (Rust)  │  data/   │ (Rust)    │ ◀── wikidata.org
-└──────────────┘               └──────────────────┘                  └─────────┘          └───────────┘
-                                        ▲ settings page served by the server
+┌──────────────┐  once a day   ┌──────────────────┐  crop (PNG)   ┌──────────────────┐
+│ Pebble       │ ◀── bitmap ── │ Phone (PebbleKit │ ◀──────────── │ Rijksmuseum IIIF │
+│ watchface C  │ ─ screen info▶│ JS, catalog in   │               │ image server     │
+└──────────────┘               │ the app)         │  ┌─ picture ─ │ (iiif.micr.io)   │
+                               └──────────────────┘  ▼            └──────────────────┘
+                                         ▲    settings page (static files in site/)
+                                         │           ▲
+                          catalog.json ──┴───────────┘
+                                ▲
+                   ┌────────────┴─────┐  monthly, ~1 request/s
+                   │ generator (Rust) │ ◀── data.rijksmuseum.nl, iiif.micr.io, wikidata.org
+                   └──────────────────┘
 ```
 
 ## What's in here
@@ -18,11 +24,12 @@ date that stay out of its way.
 | Path | What it is |
 |---|---|
 | `watchface/` | The Pebble project: C watchface (`src/c/main.c`) and phone-side JS (`src/pkjs/`). |
-| `server/` | Rust: the **generator** (fetches paintings politely, smart-crops and tones a crop per screen) and the **server** (serves the pre-rendered files + settings page). |
-| `catalog/` | Generated metadata and the Featured list. Not in git: published as a `catalog.tar.gz` release asset (see `scripts/catalog.sh`). |
-| `server/static/config/` | The custom settings page (plain HTML/CSS/JS, no Clay). |
-| `docker-compose.yml` | Runs the server, optionally with a Tailscale Funnel sidecar for a public HTTPS URL. |
-| `docs/` | [Supported watches](docs/DEVICES.md), [architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [deployment](docs/DEPLOY.md), [Rust for TypeScript developers](docs/RUST_FOR_TS_DEVS.md). |
+| `generator/` | Rust: the **generator** (fetches paintings politely, checks licenses, ranks Featured, plans a smart crop per screen, writes `catalog.json`). |
+| `site/` | The custom settings page (plain HTML/CSS/JS, no Clay), static files. Also holds the JS shared with the phone (`catalog.js`, `render.js`, `settings.js`, `looks.js`). |
+| `catalog/` | Generated: `catalog.json`, metadata and the Featured list. Not in git: `featured.json` and `paintings.jsonl` are published as a `catalog.tar.gz` release asset (see `scripts/catalog.sh`). |
+| `scripts/` | `bundle-catalog.mjs` (copies `catalog.json` into the app and `site/`), `catalog.sh`, `device-mockups.py`. |
+| `docker-compose.yml` | Runs the generator. |
+| `docs/` | [Supported watches](docs/DEVICES.md), [architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [publishing](docs/DEPLOY.md), [Rust for TypeScript developers](docs/RUST_FOR_TS_DEVS.md). |
 
 ## Features
 
@@ -30,11 +37,15 @@ date that stay out of its way.
   exact screen: 144×168, 180×180 round, 200×228 or 260×260 round. Color watches
   only for now (Pebble Time, Time Steel, Time Round, Time 2, Round 2; see
   [Supported watches](docs/DEVICES.md)).
-- Every crop is cut from a local master image at the screen's exact size, so no
-  stretching. Color tuning and frames are applied on the phone, so changing them
-  is instant and needs no download.
+- No server: the catalog is part of the app, and the phone asks the Rijksmuseum's
+  IIIF image server for the crop at the screen's exact size, so no stretching.
+  Color tuning and frames are applied on the phone, so changing them is instant
+  and needs no download.
 - Paintings that almost fit (≤ 20 px off) get a simple center crop; very wide or tall
-  ones get a smart crop that finds faces, detail and color. Or choose "Whole painting".
+  ones get a smart crop that finds faces, detail and color, and keeps the head of
+  a portrait. Or choose Contain to see the whole painting.
+- **Zoom and position:** zoom a Cover view in up to 200 % and move it anywhere
+  (drag the preview, arrow buttons, Reset), saved per painting.
 - Colors are dithered to Pebble's 64-color palette with optional tuning for
   daylight, indoor or backlit viewing (based on pebble-color-optimizer).
 - **Date & time:** time on/off, 12/24h (follows the phone by default), hide AM/PM,
@@ -72,20 +83,19 @@ date that stay out of its way.
 
 ## Quick start
 
-1. **Generate the paintings** (see [docs/GENERATOR.md](docs/GENERATOR.md); the
-   first full run takes most of a day at one request per second):
+1. **Generate the catalog** (see [docs/GENERATOR.md](docs/GENERATOR.md); a full
+   first run takes hours):
    ```sh
-   cp .env.example .env
-   docker compose run --rm generator --limit 20    # quick test run
-   docker compose run --rm generator               # everything
+   cp .env.example .env                      # set CONTACT
+   docker compose run --rm generator treasure-trove-generator --limit 20   # quick test run
+   docker compose run --rm generator         # everything
+   node scripts/bundle-catalog.mjs           # into the app and site/
    ```
-2. **Run the server** (see [docs/DEPLOY.md](docs/DEPLOY.md) for Proxmox + Tailscale):
-   ```sh
-   docker compose up -d --build
-   curl http://localhost:8080/healthz   # "paintings" = how many are ready
-   ```
+2. **Host the settings page** (see [docs/DEPLOY.md](docs/DEPLOY.md)): publish
+   `site/` (with its `catalog.json`) on any static host, e.g. GitHub Pages. To
+   test locally: `cd site && python3 -m http.server 8090`.
 3. **Point the watchface at it:** edit `watchface/src/pkjs/config.js` →
-   `SERVER_URL` (use the HTTPS Funnel URL so it works away from home).
+   `SETTINGS_URL` (e.g. `http://<your-mac>:8090` for testing).
 4. **Build and install the watchface** with the Pebble SDK
    ([developer.repebble.com](https://developer.repebble.com)):
    ```sh
@@ -93,6 +103,8 @@ date that stay out of its way.
    pebble build
    pebble install --phone <phone-ip>      # or --emulator basalt
    ```
+   The emulator can't download paintings (binary downloads don't work in its
+   PebbleKit JS), so use a real phone to see new ones.
 5. Open the watchface settings in the Pebble app.
 
 ## Gestures
@@ -114,8 +126,8 @@ painting's title and artist, long-press to cycle the color tuning. Keep an eye o
 
 ```sh
 npm install && npm run lint              # ESLint 10 (flat config) for all JS
-cd server && cargo test                  # unit tests for crop, palette, license rules
-cd server && cargo run                   # server on :8080, data in ./data
+npm test                                 # render.js, catalog.js, settings and looks (watchface/test/)
+cd generator && cargo test               # unit tests for crop planning, license rules, catalog
 ```
 
 ## Verify on first run
@@ -132,6 +144,10 @@ services and the SDK emulators (basalt, chalk, emery, gabbro):
   readability box 3 px of padding above and below the digits.
 
 Still to check on a real watch:
+
+- **Binary downloads.** The phone downloads the PNG crop with an ArrayBuffer
+  XHR, falling back to the `x-user-defined` text trick. The emulator can't do
+  either, so check on a real iPhone and Android phone that new paintings arrive.
 
 - **Color tuning.** "Daylight / Indoors / Backlight" stretch the simulated palettes;
   compare them on a real screen and pick a default (`palette` in the phone's

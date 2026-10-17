@@ -1,4 +1,4 @@
-// Per-painting looks (server/static/config/looks.js, shared with the phone).
+// Per-painting looks (site/looks.js, shared with the phone).
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';

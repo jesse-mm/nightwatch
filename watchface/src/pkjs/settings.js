@@ -1,1 +1,1 @@
-../../../server/static/config/settings.js
+../../../site/settings.js

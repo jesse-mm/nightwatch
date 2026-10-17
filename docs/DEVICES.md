@@ -1,15 +1,16 @@
 # Supported watches
 
-Treasure Trove supports the **color** Pebbles. The generator cuts every
-painting for each of their four screens, so the crop names in `data/art/<key>/c/`
-map to watches like this:
+Treasure Trove supports the **color** Pebbles. The generator plans a Cover
+crop of every painting for each of their four screens (`screens` in
+`catalog.json`, in this order), and the phone asks the Rijksmuseum's IIIF
+server for it at the screen's exact size:
 
-| Screen | Shape | Platform | Watches | Crops |
-|---|---|---|---|---|
-| 144 × 168 | rectangle | `basalt` | Pebble Time, Pebble Time Steel | `144x168-rect-fill.png`, `-whole.png` |
-| 180 × 180 | round | `chalk` | Pebble Time Round | `180x180-round-fill.png`, `-whole.png` |
-| 200 × 228 | rectangle | `emery` | Pebble Time 2 | `200x228-rect-fill.png`, `-whole.png` |
-| 260 × 260 | round | `gabbro` | Pebble Round 2 | `260x260-round-fill.png`, `-whole.png` |
+| Screen | Shape | Platform | Watches |
+|---|---|---|---|
+| 144 × 168 | rectangle | `basalt` | Pebble Time, Pebble Time Steel |
+| 180 × 180 | round | `chalk` | Pebble Time Round |
+| 200 × 228 | rectangle | `emery` | Pebble Time 2 |
+| 260 × 260 | round | `gabbro` | Pebble Round 2 |
 
 All four have 64-color e-paper displays. The black-and-white Pebbles (`aplite`:
 Pebble and Pebble Steel; `diorite`: Pebble 2; `flint`: Pebble 2 Duo) aren't
@@ -19,9 +20,9 @@ supported for now. Platform names and resolutions come from the Pebble SDK
 
 ## What each screen shows
 
-The same painting on each screen, straight from the generator's output
-(*Accurate* colors, no frame, filling the screen), drawn at 2× with every
-watch pixel visible. The watches are drawn to scale with each other.
+The same painting on each screen, made the way the phone makes it: the
+planned Cover crop from IIIF, toned and rendered by `site/render.js`
+(*Accurate* colors, no frame), drawn at 2× with every watch pixel visible. The watches are drawn to scale with each other.
 
 | Pebble Time / Time Steel | Pebble Time Round | Pebble Time 2 | Pebble Round 2 |
 |:---:|:---:|:---:|:---:|
@@ -31,10 +32,11 @@ watch pixel visible. The watches are drawn to scale with each other.
 *The Meeting of Granida and Daifilo*, Jan Mijtens, c. 1655–1660,
 [SK-A-1856](https://www.rijksmuseum.nl/en/collection/SK-A-1856), Rijksmuseum,
 Amsterdam (public domain). The mockups are drawn by
-[`scripts/device-mockups.py`](../scripts/device-mockups.py); regenerate them with
+[`scripts/device-mockups.py`](../scripts/device-mockups.py) (needs Pillow,
+Node and `catalog/catalog.json`; it downloads the crops); regenerate them with
 
 ```sh
-python3 scripts/device-mockups.py data 200107756 docs/images/devices
+python3 scripts/device-mockups.py catalog/catalog.json 200107756 docs/images/devices
 ```
 
 ## The real watches

@@ -1,42 +1,84 @@
 # Architecture
 
-Two programs share one Rust library (`server/src/lib.rs`):
+There is no server. The watchface and the settings page get paintings straight
+from the Rijksmuseum's IIIF image server, so nothing of ours runs anywhere. The
+slow, polite work happens once, ahead of time:
 
-- **Generator** (`treasure-trove-generator`): fetches paintings from the
-  Rijksmuseum politely, cuts and tones a crop of each painting for every
-  supported screen, and
-  records it all in `data/catalog.sqlite`. Run it monthly; it only redoes what
-  changed. See [GENERATOR.md](GENERATOR.md).
-- **Server** (`treasure-trove-server`): reads the published snapshot
-  (`serve.sqlite`) into plain in-memory maps and serves the files the generator
-  made; it reloads when a new snapshot appears. It never calls an outside service and never
-  renders; an unknown painting is a 404. Color tuning and frames are applied
-  on the phone and in the settings page (`render.js`).
+- **Generator** (`generator/`, Rust, binary `treasure-trove-generator`):
+  fetches paintings from the Rijksmuseum, checks licenses, sorts paintings into
+  eras, ranks the Featured 365 and plans a smart crop of each painting for
+  every supported screen. It writes all of that to one file,
+  `catalog/catalog.json`. Run it monthly; it only redoes what changed. See
+  [GENERATOR.md](GENERATOR.md).
+- **Phone** (`watchface/src/pkjs/`, PebbleKit JS): the catalog is bundled into
+  the app. It picks the painting, asks IIIF for the planned crop, tones,
+  dithers and frames it, and streams the bytes to the watch.
+- **Settings page** (`site/`): static files plus a copy of `catalog.json`,
+  hosted anywhere (e.g. GitHub Pages). See [DEPLOY.md](DEPLOY.md).
+
+```
+generator ──▶ catalog.json ──▶ bundled into the .pbw (phone) ──▶ IIIF crop (PNG) ──▶ tone, dither, frame ──▶ watch
+                           └─▶ site/catalog.json (settings)  ──▶ IIIF image (PNG) ──▶ preview
+```
+
+`node scripts/bundle-catalog.mjs` copies `catalog/catalog.json` to
+`watchface/src/pkjs/catalog-data.js` and `site/catalog.json` (both generated,
+not in git).
+
+The phone and the page share their logic: `catalog.js`, `render.js`,
+`settings.js` and `looks.js` live in `site/` and are symlinked into
+`watchface/src/pkjs/`. They are ES5 (UMD), so they run in PebbleKit JS and in
+the browser.
 
 ## The daily flow
 
 1. The watchface starts, creates an empty 8-bit bitmap matching its screen (only
    color watches are supported: basalt, chalk, emery, gabbro) and sends a
    **Hello** with width, height, *row stride* (bytes per bitmap row, read from the
-   bitmap itself), shape, the largest chunk it can receive, and its 12/24h setting.
-2. The phone JS checks `localStorage`: if today's painting is already cached for
-   this exact screen + framing + color tuning, it sends it straight away.
-   Otherwise it calls `GET /api/art/random?w=…&h=…&color=1&stride=…&round=…&fit=…&palette=…&frame=…`.
-3. The server picks a painting (Featured for the day, random, optionally from
-   one era, or a pinned one) and replies with metadata plus an `rgbUrl`.
-4. The phone downloads the crop (raw RGB as base64, gzipped), caches it, renders
-   it with the color tuning and frame (`render.js`), and streams the bytes to
-   the watch in chunks (`ImgBegin`, `ImgOffset`+`ImgChunk` × n, `ImgEnd`).
-   Changing tuning or frame later just re-renders the cached crop.
+   bitmap itself), shape, the largest chunk it can receive, its 12/24h setting
+   and the id of the painting it already shows (`ArtId`).
+2. The phone sends its cached painting straight away if the watch is empty,
+   then checks whether a new one is due (see rotation below) or the cached crop
+   no longer matches the screen, fit, zoom or position.
+3. If so, it picks a painting from the bundled catalog (Featured for the day,
+   random, optionally from one era, pinned, or one hung from the settings page)
+   and builds the IIIF URL for its crop with `catalog.js` (`cropRequest`).
+4. The phone downloads the PNG (binary XHR, with an `x-user-defined` text
+   fallback; it checks the PNG signature), decodes it (`png.js` with the
+   vendored `vendor/tiny-inflate.js`), tones it (`render.js` `tone`), caches
+   the toned crop in `localStorage`, renders it with the color tuning and frame
+   (`render.js` `compose`), and streams the bytes to the watch in chunks
+   (`ImgBegin`, `ImgOffset`+`ImgChunk` × n, `ImgEnd`). Changing tuning or frame
+   later just re-renders the cached crop.
 5. The watch `memcpy`s each chunk into the bitmap and redraws, so the painting
    appears row by row. Each painting carries an id (a hash of its bytes).
    Where an app may store enough (1 MB on Pebble Time 2, Round 2 and 2 Duo;
    older watches have 4 KB), the watch saves the painting on exit (`ArtMeta`
    plus 256-byte pieces) and shows it straight away on the next launch, e.g.
-   after the menu. Its Hello includes `ArtId`, and the phone skips sending a
-   painting the watch already shows.
+   after the menu. The phone skips sending a painting the watch already shows.
 6. At midnight the watch's tick handler sends Hello again with reason 2, and the
-   date check on the phone fetches a new painting.
+   date check on the phone picks a new painting when one is due.
+
+**Requests to the Rijksmuseum** stay low: the phone downloads one crop per new
+painting (daily at most) and one when a saved look changes its crop, zoom or
+position (the cache key, `cropKey`, includes them). It only ever asks for
+screen size (at most 260×260, about 140 KB as PNG).
+
+### Rotation, Featured and pinning (phone, `rotation.js`)
+
+Each cached painting remembers its **period**: `daily:2026-10-16`,
+`weekly:2026-10-12` (the Monday), `monthly:2026-10-01`, or `off`. On every
+Hello the phone compares it with the current period and only fetches when it
+changed, so the midnight Hello does nothing on most days for weekly/monthly.
+
+- **Featured** takes `catalog.featured(N)`, where *N* is the day of the year
+  of the period's first day: weekly shows that Monday's Featured painting,
+  monthly the 1st's, so all rotations walk the same year.
+- **Surprise me** takes `catalog.random(era)`.
+- **Pinned** (a key set via Advanced in the settings, found with
+  `catalog.resolve`) always shows that painting; rotation doesn't apply until
+  it's unpinned. A pinned key that isn't in the app's catalog falls back to
+  today's Featured painting.
 
 ### Settings and looks on the phone (`settings.js`, `looks.js`)
 
@@ -48,14 +90,13 @@ a JSON Schema in [`docs/schema/`](schema/):
 | `tt-settings` | The watchface settings plus `version` | [`settings.schema.json`](schema/settings.schema.json) | `settings.js`: `DEFAULTS`, `VERSION`, `MIGRATIONS` |
 | `tt-looks` | `{version, looks}`: a look per painting | [`looks.schema.json`](schema/looks.schema.json) | `looks.js`: `FIELDS`, `VERSION`, `MIGRATIONS` |
 
-Both modules live next to `render.js` and are shared the same way (the phone
-and the settings page load the same file). Reading runs every migration from
-the stored version up, keeps only known fields and fills the rest from the
-defaults. To change what a stored value means: bump `VERSION`, add a step to
-`MIGRATIONS`, and update the schema (`npm test` checks the schemas against the
-code). The page and the phone also tell each other their settings version, so
-a newer settings page works with an older phone app and the other way round.
-Version 1 is the first, so there are no migrations yet.
+Reading runs every migration from the stored version up, keeps only known
+fields and fills the rest from the defaults. To change what a stored value
+means: bump `VERSION`, add a step to `MIGRATIONS`, and update the schema
+(`npm test` checks the schemas against the code). The page and the phone also
+tell each other their settings version, so a newer settings page works with an
+older phone app and the other way round. Version 1 is the first, so there are
+no migrations yet.
 
 **Backup.** Both live only on the phone (removing the watchface wipes them),
 so the settings page has a Backup section. *Copy backup* puts this on the
@@ -70,61 +111,85 @@ takes the pasted text, applies it to the page for a check, and *Save to
 watch* stores it: the settings as usual, and the phone replaces every saved
 look with the backup's. Older backups go through the same migrations.
 
-**Looks per painting.** When the reader changes the crop, frame, color tuning
-or time placement and saves, the phone remembers that look for the painting
-on the watch:
+**Looks per painting.** When the reader changes the crop, zoom or position,
+frame, color tuning or time placement and saves, the phone remembers that look
+for the painting on the watch:
 
 ```json
-{"version": 1, "looks": {"200108369": {"fit": "fill", "frame": "gold",
-  "palette": "defined", "dither": "atkinson", "brightness": 10, "contrast": -5,
+{"version": 1, "looks": {"200108369": {"fit": "fill", "zoom": 140,
+  "focusX": 420, "focusY": 310, "frame": "gold", "palette": "defined",
+  "dither": "atkinson", "brightness": 10, "contrast": -5,
   "textRow": "bottom", "textCol": "end", "timeSize": "s"}}}
 ```
 
 | Field | Setting | Values |
 |---|---|---|
 | `fit` | Crop | `fill` (Cover), `whole` (Contain) |
+| `zoom` | Cover zoom | 100…200 (%) |
+| `focusX`, `focusY` | Cover view center | 0…1000 across / down the painting; empty = smart crop |
 | `frame` | Frame | `none`, `gold`, `wood`, `gallery` |
 | `palette` | Color tuning | `defined` (Accurate), `sun` (Daylight), `room` (Indoors), `backlight` |
 | `dither` | Dithering | `atkinson`, `checker` (50:50), `none` (Off) |
 | `brightness` | Brightness | −100…100 |
 | `contrast` | Contrast | −100…100 |
-| `zoom` | Cover zoom | 100…200 (%) |
-| `focusX`, `focusY` | Cover view center | 0…1000 across / down the painting; empty = smart crop |
 | `textRow` | Time row | `top`, `center`, `bottom` |
 | `textCol` | Time column | `auto`, `start` (left), `center`, `end` (right) |
 | `timeSize` | Time size | `s`, `m`, `l` |
 
 A look is about 160 bytes, so even one for every painting (~0.8 MB) fits the
 ~5 MB storage. A painting with a saved look gets it back whenever it is hung
-again, by rotation, a swap or a pin; others keep the current settings. The
-settings page gets the saved looks too (in its URL, so only up to ~100 KB of
-them), so a swapped-in painting previews with its own look.
+again, by rotation, a swap or a pin; a new painting without one starts at its
+planned view (zoom and position belong to one painting), and the other settings
+stay as they are. The settings page gets the saved looks too (in its URL, so
+only up to ~100 KB of them), so a swapped-in painting previews with its own
+look.
 
-### Rotation, Featured and pinning (phone, `rotation.js`)
+### Why raw bitmap bytes on the watch?
 
-Each cached painting remembers its **period**: `daily:2026-10-16`,
-`weekly:2026-10-12` (the Monday), `monthly:2026-10-01`, or `off`. On every
-Hello the phone compares it with the current period and only fetches when it
-changed, so the midnight Hello does nothing on most days for weekly/monthly.
+Pebble apps have little RAM (64 KB on basalt). Decoding a PNG on the watch
+needs the compressed file *and* the decoded bitmap in memory at once, plus
+decoder work space. So the phone decodes the PNG and sends bytes already in the
+watch's own layout: the only large allocation on the watch is the bitmap
+itself. The trade-off is transfer size (24 KB for basalt, 46 KB for emery),
+which takes a few seconds over Bluetooth. Watches with 4 KB of app storage
+can't keep the painting between launches, so the phone caches it and sends it
+again on each launch.
 
-- **Featured** asks for `/api/art/featured?day=N`, where *N* is the day of the
-  year of the period's first day: weekly shows that Monday's Featured
-  painting, monthly the 1st's, so all rotations walk the same year.
-- **Surprise me** asks for `/api/art/random`, optionally with an era.
-- **Pinned** (a key set via Advanced in the settings) always asks for that
-  painting; rotation doesn't apply until it's unpinned.
+## The catalog (`catalog.json`)
 
-### Why raw bitmap bytes instead of PNG?
+One file with everything the phone and the page need, ~1 MB of JSON. The
+generator writes it (`generator/src/bundle.rs`);
+[`docs/schema/catalog.schema.json`](schema/catalog.schema.json) describes it.
 
-Pebble apps have little RAM (64 KB on basalt). Decoding a PNG
-needs the compressed file *and* the decoded bitmap in memory at once, plus decoder
-work space. Sending bytes already in the watch's own layout means the only large
-allocation is the bitmap itself, and there's no decoding on the watch at all.
-The trade-off is transfer size (24 KB for basalt, 46 KB for emery), which takes a
-few seconds over Bluetooth once per launch.
+| Field | What |
+|---|---|
+| `version` | 1 |
+| `iiifPrefix`, `webPrefix` | Base URLs for images (`https://iiif.micr.io/`) and object pages |
+| `eras` | `pre1600`, `1600s`, `1700s`, `1800s`, `1900s` |
+| `licenses` | `[label, url]` pairs, referenced by index |
+| `screens` | `[w, h, round]` for the four screens, in crop order |
+| `slack` | Cover slack in screen pixels (20) |
+| `featured` | Painting keys in day-of-year order |
+| `paintings` | One array per painting: `[key, iiif, title, artist, date, objectNumber, eraBits, license, aspect, crops]` |
 
-The watch can't keep the image between launches: persistent storage is limited
-to 4 KB per app. That's why the phone caches it.
+`eraBits` has bit *i* set for `eras[i]`; `aspect` is width / height of the
+image. `crops` has one entry per screen: the Cover crop as fractions of the
+image (`x, y, w, h`, slack included) and `window`, where the planned view
+starts in that crop in screen pixels along its free axis.
+
+`catalog.js` reads it (`create(data)`) and offers `get`, `featured(day)`,
+`random(era)`, `resolve(query)` (object number, key or link) and:
+
+- `coverView(key, screen, {zoom, focusX, focusY})`: the visible part of the
+  painting, as fractions. Without a focus it is the planned view; zoom shrinks
+  it around its center.
+- `cropRequest(key, screen, fit, view)`: the IIIF URL, exactly at screen size.
+  Cover: `<iiifPrefix><id>/pct:x,y,w,h/<w>,<h>/0/default.png` for the
+  `coverView` region. Contain: `/full/<w>,<h>/0/default.png`, the whole
+  painting fitted inside the screen.
+- `workImage(key, screen, maxZoom)`: the whole painting at twice the Cover size
+  (enough to zoom to 200 % at full resolution), at most 1280 px on its long
+  side, for the settings page.
 
 ## Picking a painting (generator)
 
@@ -143,21 +208,25 @@ to 4 KB per app. That's why the phone caches it.
     (1850 by default; set to 0 to require an explicit license).
 - Every resolved record is stored, including rejected ones, so a painting is
   only re-checked after `REFRESH_DAYS`.
+- Only paintings on the IIIF server at `iiif.micr.io` make it into
+  `catalog.json`, since the phone cuts its crops there.
 - Wikidata is only used to pick the Featured paintings (`popularity.rs`); the
   catalog stores no per-painting Wikidata or Wikipedia links.
 
-## Rendering: crops on the server, pixels on the phone
+## Crops: planned by the generator, cut by IIIF, rendered on the phone
 
 ```
-generator:  master image (1200 px, local) ──▶ plan crop ──▶ cut + resize (Lanczos3) ──▶ tone ──▶ crop.png
-phone/page: crop ──▶ fit into the frame opening ──▶ dither (color tuning) ──▶ frame ──▶ watch bytes
+generator:  master image (1200 px, local) ──▶ plan crop ──▶ catalog.json
+phone:      IIIF crop at screen size (PNG) ──▶ tone ──▶ fit into the frame opening ──▶ dither ──▶ frame ──▶ watch bytes
+page:       IIIF work image (≤ 1280 px) ──▶ pan/zoom locally ──▶ same steps ──▶ preview
 ```
 
-The generator makes **8 crops** per painting: 4 screens × Fill/Whole, full
-color, toned, lossless PNG. Color tuning and frames are applied by
-`server/static/config/render.js`, which the phone (PebbleKit JS) and the
-settings page both run, so one crop covers all 16 tuning × frame combinations,
-changing them never downloads anything, and the settings preview is exactly
+The generator plans one **Cover** crop per screen (4 per painting) from a
+1200 px master image it keeps locally, and stores the plans in
+`data/catalog.sqlite` (table `crop_plans`). Contain needs no plan: it is the
+whole painting, sized from its aspect ratio. Tone, color tuning and frames are
+applied by `site/render.js`, which the phone and the settings page both run,
+so changing them never downloads anything and the settings preview is exactly
 what the phone sends to the watch.
 
 **Crop planning** (`imaging.rs::plan_crop`), measured in *screen* pixels:
@@ -166,14 +235,13 @@ what the phone sends to the watch.
 |---|---|
 | Shapes match | No crop |
 | Filling the screen would trim ≤ `SAFE_CROP_PX` (20) | Center crop ("safe crop") |
-| Trims more, framing = Fill | **Smart crop** |
-| Trims more, framing = Whole painting | Letterbox: the crop is the whole painting, smaller than the screen |
+| Trims more | **Smart crop** |
 
 **Smart crop** (`saliency.rs`): there is no public points-of-interest dataset for
 this collection (some Wikimedia Commons files have "depicts" regions, but coverage
 is too sparse to rely on), so we estimate interest from the pixels, like
 smartcrop.js: edges (detail), saturation (color) and a skin-tone detector (faces).
-Because "fill" always fits one axis exactly, only one direction is free, so we
+Because Cover always fits one axis exactly, only one direction is free, so we
 slide a window along a 1-D energy profile. The window weights its center a little
 more (strongly on round screens, whose corners are hidden), and there's a gentle
 pull toward the painting's center and, for tall works, toward the top.
@@ -183,23 +251,30 @@ at least 60% of the painting's skin tones sit in its top third, the crop keeps
 the top and cuts the bottom, so busy armor, lace or hands lower down can't pull
 the head out of view.
 
-**Cover slack.** Cover ("fill") crops keep up to `COVER_SLACK_PX` (20) screen
-pixels of extra painting on each side of the free axis, as far as the painting
-goes, so the crop image is a little larger than the screen. The plan records
-where the planned view sits in it (`windowX`/`windowY`, also in the API's
-`render`). `render.js` (`coverWindow`) cuts the screen-sized window there, moved
-by the `shift` setting, which the reader sets on the settings page by dragging
-the preview or with the Position slider. The shift is saved per painting with
-its look; a painting without one starts at its planned view.
+**Cover slack.** Cover crops keep up to `COVER_SLACK_PX` (20) screen pixels of
+extra painting on each side of the free axis, as far as the painting goes. The
+plan records where the planned view sits in it (`window` in `catalog.json`), so
+`coverView` can find the planned view's center.
 
-**Tone** (`imaging.rs::tone`, in the generator): auto-levels (ignoring the
-extreme 0.5 %), a shadow lift (gamma 0.8, because the reflective screen crushes
-dark varnish into a single black) and +10 % saturation, baked into the crop.
+**Zoom and position.** On the settings page a Cover view can be zoomed in
+(100–200 %) and moved anywhere: by dragging the preview, with the arrow buttons,
+or back to the plan with Reset. At 100 % it only moves along the axis the
+painting overflows; zoomed in, both ways. The view is saved per painting in its
+look as `zoom`, `focusX`, `focusY` (view center, 0–1000; empty = the planned
+view), and `coverView` turns it into the region to ask IIIF for. The page
+downloads one work image per painting (`workImage`, typically 400–1000 px) and
+pans and zooms it locally, with no requests while dragging.
 
-**On the phone** (`render.js`, ES5 so it runs in PebbleKit JS):
+**Tone** (`render.js` `tone`, ported from the generator's former Rust code):
+auto-levels (ignoring the extreme 0.5 %, gain at most 2.5×), a shadow lift
+(gamma 0.8, because the reflective screen crushes dark varnish into a single
+black) and +10 % saturation. The phone tones the crop once and caches the
+result.
 
-1. *Fit:* with a frame, the opening is smaller than the screen. A Fill crop is
-   scaled (bilinear) to cover the opening and trimmed evenly; a Whole crop is
+**Rendering** (`render.js` `compose`):
+
+1. *Fit:* with a frame, the opening is smaller than the screen. A Cover crop is
+   scaled (bilinear) to cover the opening and trimmed evenly; a Contain crop is
    scaled to fit inside it.
 2. *Dither:* Atkinson error diffusion to the Pebble palette. With color tuning
    other than *Accurate*, pixels are matched against how each Pebble color
@@ -222,20 +297,21 @@ byte-identical for all four tunings, frames pixel-identical on all four screens.
 ## Storage
 
 ```
-data/                                   (not in git)
-  catalog.sqlite                        paintings, eras, wiki links, crops + input hashes
-  serve.sqlite                          the server's snapshot
-  art/<key>/source.jpg                  master image, longest side 1200 px
-  art/<key>/c/<crop>.png                8: <w>x<h>-<rect|round>-<fill|whole>, toned RGB
-catalog/paintings.jsonl                 one painting per line: metadata, eras, links, hashes
-catalog/featured.json                   the Featured list, rank order
-                                        (catalog/ is a release artifact: scripts/catalog.sh)
+data/                                   generator's working directory (not in git)
+  catalog.sqlite                        paintings, eras, image sizes, crop plans + input hashes
+  art/<key>/source.jpg                  master image, longest side 1200 px (for planning)
+catalog/                                (not in git; release artifact: scripts/catalog.sh)
+  catalog.json                          the catalog for the phone and the settings page
+  featured.json                         the Featured list, rank order
+  paintings.jsonl                       one painting per line: metadata, eras, hashes (for diffs)
+watchface/src/pkjs/catalog-data.js      copy of catalog.json, bundled into the .pbw (generated)
+site/catalog.json                       copy of catalog.json for the settings page (generated)
 ```
 
-About 0.6 MB of crops plus a 0.17 MB master per painting (~3.6 GB for the
-collection). Bump `PIPELINE_VERSION` in `variants.rs` after changing crop or
-tone output: the next generator run re-renders from the master images without
-fetching (and removes folders from the older layout).
+Bump `PIPELINE_VERSION` in `variants.rs` after changing the planning code: the
+next generator run re-plans from the master images without fetching. Rendered
+crops from the server era (`data/art/<key>/c/`, ~3 GB) are no longer used and
+can be deleted by hand.
 
 ## Message keys
 
@@ -243,24 +319,20 @@ fetching (and removes folders from the older layout).
 |---|---|---|
 | `Hello` | watch → phone | 1 = launch, 2 = new day |
 | `ScreenW`, `ScreenH`, `RowStride`, `IsRound`, `ChunkSize`, `Is24h` | watch → phone | screen description |
+| `ArtId` | both | with Hello: the painting the watch shows; with `ImgBegin`: the id of the painting being sent |
 | `PhoneReady` | phone → watch | JS started; watch replies with Hello |
 | `ShowTime`, `ClockMode`, `HideAmPm`, `ShowDate`, `DateFormat`, `DateSep`, `HideUntilShake`, `RevealMinutes`, `BoxMode`, `TextPos`, `TimeSize`, `TextInset` | phone → watch | settings (ints; `TextPos` = row × 3 + column (row 0 top, 1 bottom, 2 center), round screens always centered horizontally; `TimeSize` 0–2 = S/M/L, default S; `TextInset` = frame width in pixels, so the text sits on the painting) |
 | `ImgBegin`, `ImgOffset`, `ImgChunk`, `ImgEnd` | phone → watch | image transfer |
 
-## HTTP API
+## Known limits
 
-| Endpoint | Returns |
-|---|---|
-| `GET /healthz` | `{ ok, paintings, eligible, pool, featured }` |
-| `GET /api/art/random?<screen>[&era=…]` | painting metadata + `render` (crop plan, width, height) + `wiki` + `cropUrl`, `rgbUrl` |
-| `GET /api/art/featured?day=N&<screen>` | the Featured painting for day *N* of the year (0-based, wraps; all paintings in turn if there's no Featured list) |
-| `GET /api/art/resolve?q=…` | `{ key }` for an object number, key or Rijksmuseum link (only servable paintings) |
-| `GET /api/art/{key}?<screen>` | same as random, for a specific painting |
-| `GET /api/art/{key}/crop.png?<screen>` | the crop, toned full-color PNG (settings page) |
-| `GET /api/art/{key}/rgb?<screen>[&format=b64]` | the same pixels as raw RGB, width × height × 3 (phone) |
-| `GET /config/` | settings page (incl. `render.js`) |
-
-`<screen>` = `w, h, round (0/1), fit (fill/whole)`; other parameters are
-ignored (tuning and frame are applied on the phone). `era` = `any, pre1600,
-1600s, 1700s, 1800s, 1900s`. Supported screens: 144×168, 180×180 round,
-200×228, 260×260 round. JSON and base64 responses are gzip-compressed.
+- **Binary downloads in the emulator.** The emulator's PebbleKit JS (pypkjs)
+  can't download binary data (its ArrayBuffer is empty, text is UTF-8
+  mangled), so the emulator can't show new paintings. Real phones run
+  PebbleKit JS on the phone's own JavaScript engine; the app tries an
+  ArrayBuffer first, then the `x-user-defined` text trick, and checks for a
+  real PNG.
+- **New paintings need a new app.** The catalog is bundled; refreshing it
+  (e.g. monthly) means a new `.pbw`. The settings page's copy is a separate
+  file and can be updated on its own.
+- **App size.** The `.pbw` is ~2.4 MB (the catalog plus the SDK's source map).

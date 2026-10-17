@@ -1,19 +1,12 @@
-//! The catalog: SQLite, written by the generator, read by the server.
+//! The catalog: the generator's working database (SQLite).
 //!
-//! - `catalog.sqlite` is the generator's working database: what we know about
-//!   each painting (metadata, license, era, links) and every file on disk with
-//!   the input hash it was made from, so a re-run only redoes work whose inputs
-//!   changed. ~40k crop rows when complete, so it stays on disk.
-//! - `serve.sqlite` is a small snapshot for the server (paintings, eras, links,
-//!   crop plans, "fully rendered" flag; a few MB). The generator publishes it
-//!   with an atomic rename, so the server never sees a half-written file. The
-//!   server reads it into plain maps (see snapshot.rs).
+//! What we know about each painting (metadata, license, era, image size) and
+//! its crop plans, each with the input hash it was made from, so a re-run only
+//! redoes work whose inputs changed. `bundle.rs` turns it into `catalog.json`.
 //!
 //! ```text
 //! <data>/catalog.sqlite
-//! <data>/serve.sqlite
-//! <data>/art/<key>/source.jpg              master image (longest side ≈ 1200 px)
-//! <data>/art/<key>/c/<crop>.png            8 per painting, toned RGB (lossless)
+//! <data>/art/<key>/source.jpg              master image, for planning crops
 //! ```
 
 use std::{
@@ -55,18 +48,20 @@ CREATE TABLE IF NOT EXISTS paintings (
   source_sha256 TEXT,
   fetched_at    INTEGER NOT NULL,     -- last time the metadata was checked
   changed_at    INTEGER NOT NULL,     -- last time the metadata actually changed
-  plans         TEXT,                 -- {crop name: CropPlan} once rendered
-  ready         INTEGER NOT NULL DEFAULT 0  -- all crops exist on disk
+  plans         TEXT,                 -- {crop name: CropPlan} once planned
+  ready         INTEGER NOT NULL DEFAULT 0, -- every crop is planned
+  width         INTEGER,              -- master image size (its aspect ratio
+  height        INTEGER               -- is what the phone needs)
 );
-CREATE TABLE IF NOT EXISTS crops (
+CREATE TABLE IF NOT EXISTS crop_plans (
   key        TEXT NOT NULL,
-  name       TEXT NOT NULL,
+  name       TEXT NOT NULL,           -- e.g. 200x228-rect-fill
   input_hash TEXT NOT NULL,
   plan       TEXT NOT NULL,           -- CropPlan as JSON
-  path       TEXT NOT NULL,
-  bytes      INTEGER NOT NULL,
   PRIMARY KEY (key, name)
 );
+-- Crop images were rendered here before the phone fetched crops from IIIF.
+DROP TABLE IF EXISTS crops;
 -- Variants (dithered per tuning/frame) are made on the phone now; drop the
 -- table older catalogs have.
 DROP TABLE IF EXISTS variants;
@@ -87,10 +82,19 @@ pub struct Stats {
     pub paintings: i64,
     pub eligible: i64,
     pub with_source: i64,
-    /// Eligible paintings with every crop rendered (what the server offers).
+    /// Eligible paintings with every crop planned (what goes in catalog.json).
     pub ready: i64,
-    pub crops: i64,
-    pub crop_bytes: i64,
+    pub plans: i64,
+}
+
+/// One painting for catalog.json (see `Catalog::bundle_rows`).
+pub struct BundleRow {
+    pub meta: ArtMeta,
+    /// Crop name → plan.
+    pub plans: HashMap<String, CropPlan>,
+    pub width: u32,
+    pub height: u32,
+    pub eras: Vec<Era>,
 }
 
 /// One painting's stored state, as the generator sees it.
@@ -107,6 +111,19 @@ impl Catalog {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.execute_batch(SCHEMA)?;
+        // Catalogs from before the image size was kept.
+        for column in ["width", "height"] {
+            let has: bool = conn.query_row(
+                "SELECT count(*) > 0 FROM pragma_table_info('paintings') WHERE name = ?1",
+                [column],
+                |r| r.get(0),
+            )?;
+            if !has {
+                conn.execute_batch(&format!(
+                    "ALTER TABLE paintings ADD COLUMN {column} INTEGER"
+                ))?;
+            }
+        }
         Ok(Self {
             conn,
             root: root.to_path_buf(),
@@ -115,46 +132,6 @@ impl Catalog {
 
     pub fn path(root: &Path) -> PathBuf {
         root.join("catalog.sqlite")
-    }
-
-    pub fn serve_path(root: &Path) -> PathBuf {
-        root.join("serve.sqlite")
-    }
-
-    /// Write the server's snapshot: only the tables it reads, then an atomic
-    /// rename over the previous one.
-    /// `featured`: Featured keys in day-of-year order (see featured.rs).
-    pub fn publish(&self, featured: &[String]) -> Result<()> {
-        let dest = Self::serve_path(&self.root);
-        let tmp = dest.with_extension("sqlite.tmp");
-        let _ = std::fs::remove_file(&tmp);
-        self.conn
-            .execute("ATTACH DATABASE ?1 AS snap", [tmp.to_string_lossy()])?;
-        let copy = self
-            .conn
-            .execute_batch(
-                "CREATE TABLE snap.pool AS SELECT * FROM main.pool;
-             CREATE TABLE snap.painting_eras AS SELECT * FROM main.painting_eras;
-             CREATE TABLE snap.paintings AS SELECT * FROM main.paintings;
-             CREATE UNIQUE INDEX snap.pool_key ON pool (key);
-             CREATE INDEX snap.painting_eras_era ON painting_eras (era, key);
-             CREATE UNIQUE INDEX snap.paintings_key ON paintings (key);
-             CREATE INDEX snap.paintings_ready ON paintings (ready, eligible);
-             CREATE TABLE snap.featured (day INTEGER PRIMARY KEY, key TEXT NOT NULL);",
-            )
-            .and_then(|()| {
-                let mut add = self
-                    .conn
-                    .prepare("INSERT INTO snap.featured (day, key) VALUES (?1, ?2)")?;
-                for (day, key) in featured.iter().enumerate() {
-                    add.execute(params![day as i64, key])?;
-                }
-                Ok(())
-            });
-        self.conn.execute_batch("DETACH DATABASE snap")?;
-        copy?;
-        std::fs::rename(&tmp, &dest)?;
-        Ok(())
     }
 
     pub fn root(&self) -> &Path {
@@ -261,11 +238,10 @@ impl Catalog {
         Ok(())
     }
 
-    /// (key, source sha) for eligible pool paintings that have a master image,
+    /// Paintings to plan: eligible pool paintings with a master image, as key,
+    /// source hash and title (the title hints at portraits when cropping);
     /// unfinished ones first (so `--limit` makes progress).
-    /// Paintings to render: key, source hash and title (the title hints at
-    /// portraits when cropping).
-    pub fn renderable(&self) -> Result<Vec<(String, String, String)>> {
+    pub fn plannable(&self) -> Result<Vec<(String, String, String)>> {
         let mut stmt = self.conn.prepare(
             "SELECT p.key, p.source_sha256, coalesce(json_extract(p.meta, '$.title'), '')
              FROM paintings p JOIN pool ON pool.key = p.key
@@ -277,52 +253,90 @@ impl Catalog {
         Ok(rows)
     }
 
-    // ---------------- crops ----------------
+    // ---------------- crop plans ----------------
 
-    /// name → input hash for a painting's existing crops.
-    pub fn crop_hashes(&self, key: &str) -> Result<HashMap<String, String>> {
+    /// name → input hash for a painting's existing crop plans.
+    pub fn plan_hashes(&self, key: &str) -> Result<HashMap<String, String>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT name, input_hash FROM crops WHERE key = ?1")?;
+            .prepare("SELECT name, input_hash FROM crop_plans WHERE key = ?1")?;
         let rows = stmt
             .query_map([key], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<Result<_, _>>()?;
         Ok(rows)
     }
 
-    pub fn put_crop(
-        &self,
-        key: &str,
-        name: &str,
-        input_hash: &str,
-        plan: &CropPlan,
-        path: &str,
-        bytes: usize,
-    ) -> Result<()> {
+    pub fn put_plan(&self, key: &str, name: &str, input_hash: &str, plan: &CropPlan) -> Result<()> {
         self.conn.execute(
-            "INSERT OR REPLACE INTO crops (key, name, input_hash, plan, path, bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![key, name, input_hash, serde_json::to_string(plan)?, path, bytes as i64],
+            "INSERT OR REPLACE INTO crop_plans (key, name, input_hash, plan) VALUES (?1, ?2, ?3, ?4)",
+            params![key, name, input_hash, serde_json::to_string(plan)?],
         )?;
         Ok(())
     }
 
-    /// After rendering a painting: forget crops that aren't in the current set
-    /// (`names`, e.g. after a layout change), collect the crop plans, and mark it
-    /// ready when every crop exists.
+    /// The master image's size (its aspect ratio goes into catalog.json).
+    pub fn set_size(&self, key: &str, width: u32, height: u32) -> Result<()> {
+        self.conn.execute(
+            "UPDATE paintings SET width = ?2, height = ?3 WHERE key = ?1",
+            params![key, width, height],
+        )?;
+        Ok(())
+    }
+
+    /// After planning a painting: forget plans that aren't in the current set
+    /// (`names`, e.g. after a layout change), collect them, and mark it ready
+    /// when every crop is planned and the image size is known.
     pub fn finish_painting(&self, key: &str, names: &[String]) -> Result<()> {
         let keep = serde_json::to_string(names)?;
         self.conn.execute(
-            "DELETE FROM crops WHERE key = ?1 AND name NOT IN (SELECT value FROM json_each(?2))",
+            "DELETE FROM crop_plans WHERE key = ?1 AND name NOT IN (SELECT value FROM json_each(?2))",
             params![key, keep],
         )?;
         self.conn.execute(
             "UPDATE paintings SET
-               plans = (SELECT json_group_object(name, json(plan)) FROM crops WHERE key = ?1),
-               ready = ((SELECT count(*) FROM crops WHERE key = ?1) >= ?2)
+               plans = (SELECT json_group_object(name, json(plan)) FROM crop_plans WHERE key = ?1),
+               ready = ((SELECT count(*) FROM crop_plans WHERE key = ?1) >= ?2 AND width > 0 AND height > 0)
              WHERE key = ?1",
             params![key, names.len() as i64],
         )?;
         Ok(())
+    }
+
+    /// Everything catalog.json needs, for each ready painting in the pool:
+    /// metadata, crop plans, image size and eras, sorted by key.
+    pub fn bundle_rows(&self) -> Result<Vec<BundleRow>> {
+        let mut eras: HashMap<String, Vec<Era>> = HashMap::new();
+        let mut stmt = self.conn.prepare("SELECT key, era FROM painting_eras")?;
+        for row in stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
+            let (key, era) = row?;
+            if let Ok(era) = serde_json::from_value::<Era>(serde_json::Value::String(era)) {
+                eras.entry(key).or_default().push(era);
+            }
+        }
+        let mut stmt = self.conn.prepare(
+            "SELECT p.meta, p.plans, p.width, p.height FROM paintings p JOIN pool ON pool.key = p.key
+             WHERE p.eligible = 1 AND p.ready = 1 AND p.plans IS NOT NULL ORDER BY p.key",
+        )?;
+        let mut out = Vec::new();
+        for row in stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, u32>(2)?,
+                r.get::<_, u32>(3)?,
+            ))
+        })? {
+            let (meta, plans, width, height) = row?;
+            let meta: ArtMeta = serde_json::from_str(&meta)?;
+            out.push(BundleRow {
+                eras: eras.remove(&meta.key).unwrap_or_default(),
+                plans: serde_json::from_str(&plans)?,
+                width,
+                height,
+                meta,
+            });
+        }
+        Ok(out)
     }
 
     pub fn transaction<T>(&mut self, f: impl FnOnce(&Catalog) -> Result<T>) -> Result<T> {
@@ -377,8 +391,7 @@ impl Catalog {
             eligible: n("SELECT count(*) FROM paintings WHERE eligible = 1")?,
             with_source: n("SELECT count(*) FROM paintings WHERE source_sha256 IS NOT NULL")?,
             ready: n("SELECT count(*) FROM paintings WHERE ready = 1 AND eligible = 1")?,
-            crops: n("SELECT count(*) FROM crops")?,
-            crop_bytes: n("SELECT coalesce(sum(bytes), 0) FROM crops")?,
+            plans: n("SELECT count(*) FROM crop_plans")?,
         })
     }
 
@@ -429,7 +442,7 @@ pub fn key_of(id: &str) -> &str {
     id.rsplit('/').next().unwrap_or(id)
 }
 
-/// Shared setup for catalog and snapshot tests.
+/// Shared setup for the catalog tests.
 #[cfg(test)]
 pub(crate) mod testing {
     use std::path::{Path, PathBuf};
@@ -493,9 +506,9 @@ pub(crate) mod testing {
         c
     }
 
-    /// Like `fetched`, plus one crop on record, finished with `expected` crops
-    /// (1 = complete) and published.
-    pub fn published(dir: &TempDir, expected: usize) -> Catalog {
+    /// Like `fetched`, plus one crop plan and the image size, finished with
+    /// `expected` plans (1 = complete).
+    pub fn planned(dir: &TempDir, expected: usize) -> Catalog {
         let c = fetched(dir);
         let plan = CropPlan {
             mode: CropMode::None,
@@ -508,14 +521,13 @@ pub(crate) mod testing {
             window_x: 0,
             window_y: 0,
         };
-        c.put_crop("1", CROP, "h1", &plan, "art/1/c/a.png", 10)
-            .unwrap();
+        c.put_plan("1", CROP, "h1", &plan).unwrap();
+        c.set_size("1", 300, 400).unwrap();
         // Crop names to keep: the fixture's crop plus placeholders up to `expected`.
         let names: Vec<String> = std::iter::once(CROP.to_string())
             .chain((1..expected).map(|i| format!("missing-{i}")))
             .collect();
         c.finish_painting("1", &names).unwrap();
-        c.publish(&[]).unwrap();
         c
     }
 }
@@ -576,12 +588,12 @@ mod tests {
     }
 
     #[test]
-    fn renderable_lists_eligible_paintings_with_a_source() {
-        let dir = TempDir::new("renderable");
+    fn plannable_lists_eligible_paintings_with_a_source() {
+        let dir = TempDir::new("plannable");
         let c = fetched(&dir);
 
         assert_eq!(
-            c.renderable().unwrap(),
+            c.plannable().unwrap(),
             vec![(
                 "1".to_string(),
                 "abc".to_string(),
@@ -591,32 +603,63 @@ mod tests {
     }
 
     #[test]
-    fn crop_hashes_returns_the_stored_input_hash_per_crop() {
+    fn plan_hashes_returns_the_stored_input_hash_per_crop() {
         let dir = TempDir::new("hashes");
-        let c = published(&dir, 1);
+        let c = planned(&dir, 1);
 
         assert_eq!(
-            c.crop_hashes("1").unwrap().get(CROP).map(String::as_str),
+            c.plan_hashes("1").unwrap().get(CROP).map(String::as_str),
             Some("h1")
         );
     }
 
     #[test]
-    fn finish_painting_forgets_crops_outside_the_current_set() {
+    fn finish_painting_forgets_plans_outside_the_current_set() {
         let dir = TempDir::new("prune");
-        let c = published(&dir, 1);
+        let c = planned(&dir, 1);
 
         c.finish_painting("1", &["other".to_string()]).unwrap();
 
-        assert!(c.crop_hashes("1").unwrap().is_empty());
+        assert!(c.plan_hashes("1").unwrap().is_empty());
     }
 
     #[test]
     fn stats_counts_a_painting_with_all_crops_as_ready() {
         let dir = TempDir::new("stats-ready");
-        let c = published(&dir, 1);
+        let c = planned(&dir, 1);
 
         assert_eq!(c.stats().unwrap().ready, 1);
+    }
+
+    #[test]
+    fn a_painting_without_its_image_size_is_not_ready() {
+        let dir = TempDir::new("no-size");
+        let c = planned(&dir, 1);
+        c.set_size("1", 0, 0).unwrap();
+        c.finish_painting("1", &[CROP.to_string()]).unwrap();
+
+        assert_eq!(c.stats().unwrap().ready, 0);
+    }
+
+    #[test]
+    fn bundle_rows_returns_ready_paintings_with_plans_size_and_eras() {
+        let dir = TempDir::new("bundle-rows");
+        let c = planned(&dir, 1);
+
+        let rows = c.bundle_rows().unwrap();
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!((rows[0].width, rows[0].height), (300, 400));
+        assert_eq!(rows[0].eras, vec![Era::C17]);
+        assert!(rows[0].plans.contains_key(CROP));
+    }
+
+    #[test]
+    fn bundle_rows_skips_paintings_that_are_not_fully_planned() {
+        let dir = TempDir::new("bundle-unready");
+        let c = planned(&dir, 2);
+
+        assert!(c.bundle_rows().unwrap().is_empty());
     }
 
     #[test]
@@ -638,7 +681,7 @@ mod tests {
     #[test]
     fn export_jsonl_writes_eras_for_each_painting() {
         let dir = TempDir::new("export");
-        let c = published(&dir, 1);
+        let c = planned(&dir, 1);
         let out = dir.path().join("paintings.jsonl");
 
         c.export_jsonl(&out).unwrap();

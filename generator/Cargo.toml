@@ -1,8 +1,8 @@
 [package]
-name = "treasure-trove-server"
-version = "0.1.0"
+name = "treasure-trove-generator"
+version = "0.2.0"
 edition = "2021"
-description = "Pre-renders public-domain Rijksmuseum paintings for Pebble watches, and serves them"
+description = "Builds the catalog of public-domain Rijksmuseum paintings for the Treasure Trove Pebble watchface"
 license = "MIT"
 publish = false
 
@@ -11,17 +11,11 @@ name = "treasure_trove"
 path = "src/lib.rs"
 
 [[bin]]
-name = "treasure-trove-server"
-path = "src/main.rs"
-
-[[bin]]
 name = "treasure-trove-generator"
 path = "src/bin/generator.rs"
 
 [dependencies]
 anyhow = "1"
-axum = "0.8"
-base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 rand = "0.9"
 rayon = "1"
@@ -30,8 +24,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "sync", "time", "signal"] }
-tower-http = { version = "0.6", features = ["fs", "trace", "cors", "compression-gzip"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

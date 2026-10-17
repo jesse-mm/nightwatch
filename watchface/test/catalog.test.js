@@ -1,4 +1,4 @@
-// The catalog bundle (server/static/config/catalog.js) and the phone's PNG
+// The catalog bundle (site/catalog.js) and the phone's PNG
 // decoder (watchface/src/pkjs/png.js).
 import { createRequire } from 'node:module';
 import { deflateSync } from 'node:zlib';
