@@ -14,6 +14,7 @@
  */
 var CONFIG = require('./config');
 var base64 = require('./base64');
+var scatter = require('./scatter');
 var rotation = require('./rotation');
 var render = require('./render');
 var looks = require('./looks');
@@ -215,11 +216,13 @@ function sendImage(bytes) {
       item.message.ImgEnd === undefined;
   });
   enqueue({ ImgBegin: bytes.length, ArtId: id });
-  for (var offset = 0; offset < bytes.length; offset += watch.chunk) {
+  // Shuffled, so the painting dissolves in on the watch (see scatter.js).
+  var stream = scatter.shuffle(bytes);
+  for (var offset = 0; offset < stream.length; offset += watch.chunk) {
     // A plain Array: what Pebble.sendAppMessage expects for byte arrays.
     enqueue({
       ImgOffset: offset,
-      ImgChunk: Array.prototype.slice.call(bytes, offset, offset + watch.chunk)
+      ImgChunk: Array.prototype.slice.call(stream, offset, offset + watch.chunk)
     });
   }
   enqueue({ ImgEnd: 1 });

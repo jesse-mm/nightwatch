@@ -217,6 +217,39 @@ static void outbox_failed(DictionaryIterator *it, AppMessageResult reason, void 
 
 static void apply_tap_subscription(void);
 
+/* The order the painting's bytes arrive in: a fixed shuffle of 0..n-1, so a
+ * new painting dissolves in pixel by pixel. Byte k of the transfer belongs at
+ * scatter(k). Same function as src/pkjs/scatter.js: keep the two identical.
+ * A 4-round Feistel network on 2 * s_scatter_half bits (the smallest even
+ * number that covers n), walked until it lands below n. */
+static int s_scatter_half;
+
+static void scatter_begin(uint32_t n) {
+  s_scatter_half = 1;
+  while (((uint32_t)1 << (2 * s_scatter_half)) < n) {
+    s_scatter_half++;
+  }
+}
+
+static uint32_t scatter(uint32_t k, uint32_t n) {
+  static const uint32_t keys[4] = { 0x7f4a7c15u, 0x2545f491u, 0x9e3779b9u, 0x6c8e9cf5u };
+  const int half = s_scatter_half;
+  const uint32_t mask = ((uint32_t)1 << half) - 1;
+  uint32_t x = k;
+  do {
+    uint32_t l = x >> half;
+    uint32_t r = x & mask;
+    for (int i = 0; i < 4; i++) {
+      uint32_t f = ((r + keys[i]) * 0x9e3779b1u) >> (32 - half);
+      uint32_t next = l ^ f;
+      l = r;
+      r = next;
+    }
+    x = (l << half) | r;
+  } while (x >= n);
+  return x;
+}
+
 static void handle_image(DictionaryIterator *iter) {
   Tuple *t;
   uint32_t total = (uint32_t)s_stride * s_screen.h;
@@ -224,6 +257,7 @@ static void handle_image(DictionaryIterator *iter) {
   if ((t = dict_find(iter, MESSAGE_KEY_ImgBegin))) {
     s_expected = (t->value->uint32 == total) ? total : 0;
     s_received = 0;
+    scatter_begin(total);
     Tuple *id = dict_find(iter, MESSAGE_KEY_ArtId);
     s_pending_id = id ? id->value->uint32 : 0;
     s_art_id = 0; /* the bitmap is being overwritten */
@@ -237,7 +271,12 @@ static void handle_image(DictionaryIterator *iter) {
     uint32_t offset = o ? o->value->uint32 : s_received;
     uint32_t len = t->length;
     if (offset + len <= s_expected) {
-      memcpy(gbitmap_get_data(s_art) + offset, t->value->data, len);
+      /* Each byte to its own place: the painting fills in at random. */
+      uint8_t *dst = gbitmap_get_data(s_art);
+      const uint8_t *src = t->value->data;
+      for (uint32_t i = 0; i < len; i++) {
+        dst[scatter(offset + i, s_expected)] = src[i];
+      }
       if (offset + len > s_received) {
         s_received = offset + len;
       }
