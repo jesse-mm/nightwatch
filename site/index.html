@@ -6,7 +6,15 @@
   <meta name="color-scheme" content="light dark">
   <title data-i18n="page.title">Treasure Trove settings</title>
   <link rel="stylesheet" href="fonts/fonts.css">
-  <link rel="stylesheet" href="style.css">
+  <script>
+    // Never run an old copy: the phone opens this page with ?v=<time>, and our
+    // own files load with the same v (fonts and vendor files never change).
+    window.TreasureAsset = (function () {
+      var v = new URLSearchParams(location.search).get('v');
+      return function (path) { return v ? path + '?v=' + encodeURIComponent(v) : path; };
+    }());
+    document.write('<link rel="stylesheet" href="' + TreasureAsset('style.css') + '">');
+  </script>
 </head>
 <body>
   <div class="loader" id="loader" role="status" aria-live="polite">
@@ -351,12 +359,13 @@
     <button type="button" class="save" id="save" data-i18n="save.button">Save to watch</button>
   </div>
 
-  <script src="settings.js"></script>
-  <script src="render.js"></script>
-  <script src="looks.js"></script>
-  <script src="catalog.js"></script>
+  <script>
+    ['settings.js', 'render.js', 'looks.js', 'catalog.js'].forEach(function (f) {
+      document.write('<script src="' + TreasureAsset(f) + '"><\/script>');
+    });
+  </script>
   <!-- ICU MessageFormat for the translations (FormatJS intl-messageformat 11.2.0, BSD-3-Clause). -->
   <script src="vendor/intl-messageformat-11.2.0.iife.js"></script>
-  <script src="i18n.js"></script>
+  <script>document.write('<script src="' + TreasureAsset('i18n.js') + '"><\/script>');</script>
 </body>
 </html>

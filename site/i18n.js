@@ -137,7 +137,8 @@
   window.TreasureI18n = { lang, t, apply };
 
   function load(code) {
-    return fetch(`translations/${code}.json`)
+    const url = `translations/${code}.json`;
+    return fetch(window.TreasureAsset ? window.TreasureAsset(url) : url)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -159,7 +160,7 @@
     }
     // Now the page logic, which needs the texts from the start.
     const script = document.createElement('script');
-    script.src = 'app.js';
+    script.src = window.TreasureAsset ? window.TreasureAsset('app.js') : 'app.js';
     document.body.append(script);
   });
 })();

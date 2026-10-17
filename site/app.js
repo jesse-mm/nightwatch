@@ -66,7 +66,9 @@ canvas.height = watch.h;
 let crop = null;
 // The painting catalog (the catalog/ folder next to this page); pictures come straight
 // from the Rijksmuseum's IIIF server, so there is no server of our own.
-const catalogReady = fetch('catalog/manifest.json')
+// The manifest is always fetched fresh; the other catalog files carry its id
+// (?id=…), so they're cached per catalog version and never mixed up.
+const catalogReady = fetch(`catalog/manifest.json?t=${Date.now()}`)
   .then((res) => {
     if (!res.ok) throw new Error(`catalog: HTTP ${res.status}`);
     return res.json();
@@ -83,7 +85,7 @@ async function loadPool(cat, pool) {
   if (cat.has(pool)) return;
   const file = cat.fileFor(pool);
   if (!file) throw new Error(`no catalog file for ${pool}`);
-  const res = await fetch(`catalog/${file}`);
+  const res = await fetch(`catalog/${file}?id=${cat.id}`);
   if (!res.ok) throw new Error(`catalog: HTTP ${res.status}`);
   if (!cat.add(await res.json())) throw new Error(t('error.catalogChanged'));
 }
@@ -543,10 +545,10 @@ let searchActive = -1;
 const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 function loadSearch() {
-  searchReady ??= Promise.all([catalogReady, fetch('catalog/search.json').then((res) => {
+  searchReady ??= catalogReady.then(async (cat) => {
+    const res = await fetch(`catalog/search.json?id=${cat.id}`);
     if (!res.ok) throw new Error(`search: HTTP ${res.status}`);
-    return res.json();
-  })]).then(([cat, data]) => {
+    const data = await res.json();
     if (data.id !== cat.id) throw new Error('the catalog changed; reopen the settings');
     return data.entries.map(([key, title, artist, date, objectNumber, pool, iiif]) => ({
       key, title, artist, date, objectNumber, pool,
