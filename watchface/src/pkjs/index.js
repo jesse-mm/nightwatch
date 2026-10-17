@@ -30,6 +30,11 @@ var ART_KEY = 'tt-art';
 var CATALOG_KEY = 'tt-catalog';
 // Rows of paintings the settings page handed over (pinned or hung), by key.
 var ROWS_KEY = 'tt-rows';
+// The pinned painting's own copy (the whole painting, PNG), so it stays
+// usable, crops and zoom included, if the Rijksmuseum drops it.
+var SOURCE_KEY = 'tt-pinned-source';
+// A pinned painting we can no longer get: shown on the settings page.
+var UNAVAILABLE_KEY = 'tt-unavailable';
 
 var DEFAULTS = settingsLib.DEFAULTS;
 
@@ -537,6 +542,19 @@ function getBytes(url, onSuccess, onError, asText) {
       settled = true;
       clearTimeout(timer);
       getBytes(url, onSuccess, onError, true);
+    } else if (CONFIG.DEV_BASE64_URL) {
+      // Development only (the emulator can't download binary data): a helper
+      // (scripts/emulator-images.mjs) sends the image as base64.
+      settled = true;
+      clearTimeout(timer);
+      getText(CONFIG.DEV_BASE64_URL + encodeURIComponent(url), function (text) {
+        var decoded = new Uint8Array(base64.decode(text));
+        if (png.isPng(decoded)) {
+          onSuccess(decoded);
+        } else {
+          onError('the dev helper sent no PNG');
+        }
+      }, onError);
     } else {
       finish(onError, 'this phone app cannot download binary data (got ' +
         (bytes ? bytes.length : 0) + ' unusable bytes)');
@@ -547,19 +565,151 @@ function getBytes(url, onSuccess, onError, asText) {
   xhr.send();
 }
 
+/** A failure that won't fix itself: the painting or its image is gone. */
+function isGone(why) {
+  return /HTTP 40[34]|HTTP 410|not in the catalog/.test(String(why));
+}
+
+/** Note on the settings page that the pinned painting can't be fetched any more. */
+function markUnavailable(key, title, reason, usingCopy) {
+  console.log('Pinned painting ' + key + ' is unavailable: ' + reason);
+  localStorage.setItem(UNAVAILABLE_KEY, JSON.stringify({
+    key: key, title: title || '', reason: reason, usingCopy: usingCopy, since: today()
+  }));
+}
+
+function clearUnavailable(key) {
+  var note = readJson(UNAVAILABLE_KEY);
+  if (note && (!key || note.key === key)) {
+    localStorage.removeItem(UNAVAILABLE_KEY);
+  }
+}
+
+/** Keep a copy of the pinned painting (once), for when the Rijksmuseum drops it. */
+function keepPinnedCopy(cat, key) {
+  var copy = readJson(SOURCE_KEY);
+  if (copy && copy.key === key) {
+    return;
+  }
+  var req = cat.workImage(key, watch, 200);
+  if (!req) {
+    return;
+  }
+  getBytes(req.url, function (file) {
+    try {
+      localStorage.setItem(SOURCE_KEY, JSON.stringify({ key: key, row: cat.row(key), png: base64.encode(file) }));
+      console.log('Kept a copy of the pinned painting (' + file.length + ' bytes)');
+    } catch (e) {
+      console.log('Could not keep a copy of the pinned painting: ' + e);
+    }
+  }, function (why) {
+    console.log('Could not download a copy of the pinned painting: ' + why);
+  });
+}
+
+/**
+ * Cut the crop from the pinned painting's own copy (see keepPinnedCopy), the
+ * way the settings page does. Returns {rgb, w, h}, or null without a copy.
+ */
+function cropFromCopy(cat, key, settings) {
+  var copy = readJson(SOURCE_KEY);
+  if (!copy || copy.key !== key) {
+    return null;
+  }
+  cat.addRow(copy.row);
+  var image = png.decode(new Uint8Array(base64.decode(copy.png)));
+  var w = watch.w;
+  var h = watch.h;
+  var rect = { x: 0, y: 0, w: image.width, h: image.height };
+  if (settings.fit === 'whole') {
+    var contain = cat.cropRequest(key, watch, 'whole');
+    w = contain.width;
+    h = contain.height;
+  } else {
+    var v = cat.coverView(key, watch, settings);
+    rect = { x: v.x * image.width, y: v.y * image.height, w: v.w * image.width, h: v.h * image.height };
+  }
+  return { rgb: render.cropRect(image.data, image.width, image.height, rect, w, h), w: w, h: h };
+}
+
+/** Cache a painting's toned crop and send it to the watch. */
+function showNewArt(cat, key, settings, period, rgb, size) {
+  var painting = cat.get(key);
+  retryCount = 0;
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  var record = {
+    date: today(),
+    period: period,
+    cropKey: cropKey(settings),
+    crop: base64.encode(rgb),
+    cropW: size.w,
+    cropH: size.h,
+    // Its catalog row: enough to fetch another crop later without a file.
+    row: cat.row(key),
+    meta: {
+      key: painting.key,
+      title: painting.title,
+      artist: painting.artist,
+      date: painting.date,
+      objectNumber: painting.objectNumber,
+      webUrl: painting.webUrl,
+      imageUrl: painting.imageUrl,
+      iiifBase: painting.iiifBase,
+      license: painting.license,
+      licenseUrl: painting.licenseUrl
+    }
+  };
+  try {
+    localStorage.setItem(ART_KEY, JSON.stringify(record));
+  } catch (e) {
+    console.log('Could not cache painting: ' + e);
+  }
+  sendImage(composeFor(record, loadSettings()));
+}
+
 /**
  * Get a painting's crop straight from the Rijksmuseum (IIIF cuts the planned
- * region), tone it, cache it and send it to the watch.
+ * region), tone it, cache it and send it to the watch. A pinned painting that
+ * is gone (not in the catalog, or its image removed) is never retried: the
+ * settings page says so, and its own copy (if kept) still serves crops.
  * @param {object} cat the catalog, with this painting's row in it
  * @param {string} key the painting
  * @param {string} period the rotation period it belongs to (see rotation.js)
  */
 function fetchArt(cat, key, period) {
-  var done = fetchDone;
-  var fail = fetchFailed;
+  var settings = loadSettings();
+  var pinned = settings.pinned === key;
+  var copy = readJson(SOURCE_KEY);
+  if (pinned && copy && copy.key === key) {
+    cat.addRow(copy.row);
+  }
+  var title = (cat.get(key) || {}).title;
+
+  /** Serve a pinned painting from its copy, or note it's unavailable. */
+  var gone = function (why) {
+    var cut = null;
+    if (pinned) {
+      try {
+        cut = cropFromCopy(cat, key, settings);
+      } catch (e) {
+        console.log('Could not use the pinned copy: ' + e);
+      }
+      markUnavailable(key, title, String(why), Boolean(cut));
+    } else {
+      console.log('Painting ' + key + ' is gone: ' + why);
+    }
+    if (cut) {
+      showNewArt(cat, key, settings, period, render.tone(cut.rgb), { w: cut.w, h: cut.h });
+    }
+    fetchDone(); // no retry: it won't come back by itself
+  };
+
   var painting = cat.get(key);
   if (!painting) {
-    fail('painting ' + key + ' is not in the catalog');
+    gone('not in the catalog');
     return;
   }
 
@@ -567,7 +717,6 @@ function fetchArt(cat, key, period) {
   // A painting with a saved look gets it back; a new one without starts at its
   // planned view (zoom and position belong to one painting); others keep the
   // current settings.
-  var settings = loadSettings();
   var look = looks.get(localStorage, painting.key, settings);
   var previous = readJson(ART_KEY);
   var samePainting = previous && previous.meta && previous.meta.key === painting.key;
@@ -582,7 +731,7 @@ function fetchArt(cat, key, period) {
 
   var request = cat.cropRequest(painting.key, watch, settings.fit, settings);
   if (!request) {
-    fail('no crop for this screen');
+    fetchFailed('no crop for this screen');
     return;
   }
   getBytes(request.url, function (file) {
@@ -593,44 +742,24 @@ function fetchArt(cat, key, period) {
       size = { w: image.width, h: image.height };
       rgb = render.tone(image.data);
     } catch (e) {
-      fail('could not decode the picture: ' + e);
+      fetchFailed('could not decode the picture: ' + e);
       return;
     }
-    retryCount = 0;
-    if (retryTimer) {
-      clearTimeout(retryTimer);
-      retryTimer = null;
+    if (pinned) {
+      clearUnavailable(key);
     }
-    var record = {
-      date: today(),
-      period: period,
-      cropKey: cropKey(settings),
-      crop: base64.encode(rgb),
-      cropW: size.w,
-      cropH: size.h,
-      // Its catalog row: enough to fetch another crop later without a file.
-      row: cat.row(key),
-      meta: {
-        key: painting.key,
-        title: painting.title,
-        artist: painting.artist,
-        date: painting.date,
-        objectNumber: painting.objectNumber,
-        webUrl: painting.webUrl,
-        imageUrl: painting.imageUrl,
-        iiifBase: painting.iiifBase,
-        license: painting.license,
-        licenseUrl: painting.licenseUrl
-      }
-    };
-    try {
-      localStorage.setItem(ART_KEY, JSON.stringify(record));
-    } catch (e) {
-      console.log('Could not cache painting: ' + e);
+    showNewArt(cat, key, settings, period, rgb, size);
+    if (pinned) {
+      keepPinnedCopy(cat, key);
     }
-    sendImage(composeFor(record, loadSettings()));
-    done();
-  }, fail);
+    fetchDone();
+  }, function (why) {
+    if (isGone(why)) {
+      gone(why);
+    } else {
+      fetchFailed(why);
+    }
+  });
 }
 
 // -------------------------------------------------------------------- events
@@ -685,7 +814,9 @@ Pebble.addEventListener('showConfiguration', function () {
     art: art ? art.meta : null,
     watch: watch,
     looks: looksForPage(),
-    rows: rows
+    rows: rows,
+    // The pinned painting can't be fetched any more (shown as a notice).
+    unavailable: readJson(UNAVAILABLE_KEY)
   };
   Pebble.openURL(PAGE_URL + '/#' + encodeURIComponent(JSON.stringify(state)));
 });
@@ -737,6 +868,15 @@ Pebble.addEventListener('webviewclosed', function (e) {
       }
     }
     localStorage.setItem(ROWS_KEY, JSON.stringify(keep));
+  }
+  // The pinned painting's copy and notice only matter while it stays pinned.
+  var copy = readJson(SOURCE_KEY);
+  if (copy && copy.key !== settings.pinned) {
+    localStorage.removeItem(SOURCE_KEY);
+  }
+  var note = readJson(UNAVAILABLE_KEY);
+  if (note && note.key !== settings.pinned) {
+    clearUnavailable();
   }
   // A restored backup replaces every saved look.
   if (result.looks && typeof result.looks === 'object') {

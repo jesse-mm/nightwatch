@@ -95,7 +95,7 @@ date that stay out of its way.
 2. **Host the settings page** (see [docs/DEPLOY.md](docs/DEPLOY.md)): publish
    `site/` (with its generated `catalog/` folder) on any static host, e.g.
    GitHub Pages. The phone loads the catalog from there too. To test locally:
-   `cd site && python3 -m http.server 8090`.
+   `npm run site` (serves `site/` on port 8090).
 3. **Point the watchface at it:** edit `watchface/src/pkjs/config.js` →
    `SETTINGS_URL` (e.g. `http://<your-mac>:8090` for testing).
 4. **Build and install the watchface** with the Pebble SDK
@@ -105,8 +105,9 @@ date that stay out of its way.
    pebble build
    pebble install --phone <phone-ip>      # or --emulator basalt
    ```
-   The emulator can't download paintings (binary downloads don't work in its
-   PebbleKit JS), so use a real phone to see new ones.
+   The emulator can't download binary data, so for the emulator also run
+   `npm run emulator-images` and set `DEV_BASE64_URL` (see
+   [docs/DEPLOY.md](docs/DEPLOY.md#testing-locally)).
 5. Open the watchface settings in the Pebble app.
 
 ## Gestures
@@ -149,7 +150,8 @@ Still to check on a real watch:
 
 - **Binary downloads.** The phone downloads the PNG crop with an ArrayBuffer
   XHR, falling back to the `x-user-defined` text trick. The emulator can't do
-  either, so check on a real iPhone and Android phone that new paintings arrive.
+  either (it uses a development helper instead), so check on a real iPhone and
+  Android phone that new paintings arrive. (Checked on one phone so far.)
 
 - **Color tuning.** "Daylight / Indoors / Backlight" stretch the simulated palettes;
   compare them on a real screen and pick a default (`palette` in the phone's

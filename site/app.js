@@ -509,6 +509,17 @@ if (settings.pinned) {
   showPinned(art && art.key === settings.pinned ? art.title : '');
 }
 
+// The phone couldn't fetch the pinned painting any more (removed from the
+// catalog, or its image from the Rijksmuseum). It doesn't keep trying.
+const gone = state.unavailable;
+if (gone && gone.key === settings.pinned) {
+  const name = gone.title ? `“${gone.title}”` : 'This painting';
+  $('pinned-gone').hidden = false;
+  $('pinned-gone').textContent = gone.usingCopy
+    ? `${name} is no longer available from the Rijksmuseum. Your watch uses the copy your phone kept, so colors, crop and zoom still work.`
+    : `${name} is no longer available from the Rijksmuseum. Your watch keeps showing it as it is; unpin it to hang other paintings again.`;
+}
+
 $('unpin').addEventListener('click', () => {
   settings.pinned = '';
   $('pin-status').textContent = '';

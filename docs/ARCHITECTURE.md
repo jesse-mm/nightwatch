@@ -389,10 +389,18 @@ can be deleted by hand.
 
 - **Binary downloads in the emulator.** The emulator's PebbleKit JS (pypkjs)
   can't download binary data (its ArrayBuffer is empty, text is UTF-8
-  mangled), so the emulator can't show new paintings. Real phones run
-  PebbleKit JS on the phone's own JavaScript engine; the app tries an
-  ArrayBuffer first, then the `x-user-defined` text trick, and checks for a
-  real PNG.
+  mangled). Real phones run PebbleKit JS on the phone's own JavaScript
+  engine; the app tries an ArrayBuffer first, then the `x-user-defined` text
+  trick, and checks for a real PNG. For the emulator only, a development
+  helper (`scripts/emulator-images.mjs`, `DEV_BASE64_URL` in config.js) sends
+  the images as base64.
+- **A pinned painting that disappears.** If the catalog no longer has it or
+  the Rijksmuseum answers 404/410 for its image, the phone doesn't retry: it
+  notes it (`tt-unavailable`) and the settings page shows a notice. Once a
+  pinned painting has been downloaded, the phone also keeps its own copy of
+  the whole painting (`tt-pinned-source`: the settings page's 2× image, PNG,
+  typically 300-700 KB), so color, crop and zoom keep working from that copy.
+  Unpinning drops the copy and the notice.
 - **The phone needs the static site.** It loads the catalog from
   `SETTINGS_URL`, so it can only pick a new painting while the site is
   reachable (or from catalog files it cached before). Showing the current

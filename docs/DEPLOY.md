@@ -66,13 +66,20 @@ block plain HTTP, so use HTTPS for the published page.
 ### Testing locally
 
 ```sh
-cd site && python3 -m http.server 8090
+npm run site               # serves site/ on :8090 (npx serve)
+npm run emulator-images    # only for the emulator, on :8092 (see below)
 ```
 
-Set `SETTINGS_URL` to `http://<your-mac>:8090`, rebuild and install. The
-emulator can open the settings page but can't download paintings (see
-[ARCHITECTURE.md](ARCHITECTURE.md#known-limits)); use a real phone to see new
-paintings.
+Set `SETTINGS_URL` to `http://<your-mac>:8090` in `watchface/src/pkjs/config.js`,
+rebuild and install. That's all a real phone needs.
+
+The emulator's PebbleKit JS can't download binary data, so it can't fetch the
+PNG crops itself. `scripts/emulator-images.mjs` fetches them from the IIIF
+server and hands them over as base64 text; add
+`DEV_BASE64_URL: 'http://<your-mac>:8092/base64?url='` to your local
+`config.js` (leave it out for real use). With `DEV_GONE=<iiif id>` it answers
+404 for that image, to try what happens when the Rijksmuseum drops a pinned
+painting.
 
 ## Settings reference (.env)
 
