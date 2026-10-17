@@ -75,7 +75,13 @@ function today() {
  * so changing them never needs a download.
  */
 function cropKey(settings) {
-  return [watch.w, watch.h, watch.round, settings.fit].join(':');
+  var key = [watch.w, watch.h, watch.round, settings.fit];
+  // Cover asks the Rijksmuseum for exactly the visible part, so zoom and
+  // position are part of the crop (a change downloads it again).
+  if (settings.fit !== 'whole') {
+    key.push(settings.zoom, settings.focusX, settings.focusY);
+  }
+  return key.join(':');
 }
 
 /** The watch's bytes for a cached crop with the current tuning and frame. */
@@ -90,10 +96,7 @@ function composeFor(art, settings) {
     palette: settings.palette,
     dither: settings.dither,
     brightness: settings.brightness,
-    contrast: settings.contrast,
-    windowX: art.windowX || 0,
-    windowY: art.windowY || 0,
-    shift: settings.shift
+    contrast: settings.contrast
   });
 }
 
@@ -401,12 +404,29 @@ function fetchArt(painting, settings, period) {
     scheduleRetry();
     done();
   };
-  var request = catalog.cropRequest(painting.key, watch, settings.fit);
+
+  // Settle the look first, so we ask for the right part of the painting once.
+  // A painting with a saved look gets it back; a new one without starts at its
+  // planned view (zoom and position belong to one painting); others keep the
+  // current settings.
+  settings = loadSettings();
+  var look = looks.get(localStorage, painting.key, settings);
+  var previous = readJson(ART_KEY);
+  var samePainting = previous && previous.meta && previous.meta.key === painting.key;
+  if (look) {
+    applyLook(settings, look);
+  } else if (!samePainting && (settings.zoom !== 100 || settings.focusX !== null || settings.focusY !== null)) {
+    settings.zoom = 100;
+    settings.focusX = null;
+    settings.focusY = null;
+    storeSettings(settings);
+  }
+
+  var request = catalog.cropRequest(painting.key, watch, settings.fit, settings);
   if (!request) {
     fail('no crop for this screen');
     return;
   }
-
   getBytes(request.url, function (file) {
     var rgb;
     var size;
@@ -430,9 +450,6 @@ function fetchArt(painting, settings, period) {
       crop: base64.encode(rgb),
       cropW: size.w,
       cropH: size.h,
-      // Where the planned view sits in a Cover crop with slack.
-      windowX: request.windowX,
-      windowY: request.windowY,
       meta: {
         key: painting.key,
         title: painting.title,
@@ -443,28 +460,9 @@ function fetchArt(painting, settings, period) {
         imageUrl: painting.imageUrl,
         iiifBase: painting.iiifBase,
         license: painting.license,
-        licenseUrl: painting.licenseUrl,
-        windowX: request.windowX,
-        windowY: request.windowY,
-        cropUrl: request.url
+        licenseUrl: painting.licenseUrl
       }
     };
-    // A painting with a saved look gets it back; others keep the current one.
-    var current = loadSettings();
-    var look = looks.get(localStorage, painting.key, current);
-    // The Cover position belongs to one painting: a new one without a saved
-    // look starts at its planned view.
-    var previous = readJson(ART_KEY);
-    var samePainting = previous && previous.meta && previous.meta.key === painting.key;
-    if (!look && !samePainting && current.shift) {
-      current.shift = 0;
-      storeSettings(current);
-    }
-    if (look && applyLook(current, look) && look.fit !== settings.fit) {
-      // Saved with the other crop: fetch that one instead (still fetching).
-      fetchArt(painting, loadSettings(), period);
-      return;
-    }
     try {
       localStorage.setItem(ART_KEY, JSON.stringify(record));
     } catch (e) {

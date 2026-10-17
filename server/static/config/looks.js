@@ -32,15 +32,18 @@
   var STORE_KEY = 'tt-looks';
   var VERSION = 1;
 
-  // Setting → allowed values; null = a number from -100 to 100.
+  // Setting → allowed values (a list), or a whole-number range; `empty: true`
+  // also allows null (focus: null = the generator's smart crop).
   var FIELDS = {
     fit: ['fill', 'whole'],
     frame: ['none', 'gold', 'wood', 'gallery'],
     palette: ['defined', 'sun', 'room', 'backlight'],
     dither: ['atkinson', 'checker', 'none'],
-    brightness: null,
-    contrast: null,
-    shift: null,
+    brightness: { min: -100, max: 100 },
+    contrast: { min: -100, max: 100 },
+    zoom: { min: 100, max: 200 },
+    focusX: { min: 0, max: 1000, empty: true },
+    focusY: { min: 0, max: 1000, empty: true },
     textRow: ['top', 'center', 'bottom'],
     textCol: ['auto', 'start', 'center', 'end'],
     timeSize: ['s', 'm', 'l']
@@ -48,15 +51,28 @@
 
   var KEYS = Object.keys(FIELDS);
 
-  function clampNumber(value) {
-    return Math.min(100, Math.max(-100, Math.round(Number(value) || 0)));
+  function isList(field) {
+    return Object.prototype.toString.call(field) === '[object Array]';
+  }
+
+  /** A value for a range field, or undefined when it doesn't fit. */
+  function inRange(field, value) {
+    if (value === null && field.empty) {
+      return null;
+    }
+    if (typeof value !== 'number' || !isFinite(value)) {
+      return undefined;
+    }
+    return Math.min(field.max, Math.max(field.min, Math.round(value)));
   }
 
   /** The look fields of `settings`. */
   function encode(settings) {
     var look = {};
     KEYS.forEach(function (key) {
-      look[key] = FIELDS[key] ? settings[key] : clampNumber(settings[key]);
+      var field = FIELDS[key];
+      var value = isList(field) ? settings[key] : inRange(field, settings[key]);
+      look[key] = value === undefined ? (field.empty ? null : field.min) : value;
     });
     return look;
   }
@@ -72,11 +88,12 @@
     var out = {};
     KEYS.forEach(function (key) {
       var value = look[key];
-      var allowed = FIELDS[key];
-      if (allowed) {
-        out[key] = allowed.indexOf(value) >= 0 ? value : defaults[key];
+      var field = FIELDS[key];
+      if (isList(field)) {
+        out[key] = field.indexOf(value) >= 0 ? value : defaults[key];
       } else {
-        out[key] = typeof value === 'number' && isFinite(value) ? clampNumber(value) : defaults[key];
+        var v = inRange(field, value);
+        out[key] = v === undefined ? defaults[key] : v;
       }
     });
     return out;

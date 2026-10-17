@@ -28,7 +28,7 @@
   var LICENSE = 7;
   var ASPECT = 8;
   var CROPS = 9;
-  var CROP_STRIDE = 5; // x, y, w, h, window per screen
+  var CROP_STRIDE = 5; // x, y, w, h, window per screen (the generator's plan)
 
   function pct(v) {
     return String(Math.round(v * 100000) / 1000);
@@ -89,47 +89,109 @@
       return -1;
     }
 
+    /** A painting's Cover plan for a screen: [x, y, w, h, window], or null. */
+    function plan(row, screen) {
+      var s = screenIndex(screen.w, screen.h, screen.round);
+      return s < 0 ? null : row[CROPS].slice(s * CROP_STRIDE, s * CROP_STRIDE + CROP_STRIDE);
+    }
+
+    function clamp(v, lo, hi) {
+      return Math.min(Math.max(v, lo), hi);
+    }
+
     /**
-     * Where to get a painting's crop for a screen: the IIIF URL, the crop size
-     * and, for Cover, where the planned view sits in it (render.js cuts it).
+     * The part of the painting a Cover screen shows, as fractions {x, y, w, h}.
+     * `view.zoom` (100-200, %) zooms in; `view.focusX`/`focusY` (0-1000, or
+     * null for the generator's smart crop) set the center. At 100% only the
+     * free axis can move; zoomed in, both can.
+     */
+    function coverView(key, screen, view) {
+      var row = byKey[key];
+      var c = row && plan(row, screen);
+      if (!c) {
+        return null;
+      }
+      view = view || {};
+      var aspect = row[ASPECT];
+      var screenRatio = screen.w / screen.h;
+      var zoom = clamp((view.zoom || 100) / 100, 1, 4);
+      // The whole cover window at 100%: full height for wide paintings,
+      // full width for tall ones.
+      var w = aspect > screenRatio ? screenRatio / aspect : 1;
+      var h = aspect > screenRatio ? 1 : aspect / screenRatio;
+      // The planned (smart) center: where the generator put the view in its
+      // crop with slack (c.window screen pixels from the crop's start).
+      var ratio = (c[2] / c[3]) * aspect;
+      var plannedX = 0.5;
+      var plannedY = 0.5;
+      if (ratio > screenRatio) {
+        var cropW = Math.max(screen.w, Math.round(screen.h * ratio));
+        plannedX = c[0] + (c[4] / cropW) * c[2] + w / 2;
+      } else if (ratio < screenRatio) {
+        var cropH = Math.max(screen.h, Math.round(screen.w / ratio));
+        plannedY = c[1] + (c[4] / cropH) * c[3] + h / 2;
+      }
+      w /= zoom;
+      h /= zoom;
+      var cx = view.focusX === null || view.focusX === undefined ? plannedX : view.focusX / 1000;
+      var cy = view.focusY === null || view.focusY === undefined ? plannedY : view.focusY / 1000;
+      // Zooming into the planned view keeps its center where it can.
+      cx = clamp(cx, w / 2, 1 - w / 2);
+      cy = clamp(cy, h / 2, 1 - h / 2);
+      return { x: cx - w / 2, y: cy - h / 2, w: w, h: h, cx: cx, cy: cy };
+    }
+
+    /**
+     * Where to get a painting's picture for a screen: the IIIF URL and size.
+     * Cover asks for exactly the visible part (see coverView) at screen size;
+     * Contain asks for the whole painting fitted inside the screen.
      * @param {string} key painting key
      * @param {object} screen {w, h, round}
      * @param {string} fit 'fill' (Cover) or 'whole' (Contain)
+     * @param {object} [view] {zoom, focusX, focusY} for Cover
      */
-    function cropRequest(key, screen, fit) {
+    function cropRequest(key, screen, fit, view) {
       var row = byKey[key];
       if (!row) {
         return null;
       }
       var base = data.iiifPrefix + row[IIIF];
-      var aspect = row[ASPECT];
       var sw = screen.w;
       var sh = screen.h;
       if (fit === 'whole') {
+        var aspect = row[ASPECT];
         var wide = aspect > sw / sh;
         var cw = wide ? sw : Math.max(1, Math.round(sh * aspect));
         var ch = wide ? Math.max(1, Math.round(sw / aspect)) : sh;
-        return { url: base + '/full/' + cw + ',' + ch + '/0/default.png', width: cw, height: ch, windowX: 0, windowY: 0 };
+        return { url: base + '/full/' + cw + ',' + ch + '/0/default.png', width: cw, height: ch };
       }
-      var s = screenIndex(sw, sh, screen.round);
-      if (s < 0) {
+      var v = coverView(key, screen, view);
+      if (!v) {
         return null;
       }
-      var c = row[CROPS].slice(s * CROP_STRIDE, s * CROP_STRIDE + CROP_STRIDE);
-      // Crop shape in image pixels relative to its height: (w * W) / (h * H).
-      var ratio = (c[2] / c[3]) * aspect;
-      // Wider than the screen: it slides sideways (otherwise up and down).
-      var slidesX = ratio > sw / sh;
-      var width = slidesX ? Math.max(sw, Math.round(sh * ratio)) : sw;
-      var height = slidesX ? sh : Math.max(sh, Math.round(sw / ratio));
       return {
-        url: base + '/pct:' + pct(c[0]) + ',' + pct(c[1]) + ',' + pct(c[2]) + ',' + pct(c[3]) +
-          '/' + width + ',' + height + '/0/default.png',
-        width: width,
-        height: height,
-        windowX: slidesX ? c[4] : 0,
-        windowY: slidesX ? 0 : c[4]
+        url: base + '/pct:' + pct(v.x) + ',' + pct(v.y) + ',' + pct(v.w) + ',' + pct(v.h) +
+          '/' + sw + ',' + sh + '/0/default.png',
+        width: sw,
+        height: sh
       };
+    }
+
+    /**
+     * The whole painting, large enough to pan and zoom a Cover view up to
+     * `maxZoom` (%) at full screen resolution: for the settings page.
+     */
+    function workImage(key, screen, maxZoom) {
+      var row = byKey[key];
+      if (!row) {
+        return null;
+      }
+      var aspect = row[ASPECT];
+      var z = (maxZoom || 200) / 100;
+      var wide = aspect > screen.w / screen.h;
+      var h = wide ? Math.round(screen.h * z) : Math.max(1, Math.round(screen.w * z / aspect));
+      var w = wide ? Math.max(1, Math.round(h * aspect)) : Math.round(screen.w * z);
+      return { url: data.iiifPrefix + row[IIIF] + '/full/' + w + ',' + h + '/0/default.png', width: w, height: h };
     }
 
     function pick(list, random) {
@@ -159,7 +221,9 @@
         var last = q.split('/').pop().split('?')[0].split('#')[0];
         return painting(byKey[last] || byObjectNumber[last.toLowerCase()]);
       },
-      cropRequest: cropRequest
+      coverView: coverView,
+      cropRequest: cropRequest,
+      workImage: workImage
     };
   }
 

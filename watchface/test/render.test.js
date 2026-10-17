@@ -159,31 +159,3 @@ describe('color adjustments', () => {
     );
   });
 });
-
-describe('cover window', () => {
-  // A 10x4 "fill" crop for an 6x4 screen: 2 px of slack on each side.
-  const cw = 10;
-  const ch = 4;
-  const crop = new Uint8Array(cw * ch * 3);
-  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) crop.fill(x * 20, (y * cw + x) * 3, (y * cw + x) * 3 + 3);
-
-  test('places the window at the plan, shifted and clamped', () => {
-    assert.deepEqual(render.coverWindow(cw, ch, 6, 4, 2, 0, 0), { x: 2, y: 0, w: 6, h: 4, axis: 'x', min: -2, max: 2 });
-    assert.equal(render.coverWindow(cw, ch, 6, 4, 2, 0, 1).x, 3);
-    assert.equal(render.coverWindow(cw, ch, 6, 4, 2, 0, 99).x, 4);
-    assert.equal(render.coverWindow(cw, ch, 6, 4, 2, 0, -99).x, 0);
-    assert.equal(render.coverWindow(6, 4, 6, 4, 0, 0, 5).axis, null);
-  });
-
-  test('compose cuts the shifted window before dithering', () => {
-    const opts = { w: 6, h: 4, fit: 'fill', frame: 'none', palette: 'defined', dither: 'none', windowX: 2 };
-    const window = (x) => {
-      const out = new Uint8Array(6 * 4 * 3);
-      for (let y = 0; y < 4; y++) out.set(crop.subarray((y * cw + x) * 3, (y * cw + x + 6) * 3), y * 18);
-      return out;
-    };
-    assert.deepEqual(render.compose(crop, cw, ch, opts), render.compose(window(2), 6, 4, opts));
-    assert.deepEqual(render.compose(crop, cw, ch, { ...opts, shift: -2 }), render.compose(window(0), 6, 4, opts));
-  });
-});
-

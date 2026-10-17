@@ -35,7 +35,7 @@ if (settings.textCol === 'auto') settings.textCol = watch.round ? 'center' : 'en
 const savedLooks = state.looks || {};
 let restoredLooks = null; // a restored backup's looks, written by the phone on save
 let lookTouched = false;
-const initialShift = settings.shift; // the reader changed the look: the phone saves it with the painting
+const initialView = { zoom: settings.zoom, focusX: settings.focusX, focusY: settings.focusY }; // the reader changed the look: the phone saves it with the painting
 // A painting picked on this page; only hung on the watch when saved.
 let chosen = null;
 // The painting the label currently describes (for the viewer).
@@ -66,8 +66,11 @@ const catalogReady = fetch('catalog.json')
     return res.json();
   })
   .then((data) => window.TreasureCatalog.create(data));
-// What the Cover crop on screen lets the reader shift (see coverWindow in render.js).
-let shiftRange = { axis: null, min: 0, max: 0 };
+// The catalog once loaded (draw() needs it synchronously for Cover views).
+let catalog = null;
+catalogReady.then((cat) => {
+  catalog = cat;
+});
 
 // ---------------- how the preview is shown ----------------
 // A page-only preference (not a watch setting): show the watch's pixels as they
@@ -126,7 +129,19 @@ applyPreviewLight();
 /** Draw the watch's pixels for the current crop, tuning and frame. */
 function draw() {
   if (!crop) return;
-  const bytes = window.TreasureRender.compose(crop.rgb, crop.w, crop.h, {
+  let rgb = crop.rgb;
+  let w = crop.w;
+  let h = crop.h;
+  // Cover: cut the visible part out of the large copy, at screen size, and
+  // tone it, like the phone does with the part it downloads.
+  if (crop.kind === 'work' && catalog) {
+    const v = catalog.coverView(crop.key, watch, settings);
+    rgb = window.TreasureRender.tone(window.TreasureRender.cropRect(crop.rgb, crop.w, crop.h,
+      { x: v.x * crop.w, y: v.y * crop.h, w: v.w * crop.w, h: v.h * crop.h }, watch.w, watch.h));
+    w = watch.w;
+    h = watch.h;
+  }
+  const bytes = window.TreasureRender.compose(rgb, w, h, {
     w: watch.w,
     h: watch.h,
     stride: watch.w,
@@ -137,9 +152,6 @@ function draw() {
     dither: settings.dither,
     brightness: settings.brightness,
     contrast: settings.contrast,
-    windowX: crop.windowX,
-    windowY: crop.windowY,
-    shift: settings.shift,
   });
   const rgba = window.TreasureRender.toScreenRGBA(bytes, watch.w, watch.h, watch.w, previewLight);
   canvas.getContext('2d').putImageData(new ImageData(rgba, watch.w, watch.h), 0, 0);
@@ -180,13 +192,17 @@ function loadCrop(url) {
 
 /** Show a painting: fetch its crop, then draw it with the current settings. */
 async function showPainting(meta) {
-  crop = await loadCrop(meta.cropUrl);
-  // Straight from the IIIF server: tone it like the phone does (render.js).
-  if (meta.cropUrl.includes('iiif')) crop.rgb = window.TreasureRender.tone(crop.rgb);
-  // Where the planned window sits in a Cover crop with slack.
-  crop.windowX = meta.windowX ?? 0;
-  crop.windowY = meta.windowY ?? 0;
-  updateShiftRange();
+  const cat = await catalogReady;
+  catalog = cat;
+  // Cover: the whole painting at twice the screen's size, to pan and zoom over.
+  // Contain: the whole painting fitted inside the screen, toned once.
+  const cover = settings.fit !== 'whole';
+  const req = cover ? cat.workImage(meta.key, watch, 200) : cat.cropRequest(meta.key, watch, 'whole');
+  if (!req) throw new Error('no picture for this watch');
+  const loaded = await loadCrop(req.url);
+  if (!cover) loaded.rgb = window.TreasureRender.tone(loaded.rgb);
+  crop = { ...loaded, kind: cover ? 'work' : 'contain', key: meta.key };
+  updateViewControls();
   canvas.setAttribute('aria-label', `${meta.title} by ${meta.artist}, as shown on the watch`);
   draw();
   screenEl.classList.remove('loading');
@@ -344,13 +360,6 @@ function syncControls() {
   $('readability').checked = settings.boxMode === 'always';
 }
 
-/** A painting from the catalog with where to get its crop for this watch. */
-function withCrop(cat, painting) {
-  const req = cat.cropRequest(painting.key, watch, settings.fit);
-  if (!req) throw new Error('no crop for this watch');
-  return { ...painting, cropUrl: req.url, windowX: req.windowX, windowY: req.windowY };
-}
-
 const byKey = (key) => (cat) => cat.get(key);
 
 /**
@@ -365,11 +374,14 @@ async function loadPreview(choose, { pick = false, useLook = true } = {}) {
     const cat = await catalogReady;
     const painting = choose(cat);
     if (!painting) throw new Error('not in the catalog');
-    let meta = withCrop(cat, painting);
+    const meta = painting;
     if (id !== requestId) return null;
     const look = useLook ? savedLook(meta.key) : null;
-    // The shift belongs to one painting: others start at their planned view.
-    if (!look && useLook) settings.shift = meta.key === art?.key ? initialShift : 0;
+    // Zoom and position belong to one painting: others start at their planned view.
+    if (!look && useLook) {
+      Object.assign(settings, meta.key === art?.key ? initialView : { zoom: 100, focusX: null, focusY: null });
+      syncControls();
+    }
     if (look) {
       const otherCrop = look.fit !== settings.fit;
       Object.assign(settings, look);
@@ -377,7 +389,6 @@ async function loadPreview(choose, { pick = false, useLook = true } = {}) {
       update();
       // Saved with the other crop: load that one instead.
       if (otherCrop) return loadPreview(byKey(meta.key), { pick, useLook: false });
-      meta = withCrop(cat, painting);
     }
     if (pick) chosen = meta;
     await showPainting(meta);
@@ -406,15 +417,12 @@ function refreshPreview({ useLook = false } = {}) {
   if (key) loadPreview(byKey(key), { useLook });
 }
 
-// First paint: the phone passes the cached painting's crop URL. Without one,
-// look the painting up in the catalog.
-if (art?.cropUrl) {
+// First paint: the painting on the watch (from the phone).
+if (art?.key) {
   showPainting(art).catch((err) => {
     setStatus(`Couldn’t load a preview (${err.message}).`);
     hideLoader();
   });
-} else if (art?.key) {
-  refreshPreview();
 }
 
 // "Hang a different painting": any painting, or one from the chosen era.
@@ -556,7 +564,7 @@ function conditions() {
   return {
     showTime: settings.showTime,
     showDate: settings.showDate,
-    coverShift: Boolean(shiftRange.axis),
+    coverView: settings.fit !== 'whole' && Boolean(crop),
     ampm: settings.showTime && (settings.clockMode === '12' || (settings.clockMode === 'auto' && !clockIs24h())),
     anyText: settings.showTime || settings.showDate,
     textColumn: (settings.showTime || settings.showDate) && !watch.round,
@@ -633,8 +641,9 @@ readability.addEventListener('change', () => {
 
 // Brightness and contrast sliders: redraw as they move.
 function showRange(input) {
-  $(`${input.dataset.key}-out`).textContent = settings[input.dataset.key] > 0
-    ? `+${settings[input.dataset.key]}` : String(settings[input.dataset.key]);
+  const key = input.dataset.key;
+  const v = settings[key];
+  $(`${key}-out`).textContent = key === 'zoom' ? `${v}%` : v > 0 ? `+${v}` : String(v);
 }
 
 document.querySelectorAll('input.range[data-key]').forEach((input) => {
@@ -663,56 +672,64 @@ $('color-reset').addEventListener('click', () => {
   draw();
 });
 
-// ---------------- Cover position (shift) ----------------
-// Cover crops keep up to 20 watch pixels of extra painting on one axis; the
-// reader can slide the window there (slider, or drag the preview).
+// ---------------- Cover zoom and position ----------------
+// Cover shows part of the painting. The reader can zoom in (100-200 %) and
+// move the view anywhere (drag the preview, or the arrow buttons). Saved per
+// painting as zoom + focusX/focusY (view center, 0-1000; null = smart crop).
 
+/** The view now, clamped by the catalog (null outside Cover). */
+function currentView() {
+  return catalog && crop?.kind === 'work' ? catalog.coverView(crop.key, watch, settings) : null;
+}
 
-function updateShiftRange() {
-  if (!crop || settings.fit !== 'fill') {
-    shiftRange = { axis: null, min: 0, max: 0 };
-  } else {
-    shiftRange = window.TreasureRender.coverWindow(crop.w, crop.h, watch.w, watch.h,
-      crop.windowX, crop.windowY, 0);
-  }
-  const input = $('shift');
-  input.min = shiftRange.min;
-  input.max = shiftRange.max;
-  if (shiftRange.axis) settings.shift = Math.min(Math.max(settings.shift, shiftRange.min), shiftRange.max);
-  input.value = settings.shift;
-  showRange(input);
-  $('shift-hint').textContent = shiftRange.axis === 'y'
-    ? 'Drag the preview up or down, or slide, to move the painting a little.'
-    : 'Drag the preview sideways, or slide, to move the painting a little.';
+function updateViewControls() {
+  const v = currentView();
+  const freeX = Boolean(v && v.w < 0.999);
+  const freeY = Boolean(v && v.h < 0.999);
+  $('view-hint').textContent = freeX && freeY
+    ? 'Drag the preview to move the painting.'
+    : freeX ? 'Drag the preview sideways, or zoom in to move it up and down too.'
+      : freeY ? 'Drag the preview up or down, or zoom in to move it sideways too.'
+        : 'Zoom in to move the painting.';
+  document.querySelectorAll('[data-nudge]').forEach((b) => {
+    const sideways = b.dataset.nudge.split(',')[0] !== '0';
+    b.disabled = !(sideways ? freeX : freeY);
+  });
   for (const el of [canvas, $('mini-art')]) {
-    el.classList.toggle('draggable', Boolean(shiftRange.axis));
-    el.style.touchAction = shiftRange.axis === 'x' ? 'pan-y' : shiftRange.axis === 'y' ? 'pan-x' : '';
+    el.classList.toggle('draggable', freeX || freeY);
+    // Let the page scroll along any axis the painting can't move on.
+    el.style.touchAction = freeX && freeY ? 'none' : freeX ? 'pan-y' : freeY ? 'pan-x' : '';
   }
   applyVisibility();
 }
 
-function setShift(value) {
-  const next = Math.round(Math.min(Math.max(value, shiftRange.min), shiftRange.max));
-  if (next === settings.shift) return;
-  settings.shift = next;
+/** Move the view so its center is at (cx, cy) (fractions), clamped. */
+function setFocus(cx, cy) {
+  if (!catalog || crop?.kind !== 'work') return;
+  const v = catalog.coverView(crop.key, watch, { zoom: settings.zoom, focusX: cx * 1000, focusY: cy * 1000 });
+  const focusX = Math.round(v.cx * 1000);
+  const focusY = Math.round(v.cy * 1000);
+  if (focusX === settings.focusX && focusY === settings.focusY) return;
+  settings.focusX = focusX;
+  settings.focusY = focusY;
   lookTouched = true;
-  $('shift').value = next;
-  showRange($('shift'));
   draw();
 }
 
-// Dragging moves the painting with the finger, i.e. the window the other way.
+// Dragging moves the painting with the finger, i.e. the view the other way.
 for (const el of [canvas, $('mini-art')]) {
   let drag = null;
   el.addEventListener('pointerdown', (e) => {
-    if (!shiftRange.axis) return;
-    drag = { x: e.clientX, y: e.clientY, shift: settings.shift, perPx: watch.w / el.clientWidth };
+    const v = currentView();
+    if (!v || !el.classList.contains('draggable')) return;
+    drag = { x: e.clientX, y: e.clientY, v, perPx: watch.w / el.clientWidth };
     el.setPointerCapture(e.pointerId);
   });
   el.addEventListener('pointermove', (e) => {
     if (!drag) return;
-    const moved = shiftRange.axis === 'x' ? e.clientX - drag.x : e.clientY - drag.y;
-    setShift(drag.shift - moved * drag.perPx);
+    const dx = (e.clientX - drag.x) * drag.perPx; // watch pixels
+    const dy = (e.clientY - drag.y) * drag.perPx;
+    setFocus(drag.v.cx - (dx / watch.w) * drag.v.w, drag.v.cy - (dy / watch.h) * drag.v.h);
   });
   const end = () => {
     drag = null;
@@ -720,6 +737,34 @@ for (const el of [canvas, $('mini-art')]) {
   el.addEventListener('pointerup', end);
   el.addEventListener('pointercancel', end);
 }
+
+// Arrow buttons: move by a tenth of the screen.
+document.querySelectorAll('[data-nudge]').forEach((b) => {
+  b.addEventListener('click', () => {
+    const v = currentView();
+    if (!v) return;
+    const [dx, dy] = b.dataset.nudge.split(',').map(Number);
+    setFocus(v.cx + dx * v.w * 0.1, v.cy + dy * v.h * 0.1);
+  });
+});
+
+$('view-reset').addEventListener('click', () => {
+  Object.assign(settings, { zoom: 100, focusX: null, focusY: null });
+  lookTouched = true;
+  syncControls();
+  updateViewControls();
+  draw();
+});
+
+// Zooming keeps the current center (the catalog clamps it into the painting).
+$('zoom').addEventListener('input', () => {
+  const v = currentView();
+  if (v && settings.focusX === null) {
+    settings.focusX = Math.round(v.cx * 1000);
+    settings.focusY = Math.round(v.cy * 1000);
+  }
+  updateViewControls();
+});
 
 // ---------------- backup ----------------
 // Settings and saved looks live only on the phone; a backup is that data as
@@ -789,7 +834,7 @@ $('backup-restore').addEventListener('click', () => {
 
 let loaderTimer = setTimeout(hideLoader, 8000); // never block the page for long
 // Nothing to load yet (first set-up, before the watch has a painting).
-if (!art?.cropUrl && !art?.key) setTimeout(hideLoader, 0);
+if (!art?.key) setTimeout(hideLoader, 0);
 
 function hideLoader() {
   if (!loaderTimer) return;

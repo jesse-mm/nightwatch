@@ -16,6 +16,16 @@ generator ──▶ catalog.json ──▶ bundled into the .pbw (phone)  ──
 - **Phone**: downloads the PNG, decodes it (`png.js` with the vendored
   `tiny-inflate`), tones it (`render.js` `tone`, ported from the generator) and
   renders it as before. The catalog (~1 MB of JSON) is part of the app.
+- **Zoom and position** (Cover): the view can be zoomed in (100–200 %) and
+  moved anywhere; at 100 % only along the axis the painting overflows. Saved
+  per painting in its look as `zoom`, `focusX`, `focusY` (view center,
+  0–1000; empty = the generator's smart crop). `catalog.js` `coverView` turns
+  that into the region to ask IIIF for.
+- **Requests to the Rijksmuseum** stay low: the phone downloads one crop per
+  new painting (daily) and one when a saved look changes its crop, zoom or
+  position (the cache key includes them). The settings page downloads the
+  whole painting once at twice the screen size (`workImage`) and pans and
+  zooms locally, with no requests while dragging.
 - **Settings page**: plain static files (`server/static`): the page, its
   scripts and `catalog.json`. Host them anywhere (GitHub Pages); set
   `SETTINGS_URL` in `watchface/src/pkjs/config.js`.

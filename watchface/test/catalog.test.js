@@ -57,14 +57,33 @@ describe('catalog', () => {
     assert.equal(catalog.resolve('SK-Z-99'), null);
   });
 
-  test('asks IIIF for the planned Cover crop with slack', () => {
+  test('asks IIIF for exactly the planned Cover view at screen size', () => {
+    // Wide 2:1 painting on a 200x228 screen: the view is full height and
+    // (200/228)/2 of the width; the plan puts it 20 px into its crop.
     const r = catalog.cropRequest('1', { w: 200, h: 228, round: 0 }, 'fill');
-    // Region 50% x 100% of a 2:1 image = square: 228 x 228 for a 228-high screen.
-    assert.deepEqual([r.width, r.height, r.windowX, r.windowY], [228, 228, 20, 0]);
-    assert.equal(r.url, 'https://iiif.micr.io/aaaaa/pct:25,0,50,100/228,228/0/default.png');
-    const tall = catalog.cropRequest('2', { w: 260, h: 260, round: 1 }, 'fill');
-    // 100% x 60% of a 1:2 image: width:height = 0.833, so 260 wide is 312 high.
-    assert.deepEqual([tall.width, tall.height, tall.windowY], [260, 312, 0]);
+    assert.deepEqual([r.width, r.height], [200, 228]);
+    const v = catalog.coverView('1', { w: 200, h: 228, round: 0 });
+    assert.equal(v.h, 1);
+    assert.ok(Math.abs(v.w - 200 / 228 / 2) < 1e-9);
+    assert.ok(Math.abs(v.x - (0.25 + (20 / 228) * 0.5)) < 1e-9);
+    assert.match(r.url, /^https:\/\/iiif\.micr\.io\/aaaaa\/pct:[\d.]+,0,[\d.]+,100\/200,228\/0\/default\.png$/);
+  });
+
+  test('zoom and focus move the Cover view, kept inside the painting', () => {
+    const screen = { w: 260, h: 260, round: 1 };
+    const zoomed = catalog.coverView('2', screen, { zoom: 200, focusX: 500, focusY: 0 });
+    // Tall 1:2 painting: at 100% the view is the full width and half the height.
+    assert.deepEqual([zoomed.w, zoomed.h], [0.5, 0.25]);
+    assert.deepEqual([zoomed.x, zoomed.y], [0.25, 0]); // clamped to the top
+    const corner = catalog.coverView('2', screen, { zoom: 200, focusX: 1000, focusY: 1000 });
+    assert.deepEqual([corner.x, corner.y], [0.5, 0.75]);
+    // At 100% the full-width axis can't move.
+    assert.equal(catalog.coverView('2', screen, { zoom: 100, focusX: 0 }).x, 0);
+  });
+
+  test('the work image is the whole painting at twice the cover size', () => {
+    assert.deepEqual(catalog.workImage('1', { w: 200, h: 228, round: 0 }, 200),
+      { url: 'https://iiif.micr.io/aaaaa/full/912,456/0/default.png', width: 912, height: 456 });
   });
 
   test('asks IIIF for the whole painting for Contain', () => {

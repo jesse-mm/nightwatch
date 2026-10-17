@@ -88,7 +88,8 @@ on the watch:
 | `dither` | Dithering | `atkinson`, `checker` (50:50), `none` (Off) |
 | `brightness` | Brightness | −100…100 |
 | `contrast` | Contrast | −100…100 |
-| `shift` | Cover position | about −20…20 watch pixels along the free axis |
+| `zoom` | Cover zoom | 100…200 (%) |
+| `focusX`, `focusY` | Cover view center | 0…1000 across / down the painting; empty = smart crop |
 | `textRow` | Time row | `top`, `center`, `bottom` |
 | `textCol` | Time column | `auto`, `start` (left), `center`, `end` (right) |
 | `timeSize` | Time size | `s`, `m`, `l` |

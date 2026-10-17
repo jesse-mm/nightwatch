@@ -119,12 +119,32 @@
       "description": "Contrast adjustment",
       "default": 0
     },
-    "shift": {
+    "zoom": {
       "type": "integer",
-      "minimum": -20,
-      "maximum": 20,
-      "description": "Cover only: moves the crop along its free axis by this many watch pixels (the crop keeps up to 20 px of slack per side)",
-      "default": 0
+      "minimum": 100,
+      "maximum": 200,
+      "description": "Cover only: zoom in percent",
+      "default": 100
+    },
+    "focusX": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1000,
+      "description": "Cover only: view center across the painting (0 = left edge, 1000 = right edge); null = the generator's smart crop",
+      "default": null
+    },
+    "focusY": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1000,
+      "description": "Cover only: view center down the painting (0 = top, 1000 = bottom); null = the generator's smart crop",
+      "default": null
     },
     "textRow": {
       "enum": [

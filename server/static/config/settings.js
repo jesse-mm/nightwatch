@@ -40,7 +40,9 @@
     dither: 'atkinson',    // atkinson | checker | none
     brightness: 0,         // -100..100
     contrast: 0,           // -100..100
-    shift: 0,              // Cover only: move the crop's window along its free axis (watch px, about -20..20)
+    zoom: 100,             // Cover only: 100-200 %
+    focusX: null,          // Cover only: view center, 0-1000 across the painting; null = smart crop
+    focusY: null,          // Cover only: view center, 0-1000 down the painting; null = smart crop
     frame: 'none',         // none | gold | wood | gallery
     selection: 'featured', // featured (365 most-read) | random
     era: 'any',            // for random: any | pre1600 | 1600s | 1700s | 1800s | 1900s

@@ -25,10 +25,11 @@ function validate(s, value, root = s, path = '$') {
   const type = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value;
   if ('const' in s && value !== s.const) errors.push(`${path}: expected ${s.const}`);
   if (s.enum && !s.enum.includes(value)) errors.push(`${path}: ${JSON.stringify(value)} not in ${s.enum}`);
-  if (s.type === 'integer' && !Number.isInteger(value)) errors.push(`${path}: not an integer`);
-  else if (s.type && s.type !== 'integer' && s.type !== type) errors.push(`${path}: not ${s.type}`);
-  if (s.minimum !== undefined && value < s.minimum) errors.push(`${path}: below ${s.minimum}`);
-  if (s.maximum !== undefined && value > s.maximum) errors.push(`${path}: above ${s.maximum}`);
+  const types = s.type === undefined ? [] : [].concat(s.type);
+  const typeOk = (t) => (t === 'integer' ? Number.isInteger(value) : t === type);
+  if (types.length && !types.some(typeOk)) errors.push(`${path}: not ${types.join(' or ')}`);
+  if (typeof value === 'number' && s.minimum !== undefined && value < s.minimum) errors.push(`${path}: below ${s.minimum}`);
+  if (typeof value === 'number' && s.maximum !== undefined && value > s.maximum) errors.push(`${path}: above ${s.maximum}`);
   if (type === 'object') {
     for (const key of s.required || []) if (!(key in value)) errors.push(`${path}: missing ${key}`);
     for (const [key, v] of Object.entries(value)) {
@@ -73,16 +74,20 @@ describe('schemas', () => {
     assert.equal(looksSchema.properties.version.const, looks.VERSION);
     const lookProps = looksSchema.$defs.look.properties;
     assert.deepEqual(Object.keys(lookProps), looks.KEYS);
-    for (const [key, allowed] of Object.entries(looks.FIELDS)) {
-      if (allowed) assert.deepEqual(lookProps[key].enum, allowed, key);
-      else assert.equal(lookProps[key].type, 'integer', key);
+    for (const [key, field] of Object.entries(looks.FIELDS)) {
+      if (Array.isArray(field)) {
+        assert.deepEqual(lookProps[key].enum, field, key);
+      } else {
+        assert.deepEqual([lookProps[key].minimum, lookProps[key].maximum], [field.min, field.max], key);
+        assert.deepEqual([].concat(lookProps[key].type), field.empty ? ['integer', 'null'] : ['integer'], key);
+      }
     }
   });
 
   test('saved looks match looks.schema.json', () => {
     const items = new Map();
     const storage = { getItem: (k) => items.get(k) ?? null, setItem: (k, v) => items.set(k, v) };
-    looks.save(storage, '200108369', { ...settingsLib.DEFAULTS, frame: 'gold', textCol: 'start', contrast: -20 });
+    looks.save(storage, '200108369', { ...settingsLib.DEFAULTS, frame: 'gold', textCol: 'start', contrast: -20, zoom: 150, focusX: 400 });
     assert.deepEqual(validate(looksSchema, JSON.parse(items.get('tt-looks'))), []);
   });
 
