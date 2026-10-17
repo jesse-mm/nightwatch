@@ -1,7 +1,7 @@
 /**
- * Minimal base64 → byte array decoder. PebbleKit JS doesn't guarantee atob() or
- * binary XHR responses on every phone, so the server sends base64 text and we
- * decode it here into a plain Array (what Pebble.sendAppMessage expects).
+ * Minimal base64 for byte arrays. PebbleKit JS doesn't guarantee atob()/btoa(),
+ * and localStorage only holds text, so cached crops are stored as base64.
+ * `decode` returns a plain Array (what Pebble.sendAppMessage expects).
  */
 var ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 var LOOKUP = {};
@@ -25,4 +25,18 @@ function decode(text) {
   return out;
 }
 
-module.exports = { decode: decode };
+/** Bytes (Array or typed array) → base64 text. */
+function encode(bytes) {
+  var parts = [];
+  for (var j = 0; j < bytes.length; j += 3) {
+    var n = (bytes[j] << 16) | ((bytes[j + 1] || 0) << 8) | (bytes[j + 2] || 0);
+    parts.push(
+      ALPHABET.charAt((n >> 18) & 63) + ALPHABET.charAt((n >> 12) & 63) +
+      (j + 1 < bytes.length ? ALPHABET.charAt((n >> 6) & 63) : '=') +
+      (j + 2 < bytes.length ? ALPHABET.charAt(n & 63) : '=')
+    );
+  }
+  return parts.join('');
+}
+
+module.exports = { decode: decode, encode: encode };

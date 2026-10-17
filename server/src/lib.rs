@@ -12,6 +12,7 @@
 //! catalog → variants → imaging → snapshot → routes. Dithering and frames live
 //! in `server/static/config/render.js` (shared with the phone).
 
+pub mod bundle;
 pub mod catalog;
 pub mod era;
 pub mod featured;

@@ -58,6 +58,14 @@ canvas.width = watch.w;
 canvas.height = watch.h;
 // The crop on screen: full-color RGB from the server, before tuning and frame.
 let crop = null;
+// The painting catalog (catalog.json next to this page); pictures come straight
+// from the Rijksmuseum's IIIF server, so there is no server of our own.
+const catalogReady = fetch('catalog.json')
+  .then((res) => {
+    if (!res.ok) throw new Error(`catalog: HTTP ${res.status}`);
+    return res.json();
+  })
+  .then((data) => window.TreasureCatalog.create(data));
 // What the Cover crop on screen lets the reader shift (see coverWindow in render.js).
 let shiftRange = { axis: null, min: 0, max: 0 };
 
@@ -165,6 +173,7 @@ function loadCrop(url) {
       resolve({ rgb, w: c.width, h: c.height });
     };
     img.onerror = () => reject(new Error('could not load the painting'));
+    img.crossOrigin = 'anonymous'; // the IIIF server allows reading the pixels
     img.src = url;
   });
 }
@@ -172,10 +181,11 @@ function loadCrop(url) {
 /** Show a painting: fetch its crop, then draw it with the current settings. */
 async function showPainting(meta) {
   crop = await loadCrop(meta.cropUrl);
-  // Where the planned window sits in a Cover crop with slack (from the server,
-  // or from the phone's cache for the painting on the watch).
-  crop.windowX = meta.render?.windowX ?? meta.windowX ?? 0;
-  crop.windowY = meta.render?.windowY ?? meta.windowY ?? 0;
+  // Straight from the IIIF server: tone it like the phone does (render.js).
+  if (meta.cropUrl.includes('iiif')) crop.rgb = window.TreasureRender.tone(crop.rgb);
+  // Where the planned window sits in a Cover crop with slack.
+  crop.windowX = meta.windowX ?? 0;
+  crop.windowY = meta.windowY ?? 0;
   updateShiftRange();
   canvas.setAttribute('aria-label', `${meta.title} by ${meta.artist}, as shown on the watch`);
   draw();
@@ -297,19 +307,9 @@ if (art) {
   showLabel(art);
 }
 
-// ---------------- live preview from the server ----------------
-// This page is served by the Treasure Trove server, so it can ask for renders
-// directly. Nothing reaches the watch until Save.
-
-function screenQuery() {
-  return new URLSearchParams({
-    w: watch.w,
-    h: watch.h,
-    round: watch.round ? 1 : 0,
-    fit: settings.fit,
-    era: settings.era,
-  }).toString();
-}
+// ---------------- live preview ----------------
+// Paintings come from the catalog and their crops straight from the
+// Rijksmuseum's IIIF server. Nothing reaches the watch until Save.
 
 let requestId = 0;
 
@@ -344,14 +344,28 @@ function syncControls() {
   $('readability').checked = settings.boxMode === 'always';
 }
 
-async function loadPreview(path, { pick = false, extra = '', useLook = true } = {}) {
+/** A painting from the catalog with where to get its crop for this watch. */
+function withCrop(cat, painting) {
+  const req = cat.cropRequest(painting.key, watch, settings.fit);
+  if (!req) throw new Error('no crop for this watch');
+  return { ...painting, cropUrl: req.url, windowX: req.windowX, windowY: req.windowY };
+}
+
+const byKey = (key) => (cat) => cat.get(key);
+
+/**
+ * Show a painting picked from the catalog.
+ * @param {function} choose catalog → painting (or null)
+ */
+async function loadPreview(choose, { pick = false, useLook = true } = {}) {
   const id = ++requestId;
   screenEl.classList.add('loading');
   setStatus(pick ? 'Hanging a new painting…' : '');
   try {
-    const res = await fetch(`${path}?${screenQuery()}${extra}`);
-    const meta = await res.json();
-    if (!res.ok) throw new Error(meta.error || `HTTP ${res.status}`);
+    const cat = await catalogReady;
+    const painting = choose(cat);
+    if (!painting) throw new Error('not in the catalog');
+    let meta = withCrop(cat, painting);
     if (id !== requestId) return null;
     const look = useLook ? savedLook(meta.key) : null;
     // The shift belongs to one painting: others start at their planned view.
@@ -362,7 +376,8 @@ async function loadPreview(path, { pick = false, extra = '', useLook = true } = 
       syncControls();
       update();
       // Saved with the other crop: load that one instead.
-      if (otherCrop) return loadPreview(`/api/art/${encodeURIComponent(meta.key)}`, { pick, useLook: false });
+      if (otherCrop) return loadPreview(byKey(meta.key), { pick, useLook: false });
+      meta = withCrop(cat, painting);
     }
     if (pick) chosen = meta;
     await showPainting(meta);
@@ -388,11 +403,11 @@ function currentKey() {
 /** Reload the shown painting, e.g. for another crop. `useLook` re-applies its saved look. */
 function refreshPreview({ useLook = false } = {}) {
   const key = currentKey();
-  if (key) loadPreview(`/api/art/${encodeURIComponent(key)}`, { useLook });
+  if (key) loadPreview(byKey(key), { useLook });
 }
 
-// First paint: the phone passes the cached painting's crop URL. Older phone
-// code only had a preview image, so ask the server for the crop instead.
+// First paint: the phone passes the cached painting's crop URL. Without one,
+// look the painting up in the catalog.
 if (art?.cropUrl) {
   showPainting(art).catch((err) => {
     setStatus(`Couldn’t load a preview (${err.message}).`);
@@ -402,11 +417,14 @@ if (art?.cropUrl) {
   refreshPreview();
 }
 
+// "Hang a different painting": any painting, or one from the chosen era.
+const randomPick = (cat) => cat.random(settings.selection === 'random' ? settings.era : 'any');
+
 function updateShuffle() {
   $('keep').hidden = $('mini-keep').hidden = !(chosen && art);
 }
 
-$('shuffle').addEventListener('click', () => loadPreview('/api/art/random', { pick: true }));
+$('shuffle').addEventListener('click', () => loadPreview(randomPick, { pick: true }));
 
 // Back to the painting the watch shows now, after swapping a few times.
 function restoreOriginal() {
@@ -430,10 +448,9 @@ $('pin-form').addEventListener('submit', async (e) => {
   if (!q) return;
   $('pin-status').textContent = 'Looking it up…';
   try {
-    const res = await fetch(`/api/art/resolve?q=${encodeURIComponent(q)}`);
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-    const meta = await loadPreview(`/api/art/${encodeURIComponent(body.key)}`, { pick: true });
+    const found = (await catalogReady).resolve(q);
+    if (!found) throw new Error('No painting found for that number or link.');
+    const meta = await loadPreview(byKey(found.key), { pick: true });
     if (!meta) throw new Error('could not load it');
     settings.pinned = meta.key;
     showPinned(meta.title);
@@ -810,7 +827,7 @@ new ResizeObserver(() => {
   miniScreen.style.setProperty('--scale', String(height / watch.h));
   renderPreview();
 }).observe($('mini-art'));
-$('mini-shuffle').addEventListener('click', () => loadPreview('/api/art/random', { pick: true }));
+$('mini-shuffle').addEventListener('click', () => loadPreview(randomPick, { pick: true }));
 
 // Pin a small preview to the top once half of the big one has scrolled away.
 new IntersectionObserver(

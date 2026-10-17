@@ -17,6 +17,7 @@ USAGE: treasure-trove-generator [OPTIONS]
 OPTIONS (environment variable in brackets):
   --data DIR            output directory: catalog.sqlite + art/   [DATA_DIR, ./data]
   --export FILE         write the git-friendly catalog here        [EXPORT_PATH]
+  --bundle FILE         write catalog.json for the phone and page  [BUNDLE_PATH]
   --rps N               requests per second to outside services   [REQUESTS_PER_SECOND, 1]
   --contact TEXT        your email or a URL, sent in the User-Agent [CONTACT]
                         (Wikimedia requires it for Wikipedia pageviews; without it
@@ -46,6 +47,7 @@ fn parse_args() -> Result<Options> {
     let mut o = Options {
         data_dir: var("DATA_DIR", PathBuf::from("./data")),
         export: std::env::var("EXPORT_PATH").ok().map(PathBuf::from),
+        bundle: std::env::var("BUNDLE_PATH").ok().map(PathBuf::from),
         requests_per_second: var("REQUESTS_PER_SECOND", 1.0),
         refresh_days: var("REFRESH_DAYS", 25),
         limit: None,
@@ -77,6 +79,7 @@ fn parse_args() -> Result<Options> {
         match a.as_str() {
             "--data" => o.data_dir = value("--data")?.into(),
             "--export" => o.export = Some(value("--export")?.into()),
+            "--bundle" => o.bundle = Some(value("--bundle")?.into()),
             "--rps" => o.requests_per_second = value("--rps")?.parse()?,
             "--contact" => o.contact = Some(value("--contact")?),
             "--featured" => o.featured_path = value("--featured")?.into(),

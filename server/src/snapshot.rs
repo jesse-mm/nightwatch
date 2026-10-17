@@ -137,6 +137,21 @@ impl Snapshot {
         list.get(day % list.len()).map(String::as_str)
     }
 
+    /// Every painting the snapshot serves.
+    pub fn paintings(&self) -> impl Iterator<Item = &Painting> {
+        self.paintings.values()
+    }
+
+    /// Paintings of one era.
+    pub fn era_keys(&self, era: Era) -> &[String] {
+        self.by_era.get(&era).map_or(&[], Vec::as_slice)
+    }
+
+    /// The Featured year, index = day of the year.
+    pub fn featured_keys(&self) -> &[String] {
+        &self.featured
+    }
+
     pub fn featured_len(&self) -> usize {
         self.featured.len()
     }

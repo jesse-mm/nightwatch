@@ -45,6 +45,9 @@ pub struct Options {
     pub data_dir: PathBuf,
     /// Write `paintings.jsonl` here after the run (for git).
     pub export: Option<PathBuf>,
+    /// Write `catalog.json` here: the catalog for the phone and settings page
+    /// when they show paintings straight from the Rijksmuseum (no server).
+    pub bundle: Option<PathBuf>,
     /// Requests per second to the Rijksmuseum/IIIF/Wikidata (fractional OK).
     pub requests_per_second: f64,
     /// Re-check metadata, pools and Wikidata older than this.
@@ -95,6 +98,11 @@ pub async fn run(opts: Options) -> Result<()> {
     }
     catalog.publish(&day_order)?;
     tracing::info!("published serve.sqlite for the server");
+    if let Some(path) = &opts.bundle {
+        let snap = crate::snapshot::Snapshot::load(&opts.data_dir)?;
+        let n = crate::bundle::write(&snap, &opts.data_dir, path)?;
+        tracing::info!(paintings = n, path = %path.display(), "wrote the catalog bundle");
+    }
     if let Some(path) = &opts.export {
         let n = catalog.export_jsonl(path)?;
         tracing::info!(paintings = n, path = %path.display(), "exported catalog");

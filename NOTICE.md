@@ -37,3 +37,9 @@ documentation files, to deal in the Software without restriction, subject to
 including the copyright notice and permission notice in all copies or
 substantial portions of the Software. The software is provided "as is", without
 warranty of any kind.
+
+## tiny-inflate (MIT)
+`watchface/src/pkjs/vendor/tiny-inflate.js` is tiny-inflate 1.0.3
+(https://github.com/foliojs/tiny-inflate), unchanged. Copyright (c) 2015-present
+Devon Govett, MIT License. It inflates the PNG crops the phone downloads from the
+Rijksmuseum's IIIF server.

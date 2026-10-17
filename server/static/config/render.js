@@ -445,6 +445,68 @@
     };
   }
 
+  // ------------------------------------------------------------ tone
+
+  var SHADOW_GAMMA = 0.8;
+  var LIFT = (function () {
+    var t = new Float32Array(256);
+    for (var i = 0; i < 256; i++) {
+      t[i] = 255 * Math.pow(i / 255, SHADOW_GAMMA);
+    }
+    return t;
+  }());
+
+  /**
+   * Tone a crop for the dim, reflective screen, like the generator did
+   * (imaging.rs `tone`): stretch the tones ignoring the extreme 0.5 %, gain at
+   * most 2.5x, lift the shadows (gamma 0.8) and add 10 % saturation. Applied
+   * once to a freshly downloaded crop, before color tuning and dithering.
+   * @param {Uint8Array} rgb full-color RGB
+   * @returns {Uint8Array} toned RGB of the same size
+   */
+  function tone(rgb) {
+    var n = rgb.length / 3;
+    var hist = new Uint32Array(256);
+    var i;
+    for (i = 0; i < n; i++) {
+      var l0 = Math.floor(0.299 * rgb[i * 3] + 0.587 * rgb[i * 3 + 1] + 0.114 * rgb[i * 3 + 2]);
+      hist[Math.min(l0, 255)]++;
+    }
+    var cut = Math.floor(n * 0.005);
+    var lo = 0;
+    var hi = 255;
+    var acc = 0;
+    for (i = 0; i < 256; i++) {
+      acc += hist[i];
+      if (acc > cut) {
+        lo = i;
+        break;
+      }
+    }
+    acc = 0;
+    for (i = 255; i >= 0; i--) {
+      acc += hist[i];
+      if (acc > cut) {
+        hi = i;
+        break;
+      }
+    }
+    var gain = Math.min(255 / Math.max(hi - lo, 1), 2.5);
+    var out = new Uint8Array(rgb.length);
+    var c = [0, 0, 0];
+    for (i = 0; i < n; i++) {
+      for (var k = 0; k < 3; k++) {
+        var v = Math.min(Math.max((rgb[i * 3 + k] - lo) * gain, 0), 255);
+        c[k] = LIFT[Math.floor(v)];
+      }
+      var l = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+      for (k = 0; k < 3; k++) {
+        out[i * 3 + k] = Math.round(Math.min(Math.max(l + (c[k] - l) * 1.1, 0), 255));
+      }
+    }
+    return out;
+  }
+
   // ------------------------------------------------------------ compose
 
   /**
@@ -601,6 +663,7 @@
   return {
     compose: compose,
     coverWindow: coverWindow,
+    tone: tone,
     toScreenRGBA: toScreenRGBA,
     dither: dither,
     adjust: adjust,

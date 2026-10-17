@@ -17,6 +17,11 @@ var rotation = require('./rotation');
 var render = require('./render');
 var looks = require('./looks');
 var settingsLib = require('./settings');
+var png = require('./png');
+// The painting catalog, bundled with the app (generated from catalog.json).
+var catalog = require('./catalog').create(require('./catalog-data'));
+// Where the settings page is hosted (static files; no server of our own).
+var PAGE_URL = CONFIG.SETTINGS_URL || CONFIG.SERVER_URL;
 
 var SETTINGS_KEY = 'tt-settings';
 var ART_KEY = 'tt-art';
@@ -71,11 +76,6 @@ function today() {
  */
 function cropKey(settings) {
   return [watch.w, watch.h, watch.round, settings.fit].join(':');
-}
-
-function screenQuery(settings) {
-  return 'w=' + watch.w + '&h=' + watch.h + '&round=' + watch.round +
-    '&fit=' + settings.fit + '&era=' + settings.era;
 }
 
 /** The watch's bytes for a cached crop with the current tuning and frame. */
@@ -219,44 +219,6 @@ function sendImage(bytes) {
 var REQUEST_TIMEOUT_MS = 60000;
 
 /**
- * GET with a timeout that works everywhere. iOS's XMLHttpRequest has no
- * `timeout`/`ontimeout`, so a hanging request would never call back and leave
- * `fetching` stuck; we time out ourselves and call back exactly once.
- */
-function get(url, onSuccess, onError) {
-  var xhr = new XMLHttpRequest();
-  var settled = false;
-  var finish = function (fn, value) {
-    if (settled) {
-      return;
-    }
-    settled = true;
-    clearTimeout(timer);
-    fn(value);
-  };
-  var timer = setTimeout(function () {
-    finish(onError, 'timeout');
-    try {
-      xhr.abort();
-    } catch (e) {
-      console.log('Could not abort timed-out request: ' + e);
-    }
-  }, REQUEST_TIMEOUT_MS);
-
-  xhr.open('GET', url, true);
-  xhr.onload = function () {
-    if (xhr.status >= 200 && xhr.status < 300) {
-      finish(onSuccess, xhr.responseText);
-    } else {
-      finish(onError, 'HTTP ' + xhr.status + ': ' + xhr.responseText);
-    }
-  };
-  xhr.onerror = function () { finish(onError, 'network error'); };
-  xhr.onabort = function () { finish(onError, 'aborted'); };
-  xhr.send();
-}
-
-/**
  * Make sure the watch shows today's painting.
  * @param {string} [hangKey] hang this painting (picked on the settings page) instead
  * @returns {boolean} whether a download started (false = nothing new needed)
@@ -285,13 +247,13 @@ function ensureArt(hangKey) {
     return true;
   }
   if (hangKey) {
-    fetchArt('/api/art/' + encodeURIComponent(hangKey), settings, period);
+    fetchArt(catalog.get(hangKey), settings, period);
     return true;
   }
   // A pinned painting stays until it's unpinned; rotation doesn't apply.
   if (settings.pinned) {
     if (!(current && art.meta.key === settings.pinned)) {
-      fetchArt('/api/art/' + encodeURIComponent(settings.pinned), settings, period);
+      fetchArt(catalog.get(settings.pinned), settings, period);
       return true;
     }
     return false;
@@ -300,17 +262,14 @@ function ensureArt(hangKey) {
   if (!due) {
     if (!current) {
       // Same painting, different screen or fit: fetch its other crop.
-      fetchArt('/api/art/' + encodeURIComponent(art.meta.key), settings, art.period);
+      fetchArt(catalog.get(art.meta.key), settings, art.period);
       return true;
     }
     return false;
   }
-  if (settings.selection === 'featured') {
-    fetchArt('/api/art/featured', settings, period,
-      '&day=' + rotation.featuredDay(settings.rotation, now));
-  } else {
-    fetchArt('/api/art/random', settings, period);
-  }
+  fetchArt(settings.selection === 'featured' ?
+    catalog.featured(rotation.featuredDay(settings.rotation, now)) :
+    catalog.random(settings.era), settings, period);
   return true;
 }
 
@@ -348,13 +307,85 @@ function scheduleRetry() {
 }
 
 /**
- * Fetch a painting and send it to the watch.
- * @param {string} period the rotation period it belongs to (see rotation.js)
- * @param {string} [extraQuery] e.g. '&day=12'
+ * Download a picture's bytes. Binary XHR isn't guaranteed in every PebbleKit
+ * JS runtime, so try an ArrayBuffer first and fall back to the old
+ * "x-user-defined" text trick (each char code is a byte). iOS's XMLHttpRequest
+ * has no `timeout`/`ontimeout`, so we time out ourselves and call back once.
  */
-function fetchArt(path, settings, period, extraQuery) {
+function getBytes(url, onSuccess, onError, asText) {
+  var xhr = new XMLHttpRequest();
+  var settled = false;
+  var finish = function (fn, value) {
+    if (!settled) {
+      settled = true;
+      clearTimeout(timer);
+      fn(value);
+    }
+  };
+  var timer = setTimeout(function () {
+    finish(onError, 'timeout');
+    try {
+      xhr.abort();
+    } catch (e) {
+      console.log('Could not abort timed-out request: ' + e);
+    }
+  }, REQUEST_TIMEOUT_MS);
+  xhr.open('GET', url, true);
+  if (asText) {
+    xhr.overrideMimeType('text/plain; charset=x-user-defined');
+  } else {
+    try {
+      xhr.responseType = 'arraybuffer';
+    } catch (e) {
+      console.log('No binary XHR here: ' + e);
+    }
+  }
+  xhr.onload = function () {
+    if (xhr.status < 200 || xhr.status >= 300) {
+      finish(onError, 'HTTP ' + xhr.status);
+      return;
+    }
+    var bytes = null;
+    if (!asText && xhr.response && xhr.response.byteLength) {
+      bytes = new Uint8Array(xhr.response);
+    } else if (asText && typeof xhr.responseText === 'string') {
+      var text = xhr.responseText;
+      bytes = new Uint8Array(text.length);
+      for (var i = 0; i < text.length; i++) {
+        bytes[i] = text.charCodeAt(i) & 0xff;
+      }
+    }
+    // Only trust a real PNG: some runtimes hand back an empty or text-decoded
+    // buffer instead of failing.
+    if (bytes && png.isPng(bytes)) {
+      finish(onSuccess, bytes);
+    } else if (!asText) {
+      console.log('Binary download not supported here; trying text');
+      settled = true;
+      clearTimeout(timer);
+      getBytes(url, onSuccess, onError, true);
+    } else {
+      finish(onError, 'this phone app cannot download binary data (got ' +
+        (bytes ? bytes.length : 0) + ' unusable bytes)');
+    }
+  };
+  xhr.onerror = function () { finish(onError, 'network error'); };
+  xhr.onabort = function () { finish(onError, 'aborted'); };
+  xhr.send();
+}
+
+/**
+ * Get a painting's crop straight from the Rijksmuseum (IIIF cuts the planned
+ * region), tone it, cache it and send it to the watch.
+ * @param {object} painting from the catalog (null: unknown painting)
+ * @param {string} period the rotation period it belongs to (see rotation.js)
+ */
+function fetchArt(painting, settings, period) {
+  if (!painting) {
+    // Not in this app's catalog (e.g. pinned in a newer one): fall back.
+    painting = catalog.featured(rotation.featuredDay('daily', new Date()));
+  }
   fetching = true;
-  var base = CONFIG.SERVER_URL;
   var done = function () {
     fetching = false;
     if (pendingHang) {
@@ -370,72 +401,77 @@ function fetchArt(path, settings, period, extraQuery) {
     scheduleRetry();
     done();
   };
+  var request = catalog.cropRequest(painting.key, watch, settings.fit);
+  if (!request) {
+    fail('no crop for this screen');
+    return;
+  }
 
-  get(base + path + '?' + screenQuery(settings) + (extraQuery || ''), function (text) {
-    var meta;
+  getBytes(request.url, function (file) {
+    var rgb;
+    var size;
     try {
-      meta = JSON.parse(text);
+      var image = png.decode(file);
+      size = { w: image.width, h: image.height };
+      rgb = render.tone(image.data);
     } catch (e) {
-      fail('bad JSON from server: ' + e);
+      fail('could not decode the picture: ' + e);
       return;
     }
-    get(base + meta.rgbUrl + '&format=b64', function (crop) {
-      retryCount = 0;
-      if (retryTimer) {
-        clearTimeout(retryTimer);
-        retryTimer = null;
+    retryCount = 0;
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+    var record = {
+      date: today(),
+      period: period,
+      cropKey: cropKey(settings),
+      crop: base64.encode(rgb),
+      cropW: size.w,
+      cropH: size.h,
+      // Where the planned view sits in a Cover crop with slack.
+      windowX: request.windowX,
+      windowY: request.windowY,
+      meta: {
+        key: painting.key,
+        title: painting.title,
+        artist: painting.artist,
+        date: painting.date,
+        objectNumber: painting.objectNumber,
+        webUrl: painting.webUrl,
+        imageUrl: painting.imageUrl,
+        iiifBase: painting.iiifBase,
+        license: painting.license,
+        licenseUrl: painting.licenseUrl,
+        windowX: request.windowX,
+        windowY: request.windowY,
+        cropUrl: request.url
       }
-      var record = {
-        date: today(),
-        period: period,
-        cropKey: cropKey(settings),
-        crop: crop,
-        cropW: meta.render.width,
-        cropH: meta.render.height,
-        // Where the planned view sits in a Cover crop with slack.
-        windowX: meta.render.windowX || 0,
-        windowY: meta.render.windowY || 0,
-        meta: {
-          key: meta.key,
-          title: meta.title,
-          artist: meta.artist,
-          date: meta.date,
-          objectNumber: meta.objectNumber,
-          webUrl: meta.webUrl,
-          imageUrl: meta.imageUrl,
-          iiifBase: meta.iiifBase,
-          license: meta.license,
-          licenseUrl: meta.licenseUrl,
-          cropMode: meta.render && meta.render.crop ? meta.render.crop.mode : null,
-          windowX: meta.render.windowX || 0,
-          windowY: meta.render.windowY || 0,
-          cropUrl: base + meta.cropUrl
-        }
-      };
-      // A painting with a saved look gets it back; others keep the current one.
-      var current = loadSettings();
-      var look = looks.get(localStorage, meta.key, current);
-      // The Cover position belongs to one painting: a new one without a saved
-      // look starts at its planned view.
-      var previous = readJson(ART_KEY);
-      var samePainting = previous && previous.meta && previous.meta.key === meta.key;
-      if (!look && !samePainting && current.shift) {
-        current.shift = 0;
-        storeSettings(current);
-      }
-      if (look && applyLook(current, look) && look.fit !== settings.fit) {
-        // Saved with the other crop: fetch that one instead (still fetching).
-        fetchArt('/api/art/' + encodeURIComponent(meta.key), loadSettings(), period);
-        return;
-      }
-      try {
-        localStorage.setItem(ART_KEY, JSON.stringify(record));
-      } catch (e) {
-        console.log('Could not cache painting: ' + e);
-      }
-      sendImage(composeFor(record, loadSettings()));
-      done();
-    }, fail);
+    };
+    // A painting with a saved look gets it back; others keep the current one.
+    var current = loadSettings();
+    var look = looks.get(localStorage, painting.key, current);
+    // The Cover position belongs to one painting: a new one without a saved
+    // look starts at its planned view.
+    var previous = readJson(ART_KEY);
+    var samePainting = previous && previous.meta && previous.meta.key === painting.key;
+    if (!look && !samePainting && current.shift) {
+      current.shift = 0;
+      storeSettings(current);
+    }
+    if (look && applyLook(current, look) && look.fit !== settings.fit) {
+      // Saved with the other crop: fetch that one instead (still fetching).
+      fetchArt(painting, loadSettings(), period);
+      return;
+    }
+    try {
+      localStorage.setItem(ART_KEY, JSON.stringify(record));
+    } catch (e) {
+      console.log('Could not cache painting: ' + e);
+    }
+    sendImage(composeFor(record, loadSettings()));
+    done();
   }, fail);
 }
 
@@ -486,7 +522,7 @@ Pebble.addEventListener('showConfiguration', function () {
     watch: watch,
     looks: looksForPage()
   };
-  Pebble.openURL(CONFIG.SERVER_URL + '/config/#' + encodeURIComponent(JSON.stringify(state)));
+  Pebble.openURL(PAGE_URL + '/config/#' + encodeURIComponent(JSON.stringify(state)));
 });
 
 Pebble.addEventListener('webviewclosed', function (e) {
