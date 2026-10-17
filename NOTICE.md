@@ -66,5 +66,5 @@ font's license is next to it as `*.OFL.txt`.
 `site/devices/pebble-time-2.png` and `site/devices/pebble-round-2.png` are the
 Pebble Time 2 and Pebble Round 2 frames from the Pebble app store
 (https://apps.repebble.com/images/screenshot_slider_background_emery_v2.png and
-…_gabbro.png), © Core Devices. Used for the settings page's watch preview; no
-license is stated, so check before redistributing.
+…_gabbro.png), © Core Devices, as used on their own website. Used for the
+settings page's watch preview.
