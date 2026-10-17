@@ -33,6 +33,7 @@ if (settings.textCol === 'auto') settings.textCol = watch.round ? 'center' : 'en
 // Looks saved per painting on the phone (looks.js): crop, frame, color tuning
 // and time placement. A painting shown here gets its saved look back.
 const savedLooks = state.looks || {};
+let restoredLooks = null; // a restored backup's looks, written by the phone on save
 let lookTouched = false; // the reader changed the look: the phone saves it with the painting
 // A painting picked on this page; only hung on the watch when saved.
 let chosen = null;
@@ -322,6 +323,14 @@ function syncControls() {
     input.value = settings[input.dataset.key];
     showRange(input);
   });
+  document.querySelectorAll('input.switch[data-key]').forEach((input) => {
+    input.checked = Boolean(settings[input.dataset.key]);
+  });
+  document.querySelectorAll('input.number[data-key]').forEach((input) => {
+    input.value = settings[input.dataset.key];
+    input.dispatchEvent(new Event('change'));
+  });
+  $('readability').checked = settings.boxMode === 'always';
 }
 
 async function loadPreview(path, { pick = false, extra = '', useLook = true } = {}) {
@@ -623,6 +632,69 @@ $('color-reset').addEventListener('click', () => {
   draw();
 });
 
+// ---------------- backup ----------------
+// Settings and saved looks live only on the phone; a backup is that data as
+// JSON text (docs/schema/backup.schema.json) that the reader keeps somewhere.
+
+function backupText() {
+  return JSON.stringify({
+    backup: 1,
+    settings: window.TreasureSettings.toStored(settings),
+    looks: window.TreasureLooks.toStored(savedLooks),
+  });
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // No clipboard API (plain http): fall back to selecting a text field.
+    const field = $('backup-input');
+    field.value = text;
+    field.select();
+    try {
+      return document.execCommand('copy');
+    } catch {
+      return false;
+    }
+  }
+}
+
+$('backup-copy').addEventListener('click', async () => {
+  const count = Object.keys(savedLooks).length;
+  const what = `Your settings and ${count} saved ${count === 1 ? 'look' : 'looks'}`;
+  $('backup-status').textContent = (await copyText(backupText()))
+    ? `${what} are copied. Paste them into a note or an email to yourself.`
+    : 'Couldn’t copy automatically: the backup is in the box below. Select it all and copy it.';
+});
+
+$('backup-restore').addEventListener('click', () => {
+  const status = $('restore-status');
+  let backup;
+  try {
+    backup = JSON.parse($('backup-input').value);
+  } catch {
+    status.textContent = 'That isn’t a backup: paste the whole text you copied.';
+    return;
+  }
+  if (!backup || backup.backup !== 1 || typeof backup.settings !== 'object') {
+    status.textContent = 'That isn’t a Treasure Trove backup.';
+    return;
+  }
+  Object.assign(settings, window.TreasureSettings.load(backup.settings));
+  if (settings.textCol === 'auto') settings.textCol = watch.round ? 'center' : 'end';
+  const looks = window.TreasureLooks.fromStored(backup.looks);
+  for (const key of Object.keys(savedLooks)) delete savedLooks[key];
+  Object.assign(savedLooks, looks);
+  restoredLooks = window.TreasureLooks.toStored(looks);
+  syncControls();
+  update();
+  refreshPreview();
+  const count = Object.keys(looks).length;
+  status.textContent = `Restored your settings and ${count} saved ${count === 1 ? 'look' : 'looks'}. Save to your watch to keep them.`;
+});
+
 // ---------------- loader + sticky mini preview ----------------
 
 let loaderTimer = setTimeout(hideLoader, 8000); // never block the page for long
@@ -700,6 +772,8 @@ $('save').addEventListener('click', () => {
     settings,
     artKey: chosen ? chosen.key : null,
     saveLook: lookTouched,
+    // From a restored backup: replaces every saved look ({version, looks}).
+    looks: restoredLooks || undefined,
   };
   document.location = returnTo() + encodeURIComponent(JSON.stringify(result));
 });

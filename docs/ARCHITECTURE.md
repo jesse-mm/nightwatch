@@ -29,7 +29,12 @@ Two programs share one Rust library (`server/src/lib.rs`):
    the watch in chunks (`ImgBegin`, `ImgOffset`+`ImgChunk` × n, `ImgEnd`).
    Changing tuning or frame later just re-renders the cached crop.
 5. The watch `memcpy`s each chunk into the bitmap and redraws, so the painting
-   appears row by row.
+   appears row by row. Each painting carries an id (a hash of its bytes).
+   Where an app may store enough (1 MB on Pebble Time 2, Round 2 and 2 Duo;
+   older watches have 4 KB), the watch saves the painting on exit (`ArtMeta`
+   plus 256-byte pieces) and shows it straight away on the next launch, e.g.
+   after the menu. Its Hello includes `ArtId`, and the phone skips sending a
+   painting the watch already shows.
 6. At midnight the watch's tick handler sends Hello again with reason 2, and the
    date check on the phone fetches a new painting.
 
@@ -51,6 +56,19 @@ defaults. To change what a stored value means: bump `VERSION`, add a step to
 code). The page and the phone also tell each other their settings version, so
 a newer settings page works with an older phone app and the other way round.
 Version 1 is the first, so there are no migrations yet.
+
+**Backup.** Both live only on the phone (removing the watchface wipes them),
+so the settings page has a Backup section. *Copy backup* puts this on the
+clipboard ([`backup.schema.json`](schema/backup.schema.json)):
+
+```json
+{"backup": 1, "settings": {"version": 1, ...}, "looks": {"version": 1, "looks": {...}}}
+```
+
+The reader keeps it somewhere (a note, an email to themselves). *Restore*
+takes the pasted text, applies it to the page for a check, and *Save to
+watch* stores it: the settings as usual, and the phone replaces every saved
+look with the backup's. Older backups go through the same migrations.
 
 **Looks per painting.** When the reader changes the crop, frame, color tuning
 or time placement and saves, the phone remembers that look for the painting

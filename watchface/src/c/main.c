@@ -12,6 +12,13 @@
 #include <pebble.h>
 
 #define SETTINGS_KEY 1
+/* The last painting, kept on the watch so it shows instantly on the next
+ * launch (e.g. after the menu) instead of being sent again. ART_META_KEY holds
+ * its id and size; the bytes follow in PERSIST_DATA_MAX_LENGTH pieces from
+ * ART_DATA_KEY. Only where an app may store enough (1 MB on Pebble Time 2,
+ * Round 2 and 2 Duo; 4 KB on older watches, too little for a painting). */
+#define ART_META_KEY 2
+#define ART_DATA_KEY 100
 /* How long a flick shows the time is a setting: 1..REVEAL_MAX_MIN minutes. */
 #define REVEAL_MAX_MIN 60
 #define HELLO_RETRIES 5
@@ -83,6 +90,14 @@ static uint16_t s_stride;
 static uint32_t s_expected;     /* bytes in the current transfer, 0 = none */
 static uint32_t s_received;     /* highest byte written so far */
 static bool s_art_ready;        /* a complete painting has been received */
+static uint32_t s_art_id;       /* phone's id of the painting shown; 0 = none/partial */
+static uint32_t s_pending_id;   /* id of the painting being received */
+static bool s_art_unsaved;      /* received since the last save to storage */
+
+typedef struct {
+  uint32_t id;
+  uint32_t size;
+} ArtMeta;
 
 static bool s_revealed;
 static AppTimer *s_reveal_timer;
@@ -181,6 +196,9 @@ static void send_hello(int32_t reason) {
   dict_write_int32(it, MESSAGE_KEY_ChunkSize, CHUNK_SIZE);
   /* The watch's own clock style, so the settings page knows if "Auto" is 12h. */
   dict_write_int32(it, MESSAGE_KEY_Is24h, clock_is_24h_style() ? 1 : 0);
+  /* The painting we already show (restored from storage): the phone skips
+   * sending it again when it would send the same one. */
+  dict_write_int32(it, MESSAGE_KEY_ArtId, (int32_t)s_art_id);
   app_message_outbox_send();
 }
 
@@ -204,6 +222,9 @@ static void handle_image(DictionaryIterator *iter) {
   if ((t = dict_find(iter, MESSAGE_KEY_ImgBegin))) {
     s_expected = (t->value->uint32 == total) ? total : 0;
     s_received = 0;
+    Tuple *id = dict_find(iter, MESSAGE_KEY_ArtId);
+    s_pending_id = id ? id->value->uint32 : 0;
+    s_art_id = 0; /* the bitmap is being overwritten */
     if (!s_expected) {
       APP_LOG(APP_LOG_LEVEL_WARNING, "image size %lu != %lu", (unsigned long)t->value->uint32,
               (unsigned long)total);
@@ -223,6 +244,10 @@ static void handle_image(DictionaryIterator *iter) {
   }
   if ((t = dict_find(iter, MESSAGE_KEY_ImgEnd)) && s_expected) {
     s_art_ready = s_received >= s_expected;
+    if (s_art_ready) {
+      s_art_id = s_pending_id;
+      s_art_unsaved = true;
+    }
     s_expected = 0;
     layer_mark_dirty(s_art_layer);
     layer_mark_dirty(s_text_layer);
@@ -448,6 +473,59 @@ static void unobstructed_change(AnimationProgress progress, void *ctx) {
 }
 #endif
 
+/* ----------------------------------------------------------------- storage */
+
+static size_t art_size(void) {
+  return (size_t)s_stride * s_screen.h;
+}
+
+static bool can_store_art(void) {
+  /* Room for the painting plus settings and some slack. */
+  return persist_get_max_size() >= art_size() + 2048;
+}
+
+/* Keep the painting for the next launch. Called on exit, as the storage guide
+ * recommends (writing ~45-70 KB can pause the watch briefly). */
+static void save_art(void) {
+  if (!s_art || !s_art_ready || !s_art_unsaved || !s_art_id || !can_store_art()) {
+    return;
+  }
+  /* Drop the old description first, so a half-written painting is never used. */
+  persist_delete(ART_META_KEY);
+  const uint8_t *data = gbitmap_get_data(s_art);
+  size_t size = art_size();
+  for (size_t offset = 0, key = ART_DATA_KEY; offset < size; offset += PERSIST_DATA_MAX_LENGTH, key++) {
+    size_t len = size - offset < PERSIST_DATA_MAX_LENGTH ? size - offset : PERSIST_DATA_MAX_LENGTH;
+    if (persist_write_data(key, data + offset, len) != (int)len) {
+      APP_LOG(APP_LOG_LEVEL_WARNING, "could not save the painting at %u", (unsigned)offset);
+      return;
+    }
+  }
+  ArtMeta meta = { .id = s_art_id, .size = size };
+  persist_write_data(ART_META_KEY, &meta, sizeof(meta));
+  s_art_unsaved = false;
+}
+
+/* Show the painting kept by the last launch, if it fits this screen. */
+static void restore_art(void) {
+  ArtMeta meta;
+  if (!s_art || !persist_exists(ART_META_KEY) ||
+      persist_read_data(ART_META_KEY, &meta, sizeof(meta)) != (int)sizeof(meta) ||
+      meta.size != art_size() || !meta.id) {
+    return;
+  }
+  uint8_t *data = gbitmap_get_data(s_art);
+  for (size_t offset = 0, key = ART_DATA_KEY; offset < meta.size; offset += PERSIST_DATA_MAX_LENGTH, key++) {
+    size_t len = meta.size - offset < PERSIST_DATA_MAX_LENGTH ? meta.size - offset : PERSIST_DATA_MAX_LENGTH;
+    if (persist_read_data(key, data + offset, len) != (int)len) {
+      memset(data, 0xC0, meta.size);
+      return;
+    }
+  }
+  s_art_id = meta.id;
+  s_art_ready = true;
+}
+
 /* ------------------------------------------------------------------ window */
 
 static void window_load(Window *window) {
@@ -461,6 +539,7 @@ static void window_load(Window *window) {
     /* 0xC0 = opaque black (0b11RRGGBB). */
     memset(gbitmap_get_data(s_art), 0xC0,
            (size_t)s_stride * s_screen.h);
+    restore_art();
   }
 
   s_art_layer = layer_create(bounds);
@@ -473,6 +552,7 @@ static void window_load(Window *window) {
 }
 
 static void window_unload(Window *window) {
+  save_art();
   layer_destroy(s_text_layer);
   layer_destroy(s_art_layer);
   if (s_art) {

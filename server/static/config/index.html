@@ -266,6 +266,23 @@
       </label>
     </section>
 
+    <section class="group" aria-labelledby="g-backup">
+      <h2 id="g-backup">Backup</h2>
+      <div class="row stacked">
+        <span class="row-text">Copy a backup
+          <small>Your settings and the looks you saved per painting live only on this phone, and are gone if you remove the watchface. Copy them and keep the text somewhere safe, for example in a note or an email to yourself.</small></span>
+        <button type="button" class="text-button" id="backup-copy">Copy backup</button>
+        <span class="label-status" id="backup-status" role="status"></span>
+      </div>
+      <div class="row stacked">
+        <label class="row-text" for="backup-input">Restore a backup
+          <small>Paste a backup here, check the preview, then save to your watch.</small></label>
+        <textarea class="backup-input" id="backup-input" rows="3" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder='{"backup": 1, …}'></textarea>
+        <button type="button" class="text-button" id="backup-restore">Restore</button>
+        <span class="label-status" id="restore-status" role="status"></span>
+      </div>
+    </section>
+
     <aside class="visit">
       <p class="visit-kicker">Enjoying these paintings?</p>
       <p class="visit-title">Support the Rijksmuseum</p>

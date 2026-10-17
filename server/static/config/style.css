@@ -529,6 +529,19 @@ main {
 .pin-field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .pin-field .text-button { margin-top: 0; }
 
+.backup-input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  font: 400 var(--step--1)/1.4 ui-monospace, Menlo, monospace;
+  color: var(--ink);
+  background: var(--control);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  resize: vertical;
+}
+
+.backup-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
 /* ---------------- deep-zoom viewer ---------------- */
 
 .viewer {

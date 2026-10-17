@@ -87,13 +87,16 @@
 
   /** Every saved look at the current version, painting key → look. */
   function readAll(storage) {
-    var stored;
     try {
-      stored = JSON.parse(storage.getItem(STORE_KEY));
+      return fromStored(JSON.parse(storage.getItem(STORE_KEY)));
     } catch (e) {
       return {}; // unreadable: start over rather than fail
     }
-    if (!stored || typeof stored !== 'object' || typeof stored.version !== 'number') {
+  }
+
+  /** `{version, looks}` (from storage or a backup) → painting key → look, migrated. */
+  function fromStored(stored) {
+    if (!stored || typeof stored !== 'object' || typeof stored.version !== 'number' || stored.version > VERSION) {
       return {};
     }
     var map = stored.looks || {};
@@ -123,7 +126,7 @@
     var all = readAll(storage);
     all[paintingKey] = encode(settings);
     try {
-      storage.setItem(STORE_KEY, JSON.stringify({ version: VERSION, looks: all }));
+      storage.setItem(STORE_KEY, JSON.stringify(toStored(all)));
     } catch (e) {
       // Storage full or unavailable: the look just isn't remembered.
     }
@@ -134,6 +137,27 @@
     return readAll(storage);
   }
 
+  /** Painting key → look as stored: `{version, looks}`. */
+  function toStored(map) {
+    return { version: VERSION, looks: map || {} };
+  }
+
+  /** Replace every saved look, e.g. from a backup (`{version, looks}`). */
+  function replaceAll(storage, stored) {
+    var map = fromStored(stored);
+    var clean = {};
+    for (var key in map) {
+      if (Object.prototype.hasOwnProperty.call(map, key)) {
+        clean[key] = map[key];
+      }
+    }
+    try {
+      storage.setItem(STORE_KEY, JSON.stringify(toStored(clean)));
+    } catch (e) {
+      // Storage full or unavailable: the backup just isn't restored.
+    }
+  }
+
   return {
     VERSION: VERSION,
     FIELDS: FIELDS,
@@ -142,6 +166,9 @@
     decode: decode,
     get: get,
     save: save,
-    all: all
+    all: all,
+    fromStored: fromStored,
+    toStored: toStored,
+    replaceAll: replaceAll
   };
 }));

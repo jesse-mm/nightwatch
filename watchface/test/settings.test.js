@@ -12,9 +12,14 @@ const looks = require('../src/pkjs/looks.js');
 const schema = (name) => JSON.parse(readFileSync(new URL(`../../docs/schema/${name}.schema.json`, import.meta.url)));
 const settingsSchema = schema('settings');
 const looksSchema = schema('looks');
+const backupSchema = schema('backup');
 
 /** Just enough JSON Schema for these two files: errors as strings, [] = valid. */
 function validate(s, value, root = s, path = '$') {
+  if (s.$ref?.endsWith('.schema.json')) {
+    const other = schema(s.$ref.replace('.schema.json', ''));
+    return validate(other, value, other, path);
+  }
   if (s.$ref) return validate(root.$defs[s.$ref.replace('#/$defs/', '')], value, root, path);
   const errors = [];
   const type = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value;
@@ -79,5 +84,15 @@ describe('schemas', () => {
     const storage = { getItem: (k) => items.get(k) ?? null, setItem: (k, v) => items.set(k, v) };
     looks.save(storage, '200108369', { ...settingsLib.DEFAULTS, frame: 'gold', textCol: 'start', contrast: -20 });
     assert.deepEqual(validate(looksSchema, JSON.parse(items.get('tt-looks'))), []);
+  });
+
+  test('a backup matches backup.schema.json', () => {
+    const backup = {
+      backup: 1,
+      settings: settingsLib.toStored({ ...settingsLib.DEFAULTS, frame: 'wood' }),
+      looks: looks.toStored({ 200108369: looks.encode({ ...settingsLib.DEFAULTS, frame: 'gold' }) }),
+    };
+    assert.deepEqual(validate(backupSchema, backup), []);
+    assert.notDeepEqual(validate(backupSchema, { ...backup, backup: 2 }), []);
   });
 });

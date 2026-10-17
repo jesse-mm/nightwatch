@@ -29,6 +29,9 @@ var pendingHang = null;  // painting picked in settings while a fetch was runnin
 // True after the watchface (re)starts: its screen is black until we send a
 // painting. Cleared once we've sent one.
 var watchEmpty = true;
+// Id of the painting the watch shows (it keeps it between launches where it
+// can); 0 = none or unknown. Sending the same painting again is skipped.
+var watchArtId = 0;
 var retryTimer = null;
 var retryCount = 0;
 var RETRY_MINUTES = [2, 5, 15, 30];
@@ -166,9 +169,25 @@ function textPos(s) {
   return row * 3 + col;
 }
 
+/** FNV-1a: a cheap 32-bit fingerprint of the watch's bytes (never 0). */
+function artId(bytes) {
+  var h = 0x811c9dc5;
+  for (var i = 0; i < bytes.length; i++) {
+    h ^= bytes[i];
+    h = Math.imul ? Math.imul(h, 0x01000193) : (h * 0x01000193) | 0;
+  }
+  return (h | 0) || 1;
+}
+
 function sendImage(bytes) {
   if (bytes.length !== watch.stride * watch.h) {
     console.log('Image has ' + bytes.length + ' bytes, watch expects ' + (watch.stride * watch.h));
+    return;
+  }
+  var id = artId(bytes);
+  if (id === watchArtId) {
+    console.log('The watch already shows this painting; not sending it again');
+    watchEmpty = false;
     return;
   }
   // Drop any half-sent older image still in the queue.
@@ -176,7 +195,7 @@ function sendImage(bytes) {
     return item.message.ImgChunk === undefined && item.message.ImgBegin === undefined &&
       item.message.ImgEnd === undefined;
   });
-  enqueue({ ImgBegin: bytes.length });
+  enqueue({ ImgBegin: bytes.length, ArtId: id });
   for (var offset = 0; offset < bytes.length; offset += watch.chunk) {
     // A plain Array: what Pebble.sendAppMessage expects for byte arrays.
     enqueue({
@@ -185,6 +204,7 @@ function sendImage(bytes) {
     });
   }
   enqueue({ ImgEnd: 1 });
+  watchArtId = id;
   watchEmpty = false;
 }
 
@@ -420,6 +440,7 @@ Pebble.addEventListener('appmessage', function (e) {
     chunk: p.ChunkSize,
     is24h: p.Is24h
   };
+  watchArtId = p.ArtId || 0;
   if (p.Hello === 1) {
     // The watchface just started: its screen is empty.
     watchEmpty = true;
@@ -482,6 +503,10 @@ Pebble.addEventListener('webviewclosed', function (e) {
   }
   storeSettings(settings);
   sendSettings(settings);
+  // A restored backup replaces every saved look.
+  if (result.looks && typeof result.looks === 'object') {
+    looks.replaceAll(localStorage, result.looks);
+  }
   // The reader changed the look: remember it for the painting that ends up on
   // the watch, so it comes back whenever that painting is hung again.
   if (result.saveLook) {

@@ -66,7 +66,7 @@
         s[key] = stored[key];
       }
     }
-    var version = typeof stored.version === 'number' ? stored.version : VERSION;
+    var version = typeof stored.version === 'number' && stored.version <= VERSION ? stored.version : VERSION;
     for (var v = version; v < VERSION; v++) {
       MIGRATIONS[v - 1](s);
     }

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Treasure Trove backup",
+  "description": "What “Copy backup” on the settings page puts on the clipboard, and what “Restore” reads back.",
+  "type": "object",
+  "required": [
+    "backup",
+    "settings",
+    "looks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "backup": {
+      "const": 1,
+      "description": "Backup format version"
+    },
+    "settings": {
+      "$ref": "settings.schema.json"
+    },
+    "looks": {
+      "$ref": "looks.schema.json"
+    }
+  }
+}

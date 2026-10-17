@@ -17,7 +17,7 @@
       "Hello", "PhoneReady",
       "ScreenW", "ScreenH", "RowStride", "IsRound", "ChunkSize", "Is24h",
       "ShowTime", "ClockMode", "HideAmPm", "ShowDate", "DateFormat", "DateSep", "HideUntilShake", "RevealMinutes", "BoxMode", "TextPos", "TimeSize", "TextInset",
-      "ImgBegin", "ImgOffset", "ImgChunk", "ImgEnd"
+      "ImgBegin", "ImgOffset", "ImgChunk", "ImgEnd", "ArtId"
     ],
     "resources": { "media": [] }
   }

@@ -63,4 +63,17 @@ describe('looks', () => {
     storage.setItem('tt-looks', '{not json');
     assert.equal(looks.get(storage, 'x', DEFAULTS), null);
   });
+
+  test('restores looks from a backup, dropping anything unusable', () => {
+    const storage = memoryStorage();
+    looks.save(storage, 'old', DEFAULTS);
+    looks.replaceAll(storage, {
+      version: 1,
+      looks: { 200108369: { ...DEFAULTS, frame: 'gold' }, broken: 'nope' },
+    });
+    assert.deepEqual(Object.keys(looks.all(storage)), ['200108369']);
+    assert.equal(looks.get(storage, '200108369', DEFAULTS).frame, 'gold');
+    // A newer format than this code knows is ignored rather than misread.
+    assert.deepEqual(looks.fromStored({ version: 99, looks: { a: DEFAULTS } }), {});
+  });
 });
