@@ -152,6 +152,7 @@ applyPreviewLight();
 /** Draw the watch's pixels for the current crop, tuning and frame. */
 function draw() {
   if (!crop) return;
+  updateNudgeButtons();
   let rgb = crop.rgb;
   let w = crop.w;
   let h = crop.h;
@@ -919,16 +920,30 @@ function updateViewControls() {
   const freeX = Boolean(v && v.w < 0.999);
   const freeY = Boolean(v && v.h < 0.999);
   $('view-hint').dataset.show = freeX && freeY ? 'both' : freeX ? 'x' : freeY ? 'y' : 'none';
-  document.querySelectorAll('[data-nudge]').forEach((b) => {
-    const sideways = b.dataset.nudge.split(',')[0] !== '0';
-    b.disabled = !(sideways ? freeX : freeY);
-  });
+  updateNudgeButtons();
   for (const el of [canvas, $('mini-art')]) {
     el.classList.toggle('draggable', freeX || freeY);
     // Let the page scroll along any axis the painting can't move on.
     el.style.touchAction = freeX && freeY ? 'none' : freeX ? 'pan-y' : freeY ? 'pan-x' : '';
   }
   applyVisibility();
+}
+
+/** Gray out each arrow that can't move the view further that way. */
+function updateNudgeButtons() {
+  const v = currentView();
+  // The view sits against an edge when less than half a watch pixel is left.
+  const slackX = v ? (v.w / watch.w) / 2 : 0;
+  const slackY = v ? (v.h / watch.h) / 2 : 0;
+  document.querySelectorAll('[data-nudge]').forEach((b) => {
+    const [dx, dy] = b.dataset.nudge.split(',').map(Number);
+    const room = !v ? 0
+      : dx < 0 ? v.x
+        : dx > 0 ? 1 - v.x - v.w
+          : dy < 0 ? v.y
+            : 1 - v.y - v.h;
+    b.disabled = room <= (dx ? slackX : slackY);
+  });
 }
 
 /** Move the view so its center is at (cx, cy) (fractions), clamped. */
@@ -988,7 +1003,8 @@ document.querySelectorAll('[data-nudge]').forEach((b) => {
     const again = (delay) => {
       repeat = setTimeout(() => {
         nudge();
-        again(60);
+        if (b.disabled) stop();
+        else again(60);
       }, delay);
     };
     again(400);
