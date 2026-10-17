@@ -24,8 +24,10 @@ generator ──▶ catalog.json ──▶ bundled into the .pbw (phone)  ──
 - **Requests to the Rijksmuseum** stay low: the phone downloads one crop per
   new painting (daily) and one when a saved look changes its crop, zoom or
   position (the cache key includes them). The settings page downloads the
-  whole painting once at twice the screen size (`workImage`) and pans and
-  zooms locally, with no requests while dragging.
+  whole painting once at twice the screen size (`workImage`, typically
+  400–1000 px, never more than 1280 px long) and pans and zooms locally, with
+  no requests while dragging. The phone only ever asks for screen size
+  (at most 260×260).
 - **Settings page**: plain static files (`server/static`): the page, its
   scripts and `catalog.json`. Host them anywhere (GitHub Pages); set
   `SETTINGS_URL` in `watchface/src/pkjs/config.js`.

@@ -177,9 +177,14 @@
       };
     }
 
+    // Longest side of the settings page's copy (about 720p): plenty for the
+    // preview, and only very long panoramas ever reach it.
+    var WORK_MAX_SIDE = 1280;
+
     /**
      * The whole painting, large enough to pan and zoom a Cover view up to
-     * `maxZoom` (%) at full screen resolution: for the settings page.
+     * `maxZoom` (%) at full screen resolution, but at most WORK_MAX_SIDE
+     * pixels long: for the settings page (the watch's own crop is exact).
      */
     function workImage(key, screen, maxZoom) {
       var row = byKey[key];
@@ -191,6 +196,9 @@
       var wide = aspect > screen.w / screen.h;
       var h = wide ? Math.round(screen.h * z) : Math.max(1, Math.round(screen.w * z / aspect));
       var w = wide ? Math.max(1, Math.round(h * aspect)) : Math.round(screen.w * z);
+      var scale = Math.min(1, WORK_MAX_SIDE / Math.max(w, h));
+      w = Math.max(1, Math.round(w * scale));
+      h = Math.max(1, Math.round(h * scale));
       return { url: data.iiifPrefix + row[IIIF] + '/full/' + w + ',' + h + '/0/default.png', width: w, height: h };
     }
 

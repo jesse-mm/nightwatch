@@ -86,6 +86,12 @@ describe('catalog', () => {
       { url: 'https://iiif.micr.io/aaaaa/full/912,456/0/default.png', width: 912, height: 456 });
   });
 
+  test('the work image is at most 1280 pixels long', () => {
+    const big = Catalog.create({ ...data, paintings: [['p', 'ppppp', 'Panorama', 'A', null, 'SK-A-9', 0, 0, 10, data.paintings[0][9]]] });
+    assert.deepEqual(big.workImage('p', { w: 260, h: 260, round: 1 }, 200),
+      { url: 'https://iiif.micr.io/ppppp/full/1280,128/0/default.png', width: 1280, height: 128 });
+  });
+
   test('asks IIIF for the whole painting for Contain', () => {
     const r = catalog.cropRequest('1', { w: 200, h: 228, round: 0 }, 'whole');
     assert.deepEqual([r.width, r.height], [200, 100]);
