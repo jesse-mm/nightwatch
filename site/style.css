@@ -941,3 +941,7 @@ canvas.draggable:active { cursor: grabbing; }
 .pin-results .pin-result-title { display: block; font-weight: 600; }
 .pin-results .pin-result-meta { display: block; color: var(--muted); font-size: var(--step--1); }
 .pin-results .pin-result-note { color: var(--muted); font-size: var(--step--1); cursor: default; }
+
+/* Position & zoom: one group (hint, zoom slider, arrows). */
+.view-group .view-zoom { display: flex; justify-content: space-between; margin-top: 0.4rem; color: var(--ink); }
+.view-group .nudge { margin-top: 0.5rem; }

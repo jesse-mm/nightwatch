@@ -1111,7 +1111,6 @@ new ResizeObserver(() => {
   miniScreen.style.setProperty('--scale', String(height / watch.h));
   renderPreview();
 }).observe($('mini-art'));
-$('mini-shuffle').addEventListener('click', () => loadPreview(randomPick, { pick: true }));
 
 // Pin a small preview to the top once half of the big one has scrolled away.
 new IntersectionObserver(
