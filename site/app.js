@@ -133,25 +133,6 @@ function applyPreviewLight() {
   screenEl.classList.add('mip');
 }
 
-/** Put the Indoors/Daylight switch on the stored choice. */
-function showPreviewLight() {
-  previewLight = savedPreviewLight();
-  document.querySelectorAll('input[name=previewLight]').forEach((radio) => {
-    radio.checked = radio.value === previewLight;
-  });
-}
-
-// Shown again from the browser's page cache (the script doesn't run again,
-// so the switch would show whatever it was): read the stored choice anew.
-let pageRestored = false;
-window.addEventListener('pageshow', (e) => {
-  if (!e.persisted) return;
-  pageRestored = true;
-  showPreviewLight();
-  applyPreviewLight();
-  draw();
-});
-
 document.querySelectorAll('input[name=previewLight]').forEach((radio) => {
   radio.checked = radio.value === previewLight;
   radio.addEventListener('change', () => {
@@ -1209,19 +1190,6 @@ if (new URLSearchParams(location.search).get('debug') === 'true') {
   const info = {
     phone: state.debug || t('debug.noPhone'),
     page: { watch, settings, pinned: settings.pinned || null, painting: art?.key || null },
-    previewLight: {
-      stored: (() => {
-        try {
-          return localStorage.getItem('tt-preview-light');
-        } catch (err) {
-          return `unavailable: ${err.message}`;
-        }
-      })(),
-      used: previewLight,
-      checked: document.querySelector('input[name=previewLight]:checked')?.value ?? null,
-      restoredFromCache: pageRestored,
-      loadedAt: new Date().toISOString(),
-    },
   };
   show(info);
   catalogReady.then((cat) => {
