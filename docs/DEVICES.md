@@ -1,6 +1,6 @@
 # Supported watches
 
-Treasure Trove supports the **color** Pebbles. The generator plans a Cover
+NightWatch supports the **color** Pebbles. The generator plans a Cover
 crop of every painting for each of their four screens (`screens` in the
 catalog's `manifest.json`, in this order), and the phone asks the Rijksmuseum's IIIF
 server for it at the screen's exact size:

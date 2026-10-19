@@ -1,5 +1,5 @@
 /*
- * Treasure Trove — art first, time second.
+ * NightWatch — art first, time second.
  *
  * The phone (src/pkjs) fetches a painting already converted to this watch's
  * exact bitmap layout and streams it over AppMessage. We copy the bytes straight

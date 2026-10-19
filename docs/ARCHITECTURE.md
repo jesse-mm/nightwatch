@@ -4,7 +4,7 @@ There is no server. The watchface and the settings page get paintings straight
 from the Rijksmuseum's IIIF image server, so nothing of ours runs anywhere. The
 slow, polite work happens once, ahead of time:
 
-- **Generator** (`generator/`, Rust, binary `treasure-trove-generator`):
+- **Generator** (`generator/`, Rust, binary `nightwatch-generator`):
   fetches paintings from the Rijksmuseum, checks licenses, sorts paintings into
   eras, ranks the Featured 365 and plans a smart crop of each painting for
   every supported screen. It writes all of that to a folder of small JSON
@@ -91,8 +91,8 @@ a JSON Schema in [`docs/schema/`](schema/):
 
 | Key | What | Schema | Code |
 |---|---|---|---|
-| `tt-settings` | The watchface settings plus `version` | [`settings.schema.json`](schema/settings.schema.json) | `settings.js`: `DEFAULTS`, `VERSION`, `MIGRATIONS` |
-| `tt-looks` | `{version, looks}`: a look per painting | [`looks.schema.json`](schema/looks.schema.json) | `looks.js`: `FIELDS`, `VERSION`, `MIGRATIONS` |
+| `nw-settings` | The watchface settings plus `version` | [`settings.schema.json`](schema/settings.schema.json) | `settings.js`: `DEFAULTS`, `VERSION`, `MIGRATIONS` |
+| `nw-looks` | `{version, looks}`: a look per painting | [`looks.schema.json`](schema/looks.schema.json) | `looks.js`: `FIELDS`, `VERSION`, `MIGRATIONS` |
 
 Reading runs every migration from the stored version up, keeps only known
 fields and fills the rest from the defaults. To change what a stored value
@@ -229,8 +229,8 @@ and:
 
 **Phone** (`index.js`). Only when a new painting is due, the phone fetches
 `SETTINGS_URL/catalog/manifest.json` and caches it in `localStorage`
-(`tt-catalog`); a new `id` drops the files it cached before. Then it loads only
-the file it needs, cached as `tt-catalog-<pool>`:
+(`nw-catalog`); a new `id` drops the files it cached before. Then it loads only
+the file it needs, cached as `nw-catalog-<pool>`:
 
 - Featured: `featured.json`.
 - Surprise me: `poolFor(era)`, the era's file, or for "any era" a file chosen
@@ -238,7 +238,7 @@ the file it needs, cached as `tt-catalog-<pool>`:
 
 Offline it uses the cached manifest and files. The cached painting keeps its
 own catalog row, and paintings the settings page hands over (pinned or hung)
-are kept as rows in `tt-rows`, so fetching another crop of the current
+are kept as rows in `nw-rows`, so fetching another crop of the current
 painting or a pinned one needs no catalog file. Showing the cached painting
 needs no network at all.
 
@@ -274,7 +274,7 @@ The page is in English (`en-US`) and Dutch (`nl-NL`).
   fetches the translation files, fills the static markup (`data-i18n="key"`
   sets the text; `data-i18n-attr="aria-label:key;placeholder:key"` sets
   attributes), and only then appends `app.js`, which uses
-  `TreasureI18n.t(key, vars)` from its first line. If loading fails, it still
+  `NightWatchI18n.t(key, vars)` from its first line. If loading fails, it still
   loads `app.js`; the English text in the HTML stays as it is.
 - **Adding a key.** Put it in every `translations/*.json`; in HTML add
   `data-i18n`/`data-i18n-attr` and keep the English text as the default
@@ -439,9 +439,9 @@ can be deleted by hand.
   the images as base64.
 - **A pinned painting that disappears.** If the catalog no longer has it or
   the Rijksmuseum answers 404/410 for its image, the phone doesn't retry: it
-  notes it (`tt-unavailable`) and the settings page shows a notice. Once a
+  notes it (`nw-unavailable`) and the settings page shows a notice. Once a
   pinned painting has been downloaded, the phone also keeps its own copy of
-  the whole painting (`tt-pinned-source`: the settings page's 2× image, PNG,
+  the whole painting (`nw-pinned-source`: the settings page's 2× image, PNG,
   typically 300-700 KB), so color, crop and zoom keep working from that copy.
   Unpinning drops the copy and the notice.
 - **The phone needs the static site.** It loads the catalog from

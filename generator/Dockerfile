@@ -9,8 +9,8 @@ COPY Cargo.toml Cargo.lock ./
 RUN mkdir -p src/bin && echo "fn main() {}" > src/bin/generator.rs \
     && touch src/lib.rs \
     && cargo build --release --locked \
-    && rm -rf src target/release/deps/treasure_trove* target/release/deps/libtreasure_trove* \
-       target/release/.fingerprint/treasure-trove*
+    && rm -rf src target/release/deps/nightwatch* target/release/deps/libnightwatch* \
+       target/release/.fingerprint/nightwatch*
 
 COPY src ./src
 RUN cargo build --release --locked
@@ -19,15 +19,15 @@ RUN cargo build --release --locked
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --home /app trove \
-    && mkdir -p /data /catalog && chown trove /data /catalog
+    && useradd --system --uid 10001 --home /app nightwatch \
+    && mkdir -p /data /catalog && chown nightwatch /data /catalog
 WORKDIR /app
-COPY --from=build /app/target/release/treasure-trove-generator /usr/local/bin/treasure-trove-generator
+COPY --from=build /app/target/release/nightwatch-generator /usr/local/bin/nightwatch-generator
 
 ENV DATA_DIR=/data \
     BUNDLE_DIR=/catalog/web \
     FEATURED_PATH=/catalog/featured.json \
     RUST_LOG=info
-USER trove
+USER nightwatch
 VOLUME /data
-CMD ["treasure-trove-generator"]
+CMD ["nightwatch-generator"]

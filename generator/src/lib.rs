@@ -1,4 +1,4 @@
-//! Treasure Trove's generator: builds the catalog (`catalog/web/`) the
+//! NightWatch's generator: builds the catalog (`catalog/web/`) the
 //! watchface and the settings page load (from the static site) to show
 //! public-domain Rijksmuseum paintings.
 //!

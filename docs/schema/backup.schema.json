@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Treasure Trove backup",
+  "title": "NightWatch backup",
   "description": "What “Copy backup” on the settings page puts on the clipboard, and what “Restore” reads back.",
   "type": "object",
   "required": [

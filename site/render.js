@@ -1,9 +1,9 @@
 /**
- * Treasure Trove rendering: turn a full-color crop into the exact bytes a
+ * NightWatch rendering: turn a full-color crop into the exact bytes a
  * color Pebble shows, with the chosen color tuning and frame.
  *
  * Shared by the phone (PebbleKit JS, required as './render') and the settings
- * page (window.TreasureRender), so the preview is the same code as the watch.
+ * page (window.NightWatchRender), so the preview is the same code as the watch.
  * ES5 on purpose: PebbleKit JS on iOS is a bare JavaScriptCore.
  *
  * Ported from the Rust generator (palette.rs, frame.rs) and checked against
@@ -18,7 +18,7 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory();
   } else {
-    root.TreasureRender = factory();
+    root.NightWatchRender = factory();
   }
 }(this, function () {
   'use strict';

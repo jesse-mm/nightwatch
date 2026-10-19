@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn save_then_load_round_trips() {
-        let dir = std::env::temp_dir().join(format!("tt-featured-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("nw-featured-{}", std::process::id()));
         let path = dir.join("featured.json");
         let file = FeaturedFile {
             generated: "2026-10-16".into(),

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Treasure Trove settings (localStorage tt-settings)",
+  "title": "NightWatch settings (localStorage nw-settings)",
   "description": "The watchface settings as stored by the phone; defaults and migrations live in site/settings.js.",
   "type": "object",
   "required": [

@@ -18,7 +18,7 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory();
   } else {
-    root.TreasureCatalog = factory();
+    root.NightWatchCatalog = factory();
   }
 }(this, function () {
   'use strict';

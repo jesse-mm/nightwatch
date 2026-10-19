@@ -1,7 +1,7 @@
 /**
  * The watchface settings: defaults, the storage version and migrations.
  *
- * Stored by the phone in localStorage ("tt-settings") as the settings plus a
+ * Stored by the phone in localStorage ("nw-settings") as the settings plus a
  * `version`. The shape is described by docs/schema/settings.schema.json. When a
  * stored setting changes meaning, bump VERSION and add a step to MIGRATIONS;
  * `load` runs every step from the stored version up, then keeps only known
@@ -15,7 +15,7 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory();
   } else {
-    root.TreasureSettings = factory();
+    root.NightWatchSettings = factory();
   }
 }(this, function () {
   'use strict';

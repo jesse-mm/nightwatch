@@ -1,12 +1,12 @@
 {
-  "name": "treasure-trove",
-  "author": "Treasure Trove",
+  "name": "nightwatch",
+  "author": "NightWatch",
   "version": "1.0.0",
   "keywords": ["pebble-app", "watchface", "art"],
   "private": true,
   "dependencies": {},
   "pebble": {
-    "displayName": "Treasure Trove",
+    "displayName": "NightWatch",
     "uuid": "4ad5c70c-9174-4fb8-83b8-4e26d302a156",
     "sdkVersion": "3",
     "enableMultiJS": true,

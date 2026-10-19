@@ -1,4 +1,4 @@
-# Treasure Trove
+# NightWatch
 
 *Art first, time second.* A Pebble watchface that hangs a different public-domain
 painting from the Rijksmuseum on your wrist every day, with a small LECO time and
@@ -124,7 +124,7 @@ against `settings.js`.
    first run takes hours):
    ```sh
    cp .env.example .env                      # set CONTACT
-   docker compose run --rm generator treasure-trove-generator --limit 20   # quick test run
+   docker compose run --rm generator nightwatch-generator --limit 20   # quick test run
    docker compose run --rm generator         # everything
    node scripts/bundle-catalog.mjs           # copy catalog/web/ to site/catalog/
    ```

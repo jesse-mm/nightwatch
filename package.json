@@ -1,5 +1,5 @@
 {
-  "name": "treasure-trove",
+  "name": "nightwatch",
   "private": true,
   "description": "Pebble watchface showing a daily public-domain painting from the Rijksmuseum",
   "type": "module",

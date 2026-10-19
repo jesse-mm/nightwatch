@@ -1,4 +1,4 @@
-//! `treasure-trove-generator`: builds the painting catalog (`catalog/web/`)
+//! `nightwatch-generator`: builds the painting catalog (`catalog/web/`)
 //! the watchface and the settings page use.
 //!
 //! Run it monthly (or whenever); it only redoes work whose inputs changed. See
@@ -8,12 +8,12 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 use tracing_subscriber::EnvFilter;
-use treasure_trove::generate::{self, Options};
+use nightwatch::generate::{self, Options};
 
 const HELP: &str = "\
-treasure-trove-generator: fetch paintings politely, plan their crops, write the catalog
+nightwatch-generator: fetch paintings politely, plan their crops, write the catalog
 
-USAGE: treasure-trove-generator [OPTIONS]
+USAGE: nightwatch-generator [OPTIONS]
 
 OPTIONS (environment variable in brackets):
   --data DIR            working directory: catalog.sqlite + art/  [DATA_DIR, ./data]
@@ -99,8 +99,8 @@ fn parse_args() -> Result<Options> {
     }
     // Wikimedia's policy: "<client>/<version> (<contact>) <library>".
     o.user_agent = std::env::var("USER_AGENT").unwrap_or_else(|_| match &o.contact {
-        Some(c) => format!("TreasureTrove/0.2 ({c}; Pebble watchface generator) reqwest"),
-        None => "TreasureTrove/0.2 (Pebble watchface generator; not affiliated with the Rijksmuseum) reqwest".to_string(),
+        Some(c) => format!("NightWatch/0.2 ({c}; Pebble watchface generator) reqwest"),
+        None => "NightWatch/0.2 (Pebble watchface generator; not affiliated with the Rijksmuseum) reqwest".to_string(),
     });
     Ok(o)
 }

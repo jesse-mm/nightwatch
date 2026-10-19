@@ -6,8 +6,8 @@
 // under Utilities starts it again. Loaded by i18n.js after app.js.
 
 (() => {
-  const t = (key, vars) => window.TreasureI18n.t(key, vars);
-  const SEEN = 'tt-tour-seen';
+  const t = (key, vars) => window.NightWatchI18n.t(key, vars);
+  const SEEN = 'nw-tour-seen';
 
   // Each step lights up a part of the page (from `target` down to `until`,
   // e.g. a group's heading and its first control); the card explains it.

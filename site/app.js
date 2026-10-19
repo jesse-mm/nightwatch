@@ -1,11 +1,11 @@
-// Treasure Trove settings page.
+// NightWatch settings page.
 // Opened by the phone app with the current state in the URL hash, and closed by
 // navigating to `return_to` (emulator) or `pebblejs://close#` with the result.
 
-const DEFAULTS = window.TreasureSettings.DEFAULTS;
+const DEFAULTS = window.NightWatchSettings.DEFAULTS;
 // Translated text (i18n.js, translations/*.json). i18n.js loads this file once
 // the texts are in.
-const t = (key, vars) => window.TreasureI18n.t(key, vars);
+const t = (key, vars) => window.NightWatchI18n.t(key, vars);
 
 // Settings the preview reacts to: a new fit needs another crop from the server;
 // tuning and frame are applied right here (render.js, the same code as the phone).
@@ -25,7 +25,7 @@ function readState() {
 
 const state = readState();
 // Migrated to this page's settings version (the phone may be older or newer).
-const settings = window.TreasureSettings.load(state.settings);
+const settings = window.NightWatchSettings.load(state.settings);
 // The double-flick box toggle was removed; treat older saved values as off.
 if (settings.boxMode !== 'always') settings.boxMode = 'off';
 const art = state.art || null;
@@ -40,8 +40,8 @@ let restoredLooks = null; // a restored backup's looks, written by the phone on 
 let lookTouched = false;
 // The painting on the watch keeps its own colors, zoom and position when it's
 // shown again (Undo); others without a saved look start from the defaults.
-const initialFresh = Object.fromEntries(window.TreasureLooks.FRESH.map((k) => [k, settings[k]]));
-const freshDefaults = Object.fromEntries(window.TreasureLooks.FRESH.map((k) => [k, DEFAULTS[k]])); // the reader changed the look: the phone saves it with the painting
+const initialFresh = Object.fromEntries(window.NightWatchLooks.FRESH.map((k) => [k, settings[k]]));
+const freshDefaults = Object.fromEntries(window.NightWatchLooks.FRESH.map((k) => [k, DEFAULTS[k]])); // the reader changed the look: the phone saves it with the painting
 // A painting picked on this page; only hung on the watch when saved.
 let chosen = null;
 // The painting the label currently describes (for the viewer).
@@ -72,7 +72,7 @@ const catalogReady = fetch('catalog/manifest.json')
     return res.json();
   })
   .then((manifest) => {
-    const cat = window.TreasureCatalog.create(manifest);
+    const cat = window.NightWatchCatalog.create(manifest);
     // The paintings the phone knows (on the watch, pinned): no file needed.
     for (const row of Object.values(state.rows || {})) cat.addRow(row);
     return cat;
@@ -103,7 +103,7 @@ const LIGHTS = ['room', 'sun'];
 // this page's localStorage, saved as soon as they change.
 function savedPreviewLight() {
   try {
-    const saved = localStorage.getItem('tt-preview-light');
+    const saved = localStorage.getItem('nw-preview-light');
     return LIGHTS.includes(saved) ? saved : 'room';
   } catch {
     return 'room';
@@ -117,7 +117,7 @@ miniScreen.classList.toggle('round', Boolean(watch.round));
 
 function savedMiniTime() {
   try {
-    return localStorage.getItem('tt-mini-time') !== '0';
+    return localStorage.getItem('nw-mini-time') !== '0';
   } catch {
     return true;
   }
@@ -127,7 +127,7 @@ let miniTime = savedMiniTime();
 
 function applyPreviewLight() {
   // The time is drawn in white on the watch: show the white this screen can show.
-  const [r, g, b] = window.TreasureRender.toScreenRGBA(Uint8Array.of(0xff), 1, 1, 1, previewLight);
+  const [r, g, b] = window.NightWatchRender.toScreenRGBA(Uint8Array.of(0xff), 1, 1, 1, previewLight);
   screenEl.style.setProperty('--screen-white', `rgb(${r} ${g} ${b})`);
   miniScreen.style.setProperty('--screen-white', `rgb(${r} ${g} ${b})`);
   screenEl.classList.add('mip');
@@ -139,7 +139,7 @@ document.querySelectorAll('input[name=previewLight]').forEach((radio) => {
     if (!radio.checked) return;
     previewLight = radio.value;
     try {
-      localStorage.setItem('tt-preview-light', previewLight);
+      localStorage.setItem('nw-preview-light', previewLight);
     } catch {
       // Private mode: the choice just isn't remembered.
     }
@@ -160,12 +160,12 @@ function draw() {
   // tone it, like the phone does with the part it downloads.
   if (crop.kind === 'work' && catalog) {
     const v = catalog.coverView(crop.key, watch, settings);
-    rgb = window.TreasureRender.tone(window.TreasureRender.cropRect(crop.rgb, crop.w, crop.h,
+    rgb = window.NightWatchRender.tone(window.NightWatchRender.cropRect(crop.rgb, crop.w, crop.h,
       { x: v.x * crop.w, y: v.y * crop.h, w: v.w * crop.w, h: v.h * crop.h }, watch.w, watch.h));
     w = watch.w;
     h = watch.h;
   }
-  const bytes = window.TreasureRender.compose(rgb, w, h, {
+  const bytes = window.NightWatchRender.compose(rgb, w, h, {
     w: watch.w,
     h: watch.h,
     stride: watch.w,
@@ -177,7 +177,7 @@ function draw() {
     brightness: settings.brightness,
     contrast: settings.contrast,
   });
-  const rgba = window.TreasureRender.toScreenRGBA(bytes, watch.w, watch.h, watch.w, previewLight);
+  const rgba = window.NightWatchRender.toScreenRGBA(bytes, watch.w, watch.h, watch.w, previewLight);
   canvas.getContext('2d').putImageData(new ImageData(rgba, watch.w, watch.h), 0, 0);
   canvas.hidden = false;
   $('screen-empty').hidden = true;
@@ -224,7 +224,7 @@ async function showPainting(meta) {
   const req = cover ? cat.workImage(meta.key, watch, 200) : cat.cropRequest(meta.key, watch, 'whole');
   if (!req) throw new Error(t('error.noPicture'));
   const loaded = await loadCrop(req.url);
-  if (!cover) loaded.rgb = window.TreasureRender.tone(loaded.rgb);
+  if (!cover) loaded.rgb = window.NightWatchRender.tone(loaded.rgb);
   crop = { ...loaded, kind: cover ? 'work' : 'contain', key: meta.key };
   updateViewControls();
   canvas.setAttribute('aria-label', t('preview.ariaLabel', { title: meta.title || t('art.untitled'), artist: meta.artist || t('art.unknownArtist') }));
@@ -308,7 +308,7 @@ function placeOverlay(overlay, px) {
   if (!px) return;
   const round = Boolean(watch.round);
   // With a painting frame, the text sits inside it, on the painting.
-  const margin = (round ? 10 : 4) + window.TreasureRender.frameBorder(settings.frame, watch.w, watch.h);
+  const margin = (round ? 10 : 4) + window.NightWatchRender.frameBorder(settings.frame, watch.w, watch.h);
   const edge = margin + (round ? 8 : 0);
   const pad = settings.boxMode === 'always' ? 3 : 0;
   const blockW = overlay.offsetWidth / px - 2 * pad;
@@ -324,7 +324,7 @@ function placeOverlay(overlay, px) {
 
 // ---------------- wall label ----------------
 
-const dutch = window.TreasureI18n.lang === 'nl-NL';
+const dutch = window.NightWatchI18n.lang === 'nl-NL';
 
 function showLabel(meta) {
   $('label').hidden = false;
@@ -361,7 +361,7 @@ function setStatus(text) {
 
 /** The painting's saved look, or null. */
 function savedLook(key) {
-  const look = window.TreasureLooks.decode(savedLooks[key], settings);
+  const look = window.NightWatchLooks.decode(savedLooks[key], settings);
   if (!look) return null;
   if (look.textCol === 'auto') look.textCol = watch.round ? 'center' : 'end';
   return look;
@@ -494,7 +494,7 @@ const undoStack = [];
 
 function undoEntry() {
   const look = {};
-  for (const k of [...window.TreasureLooks.KEYS, 'pinned']) look[k] = settings[k];
+  for (const k of [...window.NightWatchLooks.KEYS, 'pinned']) look[k] = settings[k];
   return { key: shown.key, chosen, look };
 }
 
@@ -745,11 +745,7 @@ let osdLoading = null;
 let viewer = null;
 
 function iiifBaseOf(meta) {
-  if (!meta) return null;
-  if (meta.iiifBase) return meta.iiifBase;
-  // Older cached paintings only have the full-image URL.
-  const m = /^(https:\/\/[^?#]+?)\/full\//.exec(meta.imageUrl || '');
-  return m ? m[1] : null;
+  return meta?.iiifBase || null;
 }
 
 function loadOpenSeadragon() {
@@ -875,7 +871,7 @@ document.querySelectorAll('.segmented[data-key]').forEach((group) => {
     radio.addEventListener('change', () => {
       if (radio.checked) {
         settings[key] = radio.value;
-        if (window.TreasureLooks.KEYS.includes(key)) lookTouched = true;
+        if (window.NightWatchLooks.KEYS.includes(key)) lookTouched = true;
         update();
         if (CROP_KEYS.includes(key)) refreshPreview();
         if (LOCAL_KEYS.includes(key)) draw();
@@ -1062,8 +1058,8 @@ $('zoom').addEventListener('input', () => {
 function backupText() {
   return JSON.stringify({
     backup: 1,
-    settings: window.TreasureSettings.toStored(settings),
-    looks: window.TreasureLooks.toStored(savedLooks),
+    settings: window.NightWatchSettings.toStored(settings),
+    looks: window.NightWatchLooks.toStored(savedLooks),
   });
 }
 
@@ -1105,12 +1101,12 @@ $('backup-restore').addEventListener('click', () => {
     status.textContent = t('restore.notBackup');
     return;
   }
-  Object.assign(settings, window.TreasureSettings.load(backup.settings));
+  Object.assign(settings, window.NightWatchSettings.load(backup.settings));
   if (settings.textCol === 'auto') settings.textCol = watch.round ? 'center' : 'end';
-  const looks = window.TreasureLooks.fromStored(backup.looks);
+  const looks = window.NightWatchLooks.fromStored(backup.looks);
   for (const key of Object.keys(savedLooks)) delete savedLooks[key];
   Object.assign(savedLooks, looks);
-  restoredLooks = window.TreasureLooks.toStored(looks);
+  restoredLooks = window.NightWatchLooks.toStored(looks);
   syncControls();
   update();
   refreshPreview();
@@ -1139,7 +1135,7 @@ $('mini-size').addEventListener('click', (e) => {
 $('mini-time').addEventListener('click', () => {
   miniTime = !miniTime;
   try {
-    localStorage.setItem('tt-mini-time', miniTime ? '1' : '0');
+    localStorage.setItem('nw-mini-time', miniTime ? '1' : '0');
   } catch {
     // Private mode: the choice just isn't remembered.
   }
@@ -1193,7 +1189,7 @@ function sendToPhone(result) {
 
 function saveToWatch() {
   sendToPhone({
-    version: window.TreasureSettings.VERSION,
+    version: window.NightWatchSettings.VERSION,
     settings,
     artKey: chosen ? chosen.key : null,
     // Catalog rows for the painting to hang and the pinned one, so the phone

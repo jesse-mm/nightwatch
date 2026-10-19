@@ -1,4 +1,4 @@
-# Treasure Trove's generator: builds catalog/web/, the painting catalog the
+# NightWatch's generator: builds catalog/web/, the painting catalog the
 # watchface and the settings page load from the static site (site/catalog/).
 # There is no server: pictures come straight from the Rijksmuseum's IIIF server.
 #
@@ -12,9 +12,9 @@
 services:
   generator:
     build: ./generator
-    image: treasure-trove-generator:latest
+    image: nightwatch-generator:latest
     restart: "no"
-    command: ["treasure-trove-generator", "--export", "/catalog/paintings.jsonl"]
+    command: ["nightwatch-generator", "--export", "/catalog/paintings.jsonl"]
     environment:
       RUST_LOG: ${RUST_LOG:-info}
       REQUESTS_PER_SECOND: ${REQUESTS_PER_SECOND:-1}

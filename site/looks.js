@@ -2,7 +2,7 @@
  * Per-painting looks: the crop, frame, color tuning and time placement a
  * reader saved for a painting, so they come back whenever it is hung again.
  *
- * Stored in localStorage ("tt-looks") as readable JSON with a version, looks
+ * Stored in localStorage ("nw-looks") as readable JSON with a version, looks
  * keyed by painting:
  *
  *   {"version": 1, "looks": {"200108369": {"fit": "fill", "frame": "gold",
@@ -24,12 +24,12 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory();
   } else {
-    root.TreasureLooks = factory();
+    root.NightWatchLooks = factory();
   }
 }(this, function () {
   'use strict';
 
-  var STORE_KEY = 'tt-looks';
+  var STORE_KEY = 'nw-looks';
   var VERSION = 1;
 
   // Setting → allowed values (a list), or a whole-number range; `empty: true`

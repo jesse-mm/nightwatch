@@ -1,5 +1,5 @@
 /**
- * Treasure Trove — phone side.
+ * NightWatch — phone side.
  *
  * Responsibilities:
  *  1. Learn the watch's screen (size, color, row stride, shape) from its Hello.
@@ -25,17 +25,17 @@ var Catalog = require('./catalog');
 // server of our own): SETTINGS_URL/ and SETTINGS_URL/catalog/.
 var PAGE_URL = CONFIG.SETTINGS_URL;
 
-var SETTINGS_KEY = 'tt-settings';
-var ART_KEY = 'tt-art';
-// The catalog manifest, and each catalog file we loaded (tt-catalog-<pool>).
-var CATALOG_KEY = 'tt-catalog';
+var SETTINGS_KEY = 'nw-settings';
+var ART_KEY = 'nw-art';
+// The catalog manifest, and each catalog file we loaded (nw-catalog-<pool>).
+var CATALOG_KEY = 'nw-catalog';
 // Rows of paintings the settings page handed over (pinned or hung), by key.
-var ROWS_KEY = 'tt-rows';
+var ROWS_KEY = 'nw-rows';
 // The pinned painting's own copy (the whole painting, PNG), so it stays
 // usable, crops and zoom included, if the Rijksmuseum drops it.
-var SOURCE_KEY = 'tt-pinned-source';
+var SOURCE_KEY = 'nw-pinned-source';
 // A pinned painting we can no longer get: shown on the settings page.
-var UNAVAILABLE_KEY = 'tt-unavailable';
+var UNAVAILABLE_KEY = 'nw-unavailable';
 
 var DEFAULTS = settingsLib.DEFAULTS;
 
@@ -115,9 +115,6 @@ function composeFor(art, settings) {
 function showCached(art, settings) {
   if (art && art.crop) {
     sendImage(composeFor(art, settings));
-  } else if (art && art.raw) {
-    // Cached by an older version: already the watch's bytes.
-    sendImage(base64.decode(art.raw));
   }
 }
 
@@ -819,7 +816,7 @@ function looksForPage() {
 
 /** Every localStorage key we use, with the cached catalog files. */
 function storageKeys() {
-  var keys = [SETTINGS_KEY, 'tt-looks', ART_KEY, CATALOG_KEY, ROWS_KEY, SOURCE_KEY, UNAVAILABLE_KEY];
+  var keys = [SETTINGS_KEY, 'nw-looks', ART_KEY, CATALOG_KEY, ROWS_KEY, SOURCE_KEY, UNAVAILABLE_KEY];
   var manifest = readJson(CATALOG_KEY);
   ((manifest && manifest.files) || []).forEach(function (f) {
     keys.push(CATALOG_KEY + '-' + f.pool);

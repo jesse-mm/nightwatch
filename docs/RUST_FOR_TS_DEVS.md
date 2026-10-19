@@ -19,8 +19,8 @@ order: `generate.rs` → `catalog.rs` → `imaging.rs` → `saliency.rs` →
 Install the toolchain with [rustup](https://rustup.rs). The compiler's error
 messages are long but usually say exactly what to change. Read them top to bottom.
 
-The crate is a library (`treasure_trove`, `src/lib.rs`) plus one binary
-(`treasure-trove-generator`, `src/bin/generator.rs`), which only parses the
+The crate is a library (`nightwatch`, `src/lib.rs`) plus one binary
+(`nightwatch-generator`, `src/bin/generator.rs`), which only parses the
 options and calls `generate::run`.
 
 ## Reading the code

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Treasure Trove catalog (catalog/web/, served as site/catalog/)",
+  "title": "NightWatch catalog (catalog/web/, served as site/catalog/)",
   "description": "Written by the generator (generator/src/bundle.rs); read by site/catalog.js on the phone and the settings page. manifest.json is the manifest; every other file (featured.json, one per era, undated.json) is a part, except search.json (the search entries).",
   "oneOf": [
     {

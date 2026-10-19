@@ -88,7 +88,7 @@ describe('schemas', () => {
     const items = new Map();
     const storage = { getItem: (k) => items.get(k) ?? null, setItem: (k, v) => items.set(k, v) };
     looks.save(storage, '200108369', { ...settingsLib.DEFAULTS, frame: 'gold', textCol: 'start', contrast: -20, zoom: 150, focusX: 4000 });
-    assert.deepEqual(validate(looksSchema, JSON.parse(items.get('tt-looks'))), []);
+    assert.deepEqual(validate(looksSchema, JSON.parse(items.get('nw-looks'))), []);
   });
 
   test('a backup matches backup.schema.json', () => {

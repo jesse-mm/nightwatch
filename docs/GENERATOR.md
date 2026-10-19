@@ -1,6 +1,6 @@
 # The generator
 
-`treasure-trove-generator` (in `generator/`) builds `catalog/web/`: the
+`nightwatch-generator` (in `generator/`) builds `catalog/web/`: the
 painting catalog as a folder of small JSON files, which the phone and the
 settings page load from the page's host. It keeps metadata and a master image per painting in `data/`, plans a
 Cover crop of each painting for every supported screen, and writes the plans
@@ -14,8 +14,8 @@ page (`site/render.js`). See [ARCHITECTURE.md](ARCHITECTURE.md).
 ```sh
 cp .env.example .env                         # set CONTACT
 docker compose run --rm generator            # full run, also writes catalog/paintings.jsonl
-docker compose run --rm generator treasure-trove-generator --help
-docker compose run --rm generator treasure-trove-generator --limit 20   # test run
+docker compose run --rm generator nightwatch-generator --help
+docker compose run --rm generator nightwatch-generator --limit 20   # test run
 node scripts/bundle-catalog.mjs              # copy catalog/web/ to site/catalog/
 ```
 
@@ -104,7 +104,7 @@ generator run at all. Changing the planning code (bump `PIPELINE_VERSION` in
 images**, with no network:
 
 ```sh
-docker compose run --rm generator treasure-trove-generator --skip-fetch
+docker compose run --rm generator nightwatch-generator --skip-fetch
 ```
 
 ## Output

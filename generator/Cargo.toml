@@ -1,17 +1,17 @@
 [package]
-name = "treasure-trove-generator"
+name = "nightwatch-generator"
 version = "0.2.0"
 edition = "2021"
-description = "Builds the catalog of public-domain Rijksmuseum paintings for the Treasure Trove Pebble watchface"
+description = "Builds the catalog of public-domain Rijksmuseum paintings for the NightWatch Pebble watchface"
 license = "MIT"
 publish = false
 
 [lib]
-name = "treasure_trove"
+name = "nightwatch"
 path = "src/lib.rs"
 
 [[bin]]
-name = "treasure-trove-generator"
+name = "nightwatch-generator"
 path = "src/bin/generator.rs"
 
 [dependencies]

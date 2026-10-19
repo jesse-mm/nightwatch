@@ -2,7 +2,7 @@
 // Messages live in translations/<lang>.json as ICU MessageFormat, formatted by
 // intl-messageformat (loaded before this file from vendor/). This script loads the
 // translation files first, fills the static page (data-i18n, data-i18n-attr)
-// and only then loads app.js, which uses window.TreasureI18n.t() right away.
+// and only then loads app.js, which uses window.NightWatchI18n.t() right away.
 //
 // vendor/intl-messageformat-11.2.0.iife.js: FormatJS intl-messageformat 11.2.0
 // (BSD-3-Clause), unmodified, from
@@ -134,7 +134,7 @@
     });
   }
 
-  window.TreasureI18n = { lang, t, apply };
+  window.NightWatchI18n = { lang, t, apply };
 
   function load(code) {
     return fetch(`translations/${code}.json`)

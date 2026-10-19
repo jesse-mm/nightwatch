@@ -6,7 +6,7 @@ Rijksmuseum data services (https://data.rijksmuseum.nl/about/). Only works the d
 Public Domain Mark) or under CC BY / CC BY-SA are shown. See
 https://data.rijksmuseum.nl/policy/ for the museum's terms.
 
-Treasure Trove is an independent project and is not affiliated with or endorsed
+NightWatch is an independent project and is not affiliated with or endorsed
 by the Rijksmuseum.
 
 ## Device photos
