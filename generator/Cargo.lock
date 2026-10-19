@@ -705,6 +705,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "nightwatch-generator"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "rand 0.9.5",
+ "rayon",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1428,24 +1446,6 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
-]
-
-[[package]]
-name = "nightwatch-generator"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "image",
- "rand 0.9.5",
- "rayon",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
