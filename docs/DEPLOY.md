@@ -51,26 +51,36 @@ The catalog isn't part of the app, so a new catalog needs no new `.pbw`.
 
 `site/` is plain static files: `index.html`, `app.js`, `style.css`,
 `render.js`, `looks.js`, `settings.js`, `catalog.js` and the generated
-`catalog/` folder. Any static host works; on GitHub Pages, publish `site/`
-including the generated `catalog/` folder (it's gitignored, so copy it in
-when you publish).
-
-### On Cloudflare Pages
-
-Upload `site/` directly rather than connecting the repository: the catalog
-isn't in git, and the generator takes far too long to run in a Pages build.
+`catalog/` folder. Publish the built copy:
 
 ```sh
-npm run deploy                         # bundles the catalog, then uploads site/
-PAGES_PROJECT=<name> npm run deploy    # project name other than nightwatch
+npm run build:site    # copies the catalog in, then site/ → dist/ minified
+npm run preview       # build:site, then serves dist/ on :8091 to check it
 ```
 
-The first run asks you to log in to Cloudflare and creates the project, which
-is then live at `https://<name>.pages.dev`. To serve it from a subdomain of
-your own, add it under the project's **Custom domains**: if the domain's DNS
-is on Cloudflare the record and certificate are set up for you; otherwise add
-a `CNAME <subdomain> → <name>.pages.dev` record at your DNS provider. Then
-set `SETTINGS_URL` to that address (step 3). The site is far within the free
+`scripts/build-site.mjs` minifies our JS and CSS with esbuild, file by file:
+no bundling, every file keeps its name, so `dist/` works exactly like
+`site/` (you can also publish `site/` itself, just larger). Any static host
+works; on GitHub Pages, publish `dist/` (it's gitignored, like the catalog).
+
+### On Cloudflare
+
+`wrangler.jsonc` serves `dist/` as a Worker with static assets (no code of
+our own). Upload it from your machine rather than connecting the repository:
+the catalog isn't in git, and the generator takes far too long to run in a
+Cloudflare build.
+
+```sh
+npm run deploy    # build:site, then uploads dist/
+```
+
+The Worker is called `nightwatch`; change `name` in `wrangler.jsonc` for
+another one. The first run asks you to log in to Cloudflare and creates the
+Worker, which is then live at `https://nightwatch.<your-subdomain>.workers.dev`.
+To serve it from a subdomain of your own, add it under the Worker's
+**Settings → Domains & Routes → Custom domain** (the domain's DNS must be on
+Cloudflare; the record and certificate are set up for you). Then set
+`SETTINGS_URL` to that address (step 3). The site is far within the free
 plan's limits (25 MiB per file, 20,000 files).
 
 The page loads `catalog/manifest.json` from next to itself (and other catalog
@@ -82,8 +92,8 @@ from catalog files it cached before.
 
 ### Updating the catalog
 
-Run the generator, `node scripts/bundle-catalog.mjs`, and publish `site/`
-again (on Cloudflare Pages, `npm run deploy` does both). The phone sees the
+Run the generator, `npm run build:site`, and publish `dist/` again (on
+Cloudflare, `npm run deploy` does both). The phone sees the
 new manifest `id` the next time it fetches a new painting, drops the catalog
 files it cached and loads the new ones. Phone webviews may block plain HTTP,
 so use HTTPS for the published page.

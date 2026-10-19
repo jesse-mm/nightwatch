@@ -6,7 +6,7 @@ import globals from 'globals';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['**/build/**', 'generator/target/**', 'node_modules/**', 'site/vendor/**']),
+  globalIgnores(['**/build/**', 'dist/**', 'generator/target/**', 'node_modules/**', 'site/vendor/**']),
 
   // Vendored libraries: not ours to restyle, but they must still parse as ES5.
   {

@@ -14,11 +14,15 @@
     "emulator-images": "node scripts/emulator-images.mjs",
     "dev": "npm run emulator-images & npm run site",
     "build:watch": "cd watchface && NIGHTWATCH_ENV=production pebble build",
-    "deploy": "node scripts/bundle-catalog.mjs && npx --yes wrangler@4.147.0 pages deploy site --project-name \"${PAGES_PROJECT:-nightwatch}\""
+    "build:site": "node scripts/bundle-catalog.mjs && node scripts/build-site.mjs",
+    "preview": "npm run build:site && wrangler dev --port 8091",
+    "deploy": "npm run build:site && wrangler deploy"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "esbuild": "0.28.2",
     "eslint": "^10.12.0",
-    "globals": "^16.5.0"
+    "globals": "^16.5.0",
+    "wrangler": "^4.151.2"
   }
 }

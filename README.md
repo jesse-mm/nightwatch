@@ -27,7 +27,7 @@ date that stay out of its way.
 | `generator/` | Rust: the **generator** (fetches paintings politely, checks licenses, ranks Featured, plans a smart crop per screen, writes the catalog folder `catalog/web/`). |
 | `site/` | The custom settings page (plain HTML/CSS/JS, no Clay), static files. Also holds the JS shared with the phone (`catalog.js`, `render.js`, `settings.js`, `looks.js`). |
 | `catalog/` | Generated: the catalog folder `web/` (a manifest, Featured and one file per era), metadata and the Featured list. Not in git: `featured.json` and `paintings.jsonl` are published as a `catalog.tar.gz` release asset (see `scripts/catalog.sh`). |
-| `scripts/` | `bundle-catalog.mjs` (copies `catalog/web/` to `site/catalog/`), `catalog.sh`, `device-mockups.py`. |
+| `scripts/` | `bundle-catalog.mjs` (copies `catalog/web/` to `site/catalog/`), `build-site.mjs` (minifies `site/` into `dist/` for publishing), `catalog.sh`, `device-mockups.py`. |
 | `docker-compose.yml` | Runs the generator. |
 | `docs/` | [Supported watches](docs/DEVICES.md), [architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [publishing](docs/DEPLOY.md), [Rust for TypeScript developers](docs/RUST_FOR_TS_DEVS.md). |
 
@@ -128,9 +128,9 @@ against `settings.js`.
    docker compose run --rm generator         # everything
    node scripts/bundle-catalog.mjs           # copy catalog/web/ to site/catalog/
    ```
-2. **Host the settings page** (see [docs/DEPLOY.md](docs/DEPLOY.md)): publish
-   `site/` (with its generated `catalog/` folder) on any static host, e.g.
-   GitHub Pages. The phone loads the catalog from there too. To test locally:
+2. **Host the settings page** (see [docs/DEPLOY.md](docs/DEPLOY.md)): `npm run build:site`
+   writes `dist/` (`site/` with the catalog, minified); publish it on any static
+   host, e.g. `npm run deploy` for Cloudflare. The phone loads the catalog from there too. To test locally:
    `npm run dev` (serves `site/` on port 8090, plus the emulator's image
    helper on 8092).
 3. **Point the watchface at it:** edit `watchface/src/pkjs/config.production.js`

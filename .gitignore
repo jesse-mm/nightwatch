@@ -10,9 +10,18 @@ catalog/
 catalog.tar.gz
 catalog.tar.gz.sha256
 
+# The published site: site/ minified by scripts/build-site.mjs
+dist/
+
 # Copied from catalog/web by scripts/bundle-catalog.mjs
 site/catalog/
 
 # Chosen at build time by watchface/wscript (config.dev.js or config.production.js)
 watchface/src/pkjs/config.js
 watchface/src/pkjs/config.dev.js
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
