@@ -133,8 +133,9 @@ against `settings.js`.
    GitHub Pages. The phone loads the catalog from there too. To test locally:
    `npm run dev` (serves `site/` on port 8090, plus the emulator's image
    helper on 8092).
-3. **Point the watchface at it:** edit `watchface/src/pkjs/config.js` →
-   `SETTINGS_URL` (e.g. `http://<your-mac>:8090` for testing).
+3. **Point the watchface at it:** edit `watchface/src/pkjs/config.production.js`
+   → `SETTINGS_URL`. For testing, copy it to `config.dev.js` (not in git) with
+   e.g. `http://<your-mac>:8090`; a plain `pebble build` uses that one.
 4. **Build and install the watchface** with the Pebble SDK
    ([developer.repebble.com](https://developer.repebble.com)):
    ```sh

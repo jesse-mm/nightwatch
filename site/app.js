@@ -1204,7 +1204,7 @@ function saveToWatch() {
 $('save').addEventListener('click', saveToWatch);
 
 // ---------------- debug (?debug=true) ----------------
-// A dev build (DEBUG: true in the phone's config.js) opens the page with
+// A dev build (DEBUG: true in the phone's config.dev.js) opens the page with
 // ?debug=true. The pane shows the phone's state and runs actions on the phone:
 // the page closes with { debug: action } and the phone does it (runDebug).
 

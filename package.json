@@ -12,7 +12,9 @@
     "lint:fix": "eslint . --fix",
     "site": "npx --yes serve@14.2.4 -l 8090 site",
     "emulator-images": "node scripts/emulator-images.mjs",
-    "dev": "npm run emulator-images & npm run site"
+    "dev": "npm run emulator-images & npm run site",
+    "build:watch": "cd watchface && NIGHTWATCH_ENV=production pebble build",
+    "deploy": "node scripts/bundle-catalog.mjs && npx --yes wrangler@4.147.0 pages deploy site --project-name \"${PAGES_PROJECT:-nightwatch}\""
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

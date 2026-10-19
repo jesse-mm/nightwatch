@@ -435,7 +435,7 @@ can be deleted by hand.
   mangled). Real phones run PebbleKit JS on the phone's own JavaScript
   engine; the app tries an ArrayBuffer first, then the `x-user-defined` text
   trick, and checks for a real PNG. For the emulator only, a development
-  helper (`scripts/emulator-images.mjs`, `DEV_BASE64_URL` in config.js) sends
+  helper (`scripts/emulator-images.mjs`, `DEV_BASE64_URL` in config.dev.js) sends
   the images as base64.
 - **A pinned painting that disappears.** If the catalog no longer has it or
   the Rijksmuseum answers 404/410 for its image, the phone doesn't retry: it

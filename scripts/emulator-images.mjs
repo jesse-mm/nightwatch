@@ -6,7 +6,7 @@
 //   GET /base64?url=<IIIF image URL>   → the image as base64 (IIIF URLs only)
 //
 // Set DEV_BASE64_URL: 'http://<your-mac>:8092/base64?url=' in the phone's
-// config.js; the phone only uses it when binary downloads fail. Real phones
+// config.dev.js; the phone only uses it when binary downloads fail. Real phones
 // and the settings page fetch straight from IIIF.
 //
 //   node scripts/emulator-images.mjs [port]      (default 8092)

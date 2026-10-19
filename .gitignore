@@ -12,3 +12,7 @@ catalog.tar.gz.sha256
 
 # Copied from catalog/web by scripts/bundle-catalog.mjs
 site/catalog/
+
+# Chosen at build time by watchface/wscript (config.dev.js or config.production.js)
+watchface/src/pkjs/config.js
+watchface/src/pkjs/config.dev.js

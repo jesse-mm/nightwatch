@@ -28,16 +28,22 @@ and one file per era, ~1.1 MB together). It's generated and not in git.
 
 ## 3. Build the watchface
 
-Set `SETTINGS_URL` in `watchface/src/pkjs/config.js` to where the settings
-page will live (no trailing slash; the phone opens `SETTINGS_URL + '/#<state>'`),
-then build with the Pebble SDK
+Set `SETTINGS_URL` in `watchface/src/pkjs/config.production.js` to where the
+settings page will live (no trailing slash; the phone opens
+`SETTINGS_URL + '/#<state>'`), then build with the Pebble SDK
 ([developer.repebble.com](https://developer.repebble.com)):
 
 ```sh
+npm run build:watch                # → watchface/build/watchface.pbw (~240 KB)
 cd watchface
-pebble build                       # → build/watchface.pbw (~240 KB)
 pebble install --phone <phone-ip>
 ```
+
+The build picks its settings file: `npm run build:watch` always uses
+`config.production.js`. A plain `pebble build` uses `config.dev.js` when it
+exists (it's not in git, see "Testing locally") and `config.production.js`
+otherwise; `NIGHTWATCH_ENV=dev` or `production` forces one. The build writes
+`config.js` to load the chosen file, so don't edit that one.
 
 The catalog isn't part of the app, so a new catalog needs no new `.pbw`.
 
@@ -49,6 +55,24 @@ The catalog isn't part of the app, so a new catalog needs no new `.pbw`.
 including the generated `catalog/` folder (it's gitignored, so copy it in
 when you publish).
 
+### On Cloudflare Pages
+
+Upload `site/` directly rather than connecting the repository: the catalog
+isn't in git, and the generator takes far too long to run in a Pages build.
+
+```sh
+npm run deploy                         # bundles the catalog, then uploads site/
+PAGES_PROJECT=<name> npm run deploy    # project name other than nightwatch
+```
+
+The first run asks you to log in to Cloudflare and creates the project, which
+is then live at `https://<name>.pages.dev`. To serve it from a subdomain of
+your own, add it under the project's **Custom domains**: if the domain's DNS
+is on Cloudflare the record and certificate are set up for you; otherwise add
+a `CNAME <subdomain> → <name>.pages.dev` record at your DNS provider. Then
+set `SETTINGS_URL` to that address (step 3). The site is far within the free
+plan's limits (25 MiB per file, 20,000 files).
+
 The page loads `catalog/manifest.json` from next to itself (and other catalog
 files only when it needs them) and pictures straight from the Rijksmuseum's
 IIIF server, so it needs nothing else. The phone loads its catalog files from
@@ -59,9 +83,10 @@ from catalog files it cached before.
 ### Updating the catalog
 
 Run the generator, `node scripts/bundle-catalog.mjs`, and publish `site/`
-again. The phone sees the new manifest `id` the next time it fetches a new
-painting, drops the catalog files it cached and loads the new ones. Phone webviews may
-block plain HTTP, so use HTTPS for the published page.
+again (on Cloudflare Pages, `npm run deploy` does both). The phone sees the
+new manifest `id` the next time it fetches a new painting, drops the catalog
+files it cached and loads the new ones. Phone webviews may block plain HTTP,
+so use HTTPS for the published page.
 
 ### Testing locally
 
@@ -71,18 +96,18 @@ npm run site               #   serves site/ on :8090 (npx serve)
 npm run emulator-images    #   only for the emulator, on :8092 (see below)
 ```
 
-Set `SETTINGS_URL` to `http://<your-mac>:8090` in `watchface/src/pkjs/config.js`,
-rebuild and install. That's all a real phone needs.
+Copy `watchface/src/pkjs/config.production.js` to `config.dev.js` next to it
+(not in git), set `SETTINGS_URL` to `http://<your-mac>:8090` there, then
+`pebble build` and install. That's all a real phone needs.
 
 The emulator's PebbleKit JS can't download binary data, so it can't fetch the
 PNG crops itself. `scripts/emulator-images.mjs` fetches them from the IIIF
 server and hands them over as base64 text; add
-`DEV_BASE64_URL: 'http://<your-mac>:8092/base64?url='` to your local
-`config.js` (leave it out for real use). With `DEV_GONE=<iiif id>` it answers
-404 for that image, to try what happens when the Rijksmuseum drops a pinned
-painting.
+`DEV_BASE64_URL: 'http://<your-mac>:8092/base64?url='` to `config.dev.js`.
+With `DEV_GONE=<iiif id>` it answers 404 for that image, to try what happens
+when the Rijksmuseum drops a pinned painting.
 
-**Debug pane.** With `DEBUG: true` in your local `config.js`, the app opens the
+**Debug pane.** With `DEBUG: true` in `config.dev.js`, the app opens the
 settings page with `?debug=true` (you can also add it by hand in a browser).
 The pane shows what the phone stores (and how big it is), the catalog version
 on the phone and on the site, and the current painting, and has actions the
