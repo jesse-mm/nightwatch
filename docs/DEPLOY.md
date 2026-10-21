@@ -1,9 +1,9 @@
 # Publishing
 
 There is no server to run. The catalog lives next to the settings page, and
-the phone loads it from there. Publishing a new catalog means three steps:
-run the generator, copy its catalog into `site/`, and publish `site/` as
-static files. Building the `.pbw` is only needed for the first install or
+the phone loads it from there. Publishing a new catalog means two steps:
+run the generator, then build the site (`npm run build:site`, which copies the
+catalog in) and publish `dist/` as static files. Building the `.pbw` is only needed for the first install or
 when the watchface itself changes.
 
 ## 1. Run the generator
@@ -23,8 +23,10 @@ redo what changed. It writes the catalog folder `catalog/web/`.
 node scripts/bundle-catalog.mjs   # [catalog/web]
 ```
 
-This copies the folder to `site/catalog/` (`manifest.json`, `featured.json`
-and one file per era, ~1.1 MB together). It's generated and not in git.
+This copies the folder to `site/catalog/` (`manifest.json`, `featured.json`,
+one file per era, `undated.json` and `search.json`, ~1.75 MB together). It's
+generated and not in git. `npm run build:site` (step 4) runs it for you; run
+it by hand only for `npm run dev`.
 
 ## 3. Build the watchface
 
@@ -34,7 +36,7 @@ settings page will live (no trailing slash; the phone opens
 ([developer.repebble.com](https://developer.repebble.com)):
 
 ```sh
-npm run build:watch                # → watchface/build/watchface.pbw (~240 KB)
+npm run build:watch                # → watchface/build/watchface.pbw (~260 KB)
 cd watchface
 pebble install --phone <phone-ip>
 ```
@@ -46,6 +48,13 @@ otherwise; `NIGHTWATCH_ENV=dev` or `production` forces one. The build writes
 `config.js` to load the chosen file, so don't edit that one.
 
 The catalog isn't part of the app, so a new catalog needs no new `.pbw`.
+
+**Before uploading to the store**, build with `npm run build:watch`, never a
+plain `pebble build`: with a `config.dev.js` present, that one ships your
+local `SETTINGS_URL` and the debug pane. Bump `version` in
+`watchface/package.json` for every upload. Publishing your own copy rather
+than updating NightWatch? Give it its own `uuid` (and `displayName`) in
+`watchface/package.json`, so it doesn't collide with the published app.
 
 ## 4. Host the settings page
 
@@ -137,7 +146,7 @@ Read by the generator. `docker-compose.yml` passes on `RUST_LOG`,
 | `DATA_DIR` | ./data | The generator's working directory (`catalog.sqlite` + master images) |
 | `CATALOG_URL` | (empty) | Release asset for `scripts/catalog.sh fetch` |
 | `REQUESTS_PER_SECOND` | 1 | Pace of all outside requests |
-| `REFRESH_DAYS` | 25 | Re-check metadata/pools older than this |
+| `REFRESH_DAYS` | 1 | Re-check metadata/pools older than this; 1 makes every run fresh, while a run resumed the same day continues |
 | `CONTACT` | (empty) | Your email or URL for the User-Agent; needed for Wikipedia pageviews |
 | `FEATURED_PATH` | ./catalog/featured.json | The Featured list (the Docker image uses `/catalog/featured.json`) |
 | `BUNDLE_DIR` | ./catalog/web | Where to write the catalog folder (the Docker image uses `/catalog/web`) |

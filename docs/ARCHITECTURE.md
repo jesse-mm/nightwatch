@@ -8,15 +8,16 @@ slow, polite work happens once, ahead of time:
   fetches paintings from the Rijksmuseum, checks licenses, sorts paintings into
   eras, ranks the Featured 365 and plans a smart crop of each painting for
   every supported screen. It writes all of that to a folder of small JSON
-  files, `catalog/web/`. Run it monthly; it only redoes what changed. See
+  files, `catalog/web/`. Run it whenever you want a fresh catalog; it only
+  redoes what changed. See
   [GENERATOR.md](GENERATOR.md).
 - **Phone** (`watchface/src/pkjs/`, PebbleKit JS): loads the catalog from the
   settings page's host, one file at a time. It picks the painting, asks IIIF
   for the planned crop, tones, dithers and frames it, and streams the bytes to
   the watch.
 - **Settings page** (`site/`): static files plus a copy of the catalog folder
-  (`site/catalog/`), hosted anywhere (e.g. GitHub Pages). See
-  [DEPLOY.md](DEPLOY.md).
+  (`site/catalog/`), built into `dist/` and hosted on any static host (we use
+  Cloudflare). See [DEPLOY.md](DEPLOY.md).
 
 ```
 generator ──▶ catalog/web/ ──▶ site/catalog/ ─┬─▶ phone    ──▶ IIIF crop (PNG)  ──▶ tone, dither, frame ──▶ watch
@@ -25,8 +26,8 @@ generator ──▶ catalog/web/ ──▶ site/catalog/ ─┬─▶ phone    �
 
 `node scripts/bundle-catalog.mjs` copies `catalog/web/` to `site/catalog/`
 (generated, not in git). Nothing is bundled into the watch app, so a new
-catalog needs no new `.pbw`: publish `site/` again and the phone picks it up
-the next time it fetches a new painting.
+catalog needs no new `.pbw`: run `npm run build:site`, publish `dist/` again
+and the phone picks it up the next time it fetches a new painting.
 
 The phone and the page share their logic: `catalog.js`, `render.js`,
 `settings.js` and `looks.js` live in `site/` and are symlinked into
@@ -78,7 +79,7 @@ changed, so the midnight Hello does nothing on most days for weekly/monthly.
 - **Featured** takes `catalog.featured(N)`, where *N* is the day of the year
   of the period's first day: weekly shows that Monday's Featured painting,
   monthly the 1st's, so all rotations walk the same year.
-- **Surprise me** takes `catalog.random(catalog.poolFor(era))`.
+- **Selection** (random) takes `catalog.random(catalog.poolFor(era))`.
 - **Pinned** (a key set via Advanced in the settings, found with
   `catalog.resolve`) always shows that painting; rotation doesn't apply until
   it's unpinned. The settings page hands the phone the pinned painting's row,
@@ -177,6 +178,7 @@ manifest and the other files.
 | `1800s.json` | 1,215 | The 1800s |
 | `1900s.json` | 92 | The 1900s |
 | `undated.json` | 1 | Paintings without a usable date |
+| `search.json` | 4,868 | Every painting, for the pin search (see below) |
 
 Every painting is in exactly one era file (or `undated.json`); Featured ones
 are also in `featured.json`. A painting's era comes from the Rijksmuseum's
@@ -283,7 +285,7 @@ The page is in English (`en-US`) and Dutch (`nl-NL`).
   and teach `supported()` in `i18n.js` which tags map to it.
 
 
-**Search.** `search.json` (~570 KB, ~160 KB gzipped) lists every painting as
+**Search.** `search.json` (~590 KB, ~180 KB gzipped) lists every painting as
 `[key, title, artist, date, objectNumber, pool, iiif]`, with the same `id`;
 suggestions show a 128 px square thumbnail cut by the IIIF server (`…/square/128,128/0/default.jpg`). The
 settings page loads it only when someone types in the pin field, matches every
@@ -407,6 +409,7 @@ catalog/                                (not in git; release artifact: scripts/c
     manifest.json, featured.json        shared fields and file list; Featured, day-of-year order
     pre1600.json … 1900s.json           one file per era
     undated.json                        paintings without a usable date
+    search.json                         every painting, for the pin search
   featured.json                         the Featured list, rank order
   paintings.jsonl                       one painting per line: metadata, eras, hashes (for diffs)
 site/catalog/                           copy of catalog/web/, published with the page (generated)
@@ -448,4 +451,27 @@ can be deleted by hand.
   `SETTINGS_URL`, so it can only pick a new painting while the site is
   reachable (or from catalog files it cached before). Showing the current
   painting needs neither the site nor the network.
-- **App size.** The `.pbw` is ~240 KB; the catalog isn't in it.
+- **App size.** The `.pbw` is ~260 KB; the catalog isn't in it.
+
+## Checked, and still to check
+
+Built with Pebble SDK 4.33.1 (`pebble sdk install latest`). Checked against the live
+services and the SDK emulators (basalt, chalk, emery, gabbro):
+
+- **Rijksmuseum API.** The search URL works as is. Object records must be requested
+  with plain `Accept: application/ld+json`; adding `profile=` gets a 400. The image
+  license is read from `subject_to` on the VisualItem (the CC0 under `subject_of` is
+  the metadata license, not the artwork's).
+- **LECO glyphs.** `LECO_20_BOLD_NUMBERS` includes `-`, so the date renders as `15-10`.
+- **Text box insets.** The per-size font insets in `TEXT_SIZES` (`main.c`) give the
+  readability box 3 px of padding above and below the digits.
+
+Still to check on a real watch:
+
+- **Binary downloads.** The phone downloads the PNG crop with an ArrayBuffer
+  XHR, falling back to the `x-user-defined` text trick. The emulator can't do
+  either (it uses a development helper instead), so check on a real iPhone and
+  Android phone that new paintings arrive. (Checked on one phone so far.)
+- **Color tuning.** "Daylight / Indoors / Backlight" stretch the simulated palettes;
+  compare them on a real screen and pick a default (`palette` in the phone's
+  defaults, `site/settings.js`).

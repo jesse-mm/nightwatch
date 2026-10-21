@@ -16,7 +16,7 @@ cp .env.example .env                         # set CONTACT
 docker compose run --rm generator            # full run, also writes catalog/paintings.jsonl
 docker compose run --rm generator nightwatch-generator --help
 docker compose run --rm generator nightwatch-generator --limit 20   # test run
-node scripts/bundle-catalog.mjs              # copy catalog/web/ to site/catalog/
+npm run build:site                           # copy catalog/web/ into the site, build dist/
 ```
 
 Options replace the service's default command, so name the binary when you
@@ -33,7 +33,7 @@ cargo run --release --manifest-path generator/Cargo.toml -- --export catalog/pai
 | `--export FILE` | Also write `paintings.jsonl`, for diffs (`EXPORT_PATH`) |
 | `--rps 0.5` | Requests per second to outside services; 0.5 = one every 2 seconds (`REQUESTS_PER_SECOND`, default 1) |
 | `--contact TEXT` | Your email or a URL, sent in the User-Agent (`CONTACT`) |
-| `--refresh-days 0` | Re-check every painting's metadata now (`REFRESH_DAYS`, default 25) |
+| `--refresh-days 0` | Re-check every painting's metadata now, even if checked today (`REFRESH_DAYS`, default 1) |
 | `--featured FILE` | The Featured list (`FEATURED_PATH`, default `./catalog/featured.json`) |
 | `--refresh-featured` | Rebuild the Featured list (e.g. once a year) |
 | `--limit 20` | Test run: fetch and plan only 20 paintings |
@@ -70,8 +70,8 @@ recorded with its hash, and the next run continues where it left off.
 6. **Write**: the catalog folder `catalog/web/` (`--bundle`) and, with
    `--export`, `paintings.jsonl`.
 
-Then run `node scripts/bundle-catalog.mjs` to copy `catalog/web/` to
-`site/catalog/`, and publish `site/` (see [DEPLOY.md](DEPLOY.md)). No new
+Then run `npm run build:site` (it copies `catalog/web/` to `site/catalog/` and
+builds `dist/`) and publish `dist/` (see [DEPLOY.md](DEPLOY.md)). No new
 `.pbw` is needed.
 
 ## Being polite
@@ -91,7 +91,7 @@ headers, so we stay well below anything that could matter.
 
 | What | Redone when |
 |---|---|
-| Pools | older than `REFRESH_DAYS` (25) |
+| Pools | older than `REFRESH_DAYS` (1) |
 | Featured list (`catalog/featured.json`) | only when missing or with `--refresh-featured` |
 | Metadata | older than `REFRESH_DAYS`; marked *changed* only if its hash differs |
 | Master image | its IIIF URL changed, or the file is missing |
@@ -118,8 +118,9 @@ catalog/featured.json               the Featured list (see below)
 ```
 
 `catalog/web/` holds `manifest.json`, `featured.json`, one file per era
-(`pre1600.json`, `1600s.json`, `1700s.json`, `1800s.json`, `1900s.json`) and
-`undated.json`. It is described in
+(`pre1600.json`, `1600s.json`, `1700s.json`, `1800s.json`, `1900s.json`),
+`undated.json` and `search.json` (every painting, for the pin search). It is
+described in
 [ARCHITECTURE.md](ARCHITECTURE.md#the-catalog-catalogweb) and
 [`docs/schema/catalog.schema.json`](schema/catalog.schema.json). Only
 paintings with a crop plan and an image on the IIIF server make it in.
@@ -171,9 +172,9 @@ For the ~4,900 paintings in the collection:
 |---|---|
 | First run (metadata + master image, 5–7 requests per painting), `--rps 4` | ~2.5 hours |
 | First run at the default 1 request/s | 7–10 hours |
-| Monthly run (metadata only, 3–5 requests per painting), 1 request/s | 4–7 hours |
+| Later runs (metadata only, 3–5 requests per painting), 1 request/s | 4–7 hours |
 | Planning all 4,868 paintings (all cores) | ~12 seconds |
 | Master images (~0.17 MB each) | ~0.8 GB |
-| `catalog/web/` | ~1.1 MB in 8 files; the largest, `1600s.json`, ~480 KB |
+| `catalog/web/` | ~1.75 MB in 9 files; the largest, `search.json`, ~590 KB (`1600s.json` ~480 KB) |
 
 The default of 1 request per second stays gentle on purpose.

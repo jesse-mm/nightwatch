@@ -1,8 +1,52 @@
 # NightWatch
 
-*Art first, time second.* A Pebble watchface that hangs a different public-domain
-painting from the Rijksmuseum on your wrist every day, with a small LECO time and
-date that stay out of its way.
+NightWatch brings centuries of fine art to your Pebble watch. Powered by the
+Rijksmuseum's open-data collection.
+
+Every day it hangs a different public-domain painting on your wrist, cropped
+for your watch's exact screen, with a small time and date that stay out of
+its way.
+
+**[Get it on the Rebble appstore](https://apps.repebble.com/d89b36f0b3e247d580863764)**
+
+| Pebble Time | Pebble Time Round | Pebble Time 2 | Pebble Round 2 |
+|:---:|:---:|:---:|:---:|
+| ![The Night Watch on a Pebble Time](docs/images/screenshots/basalt/1-night-watch.png) | ![The Milkmaid on a Pebble Time Round](docs/images/screenshots/chalk/2-milkmaid.png) | ![The Jewish Bride on a Pebble Time 2](docs/images/screenshots/emery/4-jewish-bride.png) | ![The Syndics on a Pebble Round 2](docs/images/screenshots/gabbro/5-syndics.png) |
+
+## Features
+
+- **A new painting every day**, weekly or monthly, from the 365 Featured
+  paintings (the Rijksmuseum works most read about on Wikipedia) or a random
+  Selection, optionally from one era. Only public-domain and openly licensed
+  works.
+- **Made for your screen**: 144×168, 180×180 round, 200×228 or 260×260 round,
+  on the color Pebbles (Time, Time Steel, Time Round, Time 2, Round 2; see
+  [Supported watches](docs/DEVICES.md)).
+- **Smart crop** that finds faces, detail and color and keeps a portrait's
+  head in view, or *Contain* to see the whole painting. Zoom in up to 200 % and
+  move the view; it's remembered per painting.
+- **Frames**: wood, gold, a gallery mat or none.
+- **Colors made for the Pebble screen**: dithered to its 64 colors, with tuning
+  for daylight, indoor or backlit viewing, plus brightness and contrast.
+- **Date and time** in the Pebble's LECO font: 12/24h, several date formats,
+  three sizes, nine positions, an optional dark box for readability.
+- **Auto hide**: the painting stays clean until you flick your wrist.
+- **Pin a painting** you love: search by title or artist, or paste an object
+  number or link.
+- **A live preview** on the settings page that shows exactly what the watch
+  will show, a zoomable full-resolution view of the painting, a short tour,
+  and backup and restore. In English and Dutch.
+
+All settings and their defaults: [docs/SETTINGS.md](docs/SETTINGS.md).
+
+## How it works
+
+There is no server. A **generator** does the slow work once, ahead of time,
+and writes a catalog of small JSON files. The catalog is published next to the
+settings page as static files. The **phone** loads the catalog file it needs,
+asks the Rijksmuseum's IIIF image server for the planned crop at the screen's
+exact size, adjusts the colors, adds the frame and streams the pixels to the
+**watch**.
 
 ```
 ┌──────────────┐  once a day   ┌──────────────────┐  crop (PNG)   ┌──────────────────┐
@@ -14,195 +58,136 @@ date that stay out of its way.
                                          │           ▲
                        catalog/web/ ─────┴───────────┘  (copied into site/catalog/)
                                 ▲
-                   ┌────────────┴─────┐  monthly, ~1 request/s
+                   ┌────────────┴─────┐  when you want a fresh catalog, ~1 request/s
                    │ generator (Rust) │ ◀── data.rijksmuseum.nl, iiif.micr.io, wikidata.org
                    └──────────────────┘
 ```
 
-## What's in here
-
 | Path | What it is |
 |---|---|
-| `watchface/` | The Pebble project: C watchface (`src/c/main.c`) and phone-side JS (`src/pkjs/`). |
-| `generator/` | Rust: the **generator** (fetches paintings politely, checks licenses, ranks Featured, plans a smart crop per screen, writes the catalog folder `catalog/web/`). |
-| `site/` | The custom settings page (plain HTML/CSS/JS, no Clay), static files. Also holds the JS shared with the phone (`catalog.js`, `render.js`, `settings.js`, `looks.js`). |
-| `catalog/` | Generated: the catalog folder `web/` (a manifest, Featured and one file per era), metadata and the Featured list. Not in git: `featured.json` and `paintings.jsonl` are published as a `catalog.tar.gz` release asset (see `scripts/catalog.sh`). |
-| `scripts/` | `bundle-catalog.mjs` (copies `catalog/web/` to `site/catalog/`), `build-site.mjs` (minifies `site/` into `dist/` for publishing), `catalog.sh`, `device-mockups.py`. |
-| `docker-compose.yml` | Runs the generator. |
-| `docs/` | [Supported watches](docs/DEVICES.md), [architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [publishing](docs/DEPLOY.md). |
+| `generator/` | Rust: fetches paintings, checks licenses, ranks Featured, plans a smart crop per screen, writes `catalog/web/` |
+| `watchface/` | The Pebble project: the C watchface (`src/c/main.c`) and the phone-side JS (`src/pkjs/`) |
+| `site/` | The settings page (plain HTML/CSS/JS), plus the JS shared with the phone (`catalog.js`, `render.js`, `settings.js`, `looks.js`) |
+| `scripts/` | Build and helper scripts: `bundle-catalog.mjs`, `build-site.mjs`, `catalog.sh`, `emulator-images.mjs`, `device-mockups.py` |
+| `docs/` | The details, see below |
 
-## Features
+The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-- A random painting each day (public domain / CC only), rendered for *your* watch's
-  exact screen: 144×168, 180×180 round, 200×228 or 260×260 round. Color watches
-  only for now (Pebble Time, Time Steel, Time Round, Time 2, Round 2; see
-  [Supported watches](docs/DEVICES.md)).
-- No server: the catalog is a few static JSON files next to the settings page
-  (the phone only loads the one it needs), and the phone asks the Rijksmuseum's
-  IIIF image server for the crop at the screen's exact size, so no stretching.
-  Color tuning and frames are applied on the phone, so changing them is instant
-  and needs no download.
-- Paintings that almost fit (≤ 20 px off) get a simple center crop; very wide or tall
-  ones get a smart crop that finds faces, detail and color, and keeps the head of
-  a portrait. Or choose Contain to see the whole painting.
-- **Zoom and position:** zoom a Cover view in up to 200 % and move it anywhere
-  (drag the preview, arrow buttons, Reset), saved per painting.
-- Colors are dithered to Pebble's 64-color palette with optional tuning for
-  daylight, indoor or backlit viewing (based on pebble-color-optimizer).
-- **Date & time:** time on/off, 12/24h (follows the phone by default), hide AM/PM,
-  date on/off as DD, DD-MM or MM-DD with a `-`, `/` or `.` separator, all in LECO.
-- **Auto hide:** the painting stays clean; flick your wrist to see the time for
-  1 to 60 minutes (default 1).
-- **Frames:** none (default), gold, wood or a gallery mat, drawn into the bitmap in
-  exact Pebble colors. The painting is cropped to fit the opening.
-- **Live preview:** crop, frame, color settings and "Hang a different painting"
-  update the watch preview on the settings page straight away; nothing reaches
-  the watch until you save. The preview shows how the painting looks on a Pebble
-  Time 2 screen indoors or in daylight (from measured palettes, with the screen's
-  pixel grid), and a small copy stays pinned at the top while you scroll.
-- **Advanced color settings:** dithering (Atkinson, 50:50 checkerboard or off),
-  brightness and contrast (-100 to 100), with a reset. Applied on the phone.
-- **Featured:** the 365 Rijksmuseum paintings most read about on Wikipedia (page
-  views over the last year, all languages), one for each day of the year in a
-  fixed order. Topped up with other paintings when fewer have an article. The
-  list lives in `catalog/featured.json`, shared as a release artifact, and is only
-  rebuilt on request.
-- **Rotation:** a new painting daily, weekly or monthly, or Off to keep the current
-  one. Show Featured or "Surprise me" (random, optionally from one century:
-  before 1600, or the 1600s, 1700s, 1800s or 1900s; there's no 2000s option,
-  the few 21st-century paintings are still in copyright).
-- **Pin a painting** (Advanced): enter an object number (`SK-C-5`), Rijksmuseum id
-  or a link to the painting. Pinning turns rotation off until you unpin.
-- **Explore:** zoom into the full-resolution painting in the settings page, with a
-  minimap, streamed from the museum's IIIF image server.
-- **Support the Rijksmuseum:** the settings page links to the museum's donation page
-  (Dutch for Dutch-language phones).
-- **Improve readability:** a dark box behind the time and date (off by default;
-  without it the digits get a thin black outline).
-- The settings page shows today's painting, its artist, a link to the object on
-  rijksmuseum.nl and to the full image, plus attribution.
+## 1. How the generator works
 
-## Defaults
+The generator (`generator/`, binary `nightwatch-generator`) builds the
+painting catalog. It:
 
-What a new install starts with. A painting without a saved look gets the
-painting defaults again (colors, zoom and position); crop, frame and time
-placement carry over from the previous painting.
+1. crawls the Rijksmuseum's Search API for paintings with an image, and again
+   per century for the era filter;
+2. resolves each painting's Linked Art record and keeps only works marked
+   public domain, CC0, CC BY or CC BY-SA;
+3. downloads one 1200 px master image per painting, for planning only;
+4. ranks the Featured 365 by Wikipedia page views (all languages, last 12
+   months), only when that list is missing or you ask for a refresh;
+5. plans a Cover crop of every painting for each of the four screens, with a
+   smart crop for paintings that don't almost fit;
+6. writes `catalog/web/`: a manifest, the Featured list, one file per era and
+   a search index (~1.75 MB together).
 
-| Group | Setting | Default |
-|---|---|---|
-| Painting | Crop | Cover |
-| | Zoom | 100 % (the smart crop's view) |
-| | Frame | Wood |
-| | Color tuning | Accurate |
-| | Dithering | Atkinson |
-| | Brightness, contrast | 0 |
-| Swap painting | How often | Daily |
-| | Collection | Featured |
-| | Paintings from (Selection only) | Any era |
-| Date & time | Show time | On |
-| | Clock format | Auto (follows the watch), AM/PM shown in 12-hour |
-| | Show date | On |
-| | Date format | Day only (17) |
-| | Separator | Slash (/), for day-month formats |
-| | Position & size | Bottom right (round watches: bottom center), size S |
-| | Auto hide | On: a flick shows the time for 1 minute |
-| | Improve readability | Off |
+It is polite (one request per second by default, backing off on errors), safe
+to stop at any time, and only redoes what changed. Run it whenever you want a
+fresh catalog, for example to pick up paintings the Rijksmuseum added:
 
-Before the watch has a painting, the settings page previews Vermeer's *Woman
-Reading a Letter* (SK-C-251); saving hangs it (not pinned), so the watch shows
-what the preview showed. `FIRST_PAINTING` in `site/app.js`.
+```sh
+cp .env.example .env                                               # set CONTACT
+scripts/catalog.sh fetch                                           # optional: reuse the shared Featured list
+docker compose run --rm generator nightwatch-generator --limit 20  # quick test run
+docker compose run --rm generator                                  # everything (the first run takes hours)
+```
 
-The defaults live in `site/settings.js` (shared by the phone and the settings
-page), with the watch's own copy in `default_settings()` in
-`watchface/src/c/main.c` (used before the phone has sent anything) and the
-schema in `docs/schema/settings.schema.json`; `npm test` checks the schema
-against `settings.js`.
+Options, timings and the release artifact: [docs/GENERATOR.md](docs/GENERATOR.md).
 
-## Quick start
+## 2. How the app is built
 
-1. **Generate the catalog** (see [docs/GENERATOR.md](docs/GENERATOR.md); a full
-   first run takes hours):
-   ```sh
-   cp .env.example .env                      # set CONTACT
-   docker compose run --rm generator nightwatch-generator --limit 20   # quick test run
-   docker compose run --rm generator         # everything
-   node scripts/bundle-catalog.mjs           # copy catalog/web/ to site/catalog/
-   ```
-2. **Host the settings page** (see [docs/DEPLOY.md](docs/DEPLOY.md)): `npm run build:site`
-   writes `dist/` (`site/` with the catalog, minified); publish it on any static
-   host, e.g. `npm run deploy` for Cloudflare. The phone loads the catalog from there too. To test locally:
-   `npm run dev` (serves `site/` on port 8090, plus the emulator's image
-   helper on 8092).
-3. **Point the watchface at it:** edit `watchface/src/pkjs/config.production.js`
-   → `SETTINGS_URL`. For testing, copy it to `config.dev.js` (not in git) with
-   e.g. `http://<your-mac>:8090`; a plain `pebble build` uses that one.
-4. **Build and install the watchface** with the Pebble SDK
-   ([developer.repebble.com](https://developer.repebble.com)):
-   ```sh
-   cd watchface
-   pebble build
-   pebble install --phone <phone-ip>      # or --emulator basalt
-   ```
-   The emulator can't download binary data, so for the emulator also run
-   `npm run emulator-images` and set `DEV_BASE64_URL` (see
-   [docs/DEPLOY.md](docs/DEPLOY.md#testing-locally)).
-5. Open the watchface settings in the Pebble app.
+The watchface is a standard Pebble project built with the
+[Pebble SDK](https://developer.repebble.com) (4.33). The catalog isn't part of
+the app: the phone loads it from the settings page's host, so a new catalog
+never needs a new `.pbw`.
 
-## Gestures
+The phone-side JS gets its settings from one of two files in
+`watchface/src/pkjs/`, picked at build time:
 
-Watchfaces don't receive button presses on Pebble, so gestures use the accelerometer
-"tap" event (a flick of the wrist):
+| File | In git | Used by | Holds |
+|---|---|---|---|
+| `config.production.js` | yes | `npm run build:watch` | `SETTINGS_URL`, where the settings page and catalog live |
+| `config.dev.js` | no | a plain `pebble build`, when the file exists | your local `SETTINGS_URL`, plus `DEV_BASE64_URL` and `DEBUG` for testing |
 
-| Gesture | Effect |
-|---|---|
-| One flick | Shows the time for the chosen number of minutes (when *Auto hide* is on) |
+```sh
+npm run build:watch                     # release build → watchface/build/watchface.pbw
+cd watchface
+pebble install --phone <phone-ip>       # or --emulator basalt|chalk|emery|gabbro
+```
 
-**Touch (later).** The Pebble Time 2 and Round 2 have a touchscreen, but touch is
-[not available to watchfaces yet](https://developer.repebble.com/guides/events-and-services/touch.md)
-(SDK 4.33, watchapps only). Once it is, ideas: tap to show the time, swipe to show the
-painting's title and artist, long-press to cycle the color tuning. Keep an eye on the
-[SDK changelogs](https://developer.repebble.com/sdk/changelogs/).
+Always upload a build made with `npm run build:watch`, and bump `version` in
+`watchface/package.json` for each upload. For local testing (dev server,
+emulator, debug pane) see
+[docs/DEPLOY.md](docs/DEPLOY.md#testing-locally).
+
+## 3. How to deploy your own instance
+
+You need the Pebble SDK, Node 20.19+ and Docker (or Rust) for the generator.
+
+1. **Generate the catalog** (step 1 above).
+2. **Build and publish the site.** `npm run build:site` copies the catalog
+   into the site and writes a minified copy to `dist/`. Publish `dist/` on any
+   static host over HTTPS. For Cloudflare, `npm run deploy` builds and uploads
+   it with wrangler (the Worker name is in `wrangler.jsonc`).
+3. **Point the watchface at it.** Set `SETTINGS_URL` in
+   `watchface/src/pkjs/config.production.js` to your site (no trailing slash).
+4. **Make it your own app.** Give it its own `uuid` and `displayName` in
+   `watchface/package.json`, so it doesn't collide with NightWatch.
+5. **Build and install** with `npm run build:watch` (step 2 above), then open
+   the watchface's settings in the Pebble app.
+
+When you rerun the generator later, only step 2 is needed: the phone notices
+the new catalog the next time it picks a painting. Step by step, with
+Cloudflare and custom domains: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Development
 
 ```sh
-npm install && npm run lint              # ESLint 10 (flat config) for all JS
-npm test                                 # render.js, catalog.js, settings and looks (watchface/test/)
-cd generator && cargo test               # unit tests for crop planning, license rules, catalog
+npm install
+npm run lint                     # ESLint for all JS
+npm test                         # render.js, catalog.js, settings and looks (watchface/test/)
+cd generator && cargo test       # crop planning, license rules, catalog
+npm run dev                      # settings page on :8090, emulator image helper on :8092
 ```
 
-## Verify on first run
+| Doc | What's in it |
+|---|---|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit: the daily flow, catalog format, crops, rendering, message keys |
+| [GENERATOR.md](docs/GENERATOR.md) | Running the generator, its options, what it redoes and how long it takes |
+| [DEPLOY.md](docs/DEPLOY.md) | Building, publishing and testing locally |
+| [SETTINGS.md](docs/SETTINGS.md) | Every setting and its default, gestures |
+| [DEVICES.md](docs/DEVICES.md) | Supported watches and their screens |
 
-Built with Pebble SDK 4.33.1 (`pebble sdk install latest`). Checked against the live
-services and the SDK emulators (basalt, chalk, emery, gabbro):
+## Contributing
 
-- **Rijksmuseum API.** The search URL works as is. Object records must be requested
-  with plain `Accept: application/ld+json`; adding `profile=` gets a 400. The image
-  license is read from `subject_to` on the VisualItem (the CC0 under `subject_of` is
-  the metadata license, not the artwork's).
-- **LECO glyphs.** `LECO_20_BOLD_NUMBERS` includes `-`, so the date renders as `15-10`.
-- **Text box insets.** The per-size font insets in `TEXT_SIZES` (`main.c`) give the
-  readability box 3 px of padding above and below the digits.
+Contributions and feature requests are welcome. Open an issue to report a bug,
+suggest a painting crop that went wrong, or propose a feature; pull requests
+are welcome too. For larger changes, open an issue first so we can talk it
+through. Please run `npm run lint` and `npm test` (and `cargo test` for the
+generator) before sending a pull request.
 
-Still to check on a real watch:
+## License and credits
 
-- **Binary downloads.** The phone downloads the PNG crop with an ArrayBuffer
-  XHR, falling back to the `x-user-defined` text trick. The emulator can't do
-  either (it uses a development helper instead), so check on a real iPhone and
-  Android phone that new paintings arrive. (Checked on one phone so far.)
+The code is [MIT](LICENSE) licensed.
 
-- **Color tuning.** "Daylight / Indoors / Backlight" stretch the simulated palettes;
-  compare them on a real screen and pick a default (`palette` in the phone's
-  defaults, `watchface/src/pkjs/index.js`).
+Paintings, images and metadata come from the Rijksmuseum, Amsterdam, via the
+[Rijksmuseum data services](https://data.rijksmuseum.nl/about/). NightWatch is
+an independent project, not affiliated with or endorsed by the Rijksmuseum. If
+you enjoy the paintings, consider
+[supporting the museum](https://www.rijksmuseum.nl/en/support/donate).
 
-## Credits
+The color approach is based on
+[pebble-color-optimizer](https://github.com/czmanix/pebble-color-optimizer)
+(MIT). The Featured list is ranked with Wikidata and Wikipedia page views.
 
-Artwork and data: Rijksmuseum, Amsterdam, via the
-[Rijksmuseum data services](https://data.rijksmuseum.nl/about/). Not affiliated with
-the Rijksmuseum. Color approach: czmanix/pebble-color-optimizer (MIT). See
-[NOTICE.md](NOTICE.md).
-
-## License
-
-The code is [MIT](LICENSE). The paintings, device photos and vendored
-libraries keep their own licenses; see [NOTICE.md](NOTICE.md).
+The paintings, device photos, fonts and vendored libraries keep their own
+licenses: see [NOTICE.md](NOTICE.md) for the full credits.
