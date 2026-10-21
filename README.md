@@ -169,10 +169,12 @@ npm run dev                      # settings page on :8090, emulator image helper
 
 ## Contributing
 
-Contributions and feature requests are welcome. Open an issue to report a bug,
-suggest a painting crop that went wrong, or propose a feature; pull requests
-are welcome too. For larger changes, open an issue first so we can talk it
-through. Please run `npm run lint` and `npm test` (and `cargo test` for the
+Contributions and feature requests are welcome.
+[Open an issue](https://github.com/jesse-mm/nightwatch/issues/new) to report a
+bug, suggest a painting crop that went wrong, or propose a feature, or browse
+the [open issues](https://github.com/jesse-mm/nightwatch/issues).
+[Pull requests](https://github.com/jesse-mm/nightwatch/pulls) are welcome too.
+For larger changes, open an issue first so we can talk it through. Please run `npm run lint` and `npm test` (and `cargo test` for the
 generator) before sending a pull request.
 
 ## License and credits
