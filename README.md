@@ -189,5 +189,5 @@ The color approach is based on
 [pebble-color-optimizer](https://github.com/czmanix/pebble-color-optimizer)
 (MIT). The Featured list is ranked with Wikidata and Wikipedia page views.
 
-The paintings, device photos, fonts and vendored libraries keep their own
+The paintings, fonts and vendored libraries keep their own
 licenses: see [NOTICE.md](NOTICE.md) for the full credits.
