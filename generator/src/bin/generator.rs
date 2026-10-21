@@ -1,7 +1,7 @@
 //! `nightwatch-generator`: builds the painting catalog (`catalog/web/`)
 //! the watchface and the settings page use.
 //!
-//! Run it monthly (or whenever); it only redoes work whose inputs changed. See
+//! Run it whenever you want a fresh catalog; it only redoes work whose inputs changed. See
 //! `--help` and docs/GENERATOR.md.
 
 use std::path::PathBuf;
@@ -23,7 +23,7 @@ OPTIONS (environment variable in brackets):
   --contact TEXT        your email or a URL, sent in the User-Agent [CONTACT]
                         (Wikimedia requires it for Wikipedia pageviews; without it
                         Featured is ranked by number of Wikipedia articles)
-  --refresh-days N      re-check metadata/pools older than this   [REFRESH_DAYS, 25]
+  --refresh-days N      re-check metadata/pools older than this   [REFRESH_DAYS, 1]
   --featured FILE       the Featured list (a release artifact); built only when missing
                         [FEATURED_PATH, ./catalog/featured.json]
   --refresh-featured    rebuild the Featured list (e.g. once a year, ~20 min)
@@ -50,7 +50,7 @@ fn parse_args() -> Result<Options> {
         export: std::env::var("EXPORT_PATH").ok().map(PathBuf::from),
         bundle: var("BUNDLE_DIR", PathBuf::from("./catalog/web")),
         requests_per_second: var("REQUESTS_PER_SECOND", 1.0),
-        refresh_days: var("REFRESH_DAYS", 25),
+        refresh_days: var("REFRESH_DAYS", 1),
         limit: None,
         only: Vec::new(),
         skip_fetch: false,
