@@ -201,3 +201,8 @@ Artwork and data: Rijksmuseum, Amsterdam, via the
 [Rijksmuseum data services](https://data.rijksmuseum.nl/about/). Not affiliated with
 the Rijksmuseum. Color approach: czmanix/pebble-color-optimizer (MIT). See
 [NOTICE.md](NOTICE.md).
+
+## License
+
+The code is [MIT](LICENSE). The paintings, device photos and vendored
+libraries keep their own licenses; see [NOTICE.md](NOTICE.md).

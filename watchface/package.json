@@ -4,6 +4,7 @@
   "version": "1.0.1",
   "keywords": ["pebble-app", "watchface", "art"],
   "private": true,
+  "license": "MIT",
   "dependencies": {},
   "pebble": {
     "displayName": "NightWatch",

@@ -1,6 +1,7 @@
 {
   "name": "nightwatch",
   "private": true,
+  "license": "MIT",
   "description": "Pebble watchface showing a daily public-domain painting from the Rijksmuseum",
   "type": "module",
   "engines": {
