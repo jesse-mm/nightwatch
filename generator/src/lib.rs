@@ -8,7 +8,7 @@
 //! never stored for the watch: the phone and the settings page ask the
 //! Rijksmuseum's IIIF server for exactly the planned crop.
 //!
-//! New to Rust? Start with `docs/RUST_FOR_TS_DEVS.md`, then read: generate →
+//! Reading order: generate →
 //! catalog → imaging → saliency → bundle. Toning, dithering and frames live in
 //! `site/render.js` (shared with the phone).
 

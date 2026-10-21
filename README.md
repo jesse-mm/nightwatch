@@ -29,7 +29,7 @@ date that stay out of its way.
 | `catalog/` | Generated: the catalog folder `web/` (a manifest, Featured and one file per era), metadata and the Featured list. Not in git: `featured.json` and `paintings.jsonl` are published as a `catalog.tar.gz` release asset (see `scripts/catalog.sh`). |
 | `scripts/` | `bundle-catalog.mjs` (copies `catalog/web/` to `site/catalog/`), `build-site.mjs` (minifies `site/` into `dist/` for publishing), `catalog.sh`, `device-mockups.py`. |
 | `docker-compose.yml` | Runs the generator. |
-| `docs/` | [Supported watches](docs/DEVICES.md), [architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [publishing](docs/DEPLOY.md), [Rust for TypeScript developers](docs/RUST_FOR_TS_DEVS.md). |
+| `docs/` | [Supported watches](docs/DEVICES.md), [architecture](docs/ARCHITECTURE.md), [generator](docs/GENERATOR.md), [publishing](docs/DEPLOY.md). |
 
 ## Features
 
