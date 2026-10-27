@@ -8,6 +8,7 @@
  *
  * Gestures (watchfaces get no buttons, so we use the accelerometer "tap"):
  *   flick wrist → show the time for a minute (when "hide until flick" is on)
+ * Every launch (also coming back from the menu) shows it the same way.
  */
 #include <pebble.h>
 
@@ -21,6 +22,9 @@
 #define ART_DATA_KEY 100
 /* How long a flick shows the time is a setting: 1..REVEAL_MAX_MIN minutes. */
 #define REVEAL_MAX_MIN 60
+/* The revealed time fades in and out in this many frames. */
+#define FADE_STEPS 8
+#define FADE_STEP_MS 40
 #define HELLO_RETRIES 5
 
 /* Color watches only (basalt, chalk, emery, gabbro), so the paintings can be
@@ -100,8 +104,11 @@ typedef struct {
   uint32_t size;
 } ArtMeta;
 
-static bool s_revealed;
+static bool s_revealed;         /* shown, or fading in or out */
 static AppTimer *s_reveal_timer;
+static int s_fade_level;        /* 0 = hidden .. FADE_STEPS = fully shown */
+static int s_fade_dir;          /* +1 fading in, -1 fading out */
+static AppTimer *s_fade_timer;
 static bool s_tap_subscribed;
 static int s_hello_tries;
 
@@ -345,10 +352,31 @@ static void inbox_received(DictionaryIterator *iter, void *ctx) {
 
 /* ---------------------------------------------------------------- gestures */
 
+static void fade_step(void *data) {
+  s_fade_level += s_fade_dir;
+  if (s_fade_level <= 0 || s_fade_level >= FADE_STEPS) {
+    s_fade_level = s_fade_level <= 0 ? 0 : FADE_STEPS;
+    s_fade_timer = NULL;
+    if (s_fade_level == 0) {
+      s_revealed = false;
+    }
+  } else {
+    s_fade_timer = app_timer_register(FADE_STEP_MS, fade_step, NULL);
+  }
+  layer_mark_dirty(s_text_layer);
+}
+
+/* Fade in (+1) or out (-1) from wherever the fade is now. */
+static void fade(int dir) {
+  s_fade_dir = dir;
+  if (!s_fade_timer) {
+    s_fade_timer = app_timer_register(FADE_STEP_MS, fade_step, NULL);
+  }
+}
+
 static void reveal_timeout(void *data) {
   s_reveal_timer = NULL;
-  s_revealed = false;
-  layer_mark_dirty(s_text_layer);
+  fade(-1);
 }
 
 static uint32_t reveal_ms(void) {
@@ -356,15 +384,22 @@ static uint32_t reveal_ms(void) {
   return (uint32_t)(m < 1 ? 1 : m) * 60000u;
 }
 
-static void tap_handler(AccelAxisType axis, int32_t direction) {
-  if (s_settings.hide_until_shake) {
-    s_revealed = true;
-    if (s_reveal_timer) {
-      app_timer_reschedule(s_reveal_timer, reveal_ms());
-    } else {
-      s_reveal_timer = app_timer_register(reveal_ms(), reveal_timeout, NULL);
-    }
+/* Show the time for the chosen minutes (when "hide until flick" is on). */
+static void reveal(void) {
+  if (!s_settings.hide_until_shake || !any_text_enabled()) {
+    return;
   }
+  s_revealed = true;
+  fade(+1);
+  if (s_reveal_timer) {
+    app_timer_reschedule(s_reveal_timer, reveal_ms());
+  } else {
+    s_reveal_timer = app_timer_register(reveal_ms(), reveal_timeout, NULL);
+  }
+}
+
+static void tap_handler(AccelAxisType axis, int32_t direction) {
+  reveal();
   layer_mark_dirty(s_text_layer);
 }
 
@@ -416,6 +451,42 @@ static void draw_text(GContext *ctx, const char *text, GFont font, GRect r, GTex
   }
 }
 
+/* One 8-bit color (0b11RRGGBB) part of the way from `from` to `to`. Each channel
+ * has only 4 levels, so a 2x2 ordered dither (`d` = 0..3) fills in between. */
+static uint8_t mix(uint8_t from, uint8_t to, int level, int d) {
+  uint8_t out = 0xC0;
+  for (int shift = 0; shift < 6; shift += 2) {
+    int a = (from >> shift) & 3;
+    int b = (to >> shift) & 3;
+    int v = a * (FADE_STEPS - level) + b * level;
+    out |= ((8 * v + (2 * d + 1) * FADE_STEPS) / (8 * FADE_STEPS)) << shift;
+  }
+  return out;
+}
+
+/* Text can't be drawn see-through, so after drawing it, blend `r` of the frame
+ * back toward the painting under it (s_art holds it pixel for pixel). */
+static void fade_rect(GContext *ctx, GRect r, int level) {
+  static const uint8_t dither[2][2] = { { 0, 2 }, { 3, 1 } };
+  GBitmap *fb = graphics_capture_frame_buffer(ctx);
+  if (!fb) {
+    return;
+  }
+  const uint8_t *art = gbitmap_get_data(s_art);
+  int16_t y0 = r.origin.y < 0 ? 0 : r.origin.y;
+  int16_t y1 = r.origin.y + r.size.h > s_screen.h ? s_screen.h : r.origin.y + r.size.h;
+  for (int16_t y = y0; y < y1; y++) {
+    GBitmapDataRowInfo row = gbitmap_get_data_row_info(fb, y);
+    int16_t x0 = r.origin.x > row.min_x ? r.origin.x : row.min_x;
+    int16_t x1 = r.origin.x + r.size.w - 1 < row.max_x ? r.origin.x + r.size.w - 1 : row.max_x;
+    const uint8_t *under = art + (size_t)y * s_stride;
+    for (int16_t x = x0; x <= x1; x++) {
+      row.data[x] = mix(under[x], row.data[x], level, dither[y & 1][x & 1]);
+    }
+  }
+  graphics_release_frame_buffer(ctx, fb);
+}
+
 static GSize measure(const char *text, GFont font, int16_t max_w) {
   return graphics_text_layout_get_content_size(text, font, GRect(0, 0, max_w, 60),
                                                GTextOverflowModeFill, GTextAlignmentLeft);
@@ -427,7 +498,8 @@ static void text_update(Layer *layer, GContext *ctx) {
   }
   /* Until the first painting arrives, always show the time so the face is
    * never just black. */
-  if (s_settings.hide_until_shake && !s_revealed && s_art_ready) {
+  bool hiding = s_settings.hide_until_shake && s_art_ready;
+  if (hiding && !s_revealed) {
     return;
   }
 
@@ -498,6 +570,13 @@ static void text_update(Layer *layer, GContext *ctx) {
                 GRect(x + ts.w + AMPM_GAP, ampm_top - size->date_inset, as.w + 4, as.h),
                 GTextAlignmentLeft, boxed);
     }
+  }
+
+  if (hiding && s_fade_level < FADE_STEPS && s_art) {
+    /* The box, or the text with its outline and some slack for glyph edges. */
+    int16_t pad = BOX_PAD + 2;
+    fade_rect(ctx, GRect(left - pad, top - pad, block_w + 2 * pad, block_h + 2 * pad),
+              s_fade_level);
   }
 }
 
@@ -618,6 +697,8 @@ static void init(void) {
   update_strings();
   tick_timer_service_subscribe(MINUTE_UNIT | DAY_UNIT, tick_handler);
   apply_tap_subscription();
+  /* Opening the menu closes a watchface; coming back launches it again. */
+  reveal();
 #if PBL_API_EXISTS(unobstructed_area_service_subscribe)
   unobstructed_area_service_subscribe((UnobstructedAreaHandlers){
     .change = unobstructed_change,

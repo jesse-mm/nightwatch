@@ -50,6 +50,9 @@ accelerometer "tap" event (a flick of the wrist):
 | Gesture | Effect |
 |---|---|
 | One flick | Shows the time for the chosen number of minutes (when *Auto hide* is on) |
+| Back to the watchface | Same as a flick: opening the menu closes a watchface, so every launch shows the time |
+
+The time fades in and out over about a third of a second.
 
 The watch only listens to the accelerometer while a setting needs it, to save
 battery.
