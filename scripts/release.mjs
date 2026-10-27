@@ -111,7 +111,7 @@ if (dryRun) {
 
 // The push and the release need GitHub access; find out before changing anything.
 try {
-  run('gh', ['auth', 'status'], { stdio: 'pipe' });
+  run('gh', ['auth', 'status', '--hostname', 'github.com'], { stdio: 'pipe' });
   run('git', ['push', '--dry-run', 'origin', 'main'], { stdio: 'pipe' });
 } catch (e) {
   fail(`can't reach GitHub (${e.stderr?.trim() || e.message}); try \`gh auth login\` and \`gh auth setup-git\``);
