@@ -8,7 +8,8 @@
  *
  * Gestures (watchfaces get no buttons, so we use the accelerometer "tap"):
  *   flick wrist → show the time for a minute (when "hide until flick" is on)
- * Every launch (also coming back from the menu) shows it the same way.
+ * Every launch (also coming back from the menu) shows it the same way, and so
+ * does the backlight turning on (Pebble Time 2 and Round 2).
  */
 #include <pebble.h>
 
@@ -403,13 +404,32 @@ static void tap_handler(AccelAxisType axis, int32_t direction) {
   layer_mark_dirty(s_text_layer);
 }
 
-/* Only listen to the accelerometer when a setting needs it (battery). */
+/* The backlight service only works on Pebble Time 2, Round 2 and 2 Duo;
+ * on older watches the SDK defines it as a do-nothing macro. */
+#ifndef backlight_service_subscribe
+#define HAS_BACKLIGHT_SERVICE 1
+/* The screen lit up (a button, a wrist shake): show the time too. */
+static void backlight_handler(bool on) {
+  if (on) {
+    reveal();
+  }
+}
+#endif
+
+/* Only listen to the accelerometer and backlight when a setting needs it
+ * (battery). */
 static void apply_tap_subscription(void) {
   bool want = any_text_enabled() && s_settings.hide_until_shake;
   if (want && !s_tap_subscribed) {
     accel_tap_service_subscribe(tap_handler);
+#ifdef HAS_BACKLIGHT_SERVICE
+    backlight_service_subscribe(backlight_handler);
+#endif
   } else if (!want && s_tap_subscribed) {
     accel_tap_service_unsubscribe();
+#ifdef HAS_BACKLIGHT_SERVICE
+    backlight_service_unsubscribe();
+#endif
   }
   s_tap_subscribed = want;
 }
@@ -716,6 +736,9 @@ static void init(void) {
 static void deinit(void) {
   if (s_tap_subscribed) {
     accel_tap_service_unsubscribe();
+#ifdef HAS_BACKLIGHT_SERVICE
+    backlight_service_unsubscribe();
+#endif
   }
   tick_timer_service_unsubscribe();
   app_message_deregister_callbacks();

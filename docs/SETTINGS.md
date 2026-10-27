@@ -51,6 +51,7 @@ accelerometer "tap" event (a flick of the wrist):
 |---|---|
 | One flick | Shows the time for the chosen number of minutes (when *Auto hide* is on) |
 | Back to the watchface | Same as a flick: opening the menu closes a watchface, so every launch shows the time |
+| Backlight turns on | Same as a flick (Pebble Time 2 and Round 2; older watches don't report the backlight) |
 
 The time fades in and out over about a third of a second.
 
