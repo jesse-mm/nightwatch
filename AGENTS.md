@@ -32,3 +32,12 @@ pebble emu-tap --emulator basalt                          # a wrist flick
 ```
 
 Opening the menu closes a watchface; coming back launches it again (`init()`).
+
+## Releases
+
+`npm run release` builds the store `.pbw` and the site zip, writes
+CHANGELOG.md from the conventional commits and publishes a GitHub release;
+see [docs/DEPLOY.md](docs/DEPLOY.md#releases). Use `--dry-run` to preview;
+the user's own notes go in `RELEASE_NOTES.md` (not in git).
+Commit messages feed the changelog, so keep them conventional
+(`feat(watchface): ...`).

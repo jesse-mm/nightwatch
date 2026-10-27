@@ -52,7 +52,43 @@ The catalog isn't part of the app, so a new catalog needs no new `.pbw`.
 **Before uploading to the store**, build with `npm run build:watch`, never a
 plain `pebble build`: with a `config.dev.js` present, that one ships your
 local `SETTINGS_URL` and the debug pane. Bump `version` in
-`watchface/package.json` for every upload. Publishing your own copy rather
+`watchface/package.json` for every upload; `npm run release` (below) does both.
+
+### Releases
+
+From a clean `main`, `npm run release` makes a release in one go
+(`scripts/release.mjs`):
+
+1. Reads the [conventional commits](https://www.conventionalcommits.org) since
+   the last `v*` tag and picks the version: `feat` → minor, `fix`/`perf` →
+   patch, `!` or `BREAKING CHANGE:` → major.
+2. Adds a section to [CHANGELOG.md](../CHANGELOG.md) (features, fixes and
+   performance; docs and chores are left out) and sets `version` in
+   `watchface/package.json`.
+3. Runs `npm run build:site` (needs `catalog/web`, see step 1) and
+   `npm run build:watch`, and checks the `.pbw` carries the new version.
+4. Commits `chore(release): x.y.z`, tags `vx.y.z`, pushes, and creates the
+   GitHub release with two files: `nightwatch-x.y.z.pbw` (upload it to the
+   store) and `nightwatch-site-x.y.z.zip` (`dist/`, the settings page with the
+   catalog, ready for any static host; the `.pbw` expects it at the
+   `SETTINGS_URL` in `config.production.js`).
+5. It doesn't deploy the live site. When `site/` changed since the last tag it
+   reminds you to run `npm run deploy`, so the settings page matches the new
+   watchface.
+
+**Your own notes.** Write anything you want to say about the release (a
+summary, thanks, upgrade tips) in `RELEASE_NOTES.md` at the repo root, as
+Markdown. It goes above the generated list, in CHANGELOG.md and on the GitHub
+release. The file isn't in git, and the release removes it once it's out.
+
+```sh
+npm run release -- --dry-run   # show the version and notes, change nothing
+npm run release -- minor       # force major | minor | patch | 1.2.0
+```
+
+It needs the Pebble SDK and the GitHub CLI (`gh auth login`, plus
+`gh auth setup-git` so `git push` can use it); it checks both before changing
+anything. Publishing your own copy rather
 than updating NightWatch? Give it its own `uuid` (and `displayName`) in
 `watchface/package.json`, so it doesn't collide with the published app.
 

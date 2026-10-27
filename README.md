@@ -125,7 +125,9 @@ pebble install --phone <phone-ip>       # or --emulator basalt|chalk|emery|gabbr
 ```
 
 Always upload a build made with `npm run build:watch`, and bump `version` in
-`watchface/package.json` for each upload. For local testing (dev server,
+`watchface/package.json` for each upload. `npm run release` does both, writes
+[CHANGELOG.md](CHANGELOG.md) and publishes the `.pbw` as a GitHub release
+([docs/DEPLOY.md](docs/DEPLOY.md#releases)). For local testing (dev server,
 emulator, debug pane) see
 [docs/DEPLOY.md](docs/DEPLOY.md#testing-locally).
 
