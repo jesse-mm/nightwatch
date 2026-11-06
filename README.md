@@ -31,6 +31,9 @@ its way.
 - **Date and time** in the Pebble's LECO font: 12/24h, several date formats,
   three sizes, nine positions, an optional dark box for readability.
 - **Auto hide**: the painting stays clean until you flick your wrist.
+- **Works without your phone**: Pebble Time 2 and Round 2 keep the next few
+  paintings on the watch, so a new one still arrives at midnight when the
+  phone is away.
 - **Pin a painting** you love: search by title or artist, or paste an object
   number or link.
 - **A live preview** on the settings page that shows exactly what the watch

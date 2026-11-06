@@ -63,6 +63,43 @@ the browser.
    after the menu. The phone skips sending a painting the watch already shows.
 6. At midnight the watch's tick handler sends Hello again with reason 2, and the
    date check on the phone picks a new painting when one is due.
+7. Where the watch has room, the phone also sends it the next few paintings
+   ahead of time, so a new one is hung on time without the phone; see
+   [paintings sent ahead](#paintings-sent-ahead).
+
+### Paintings sent ahead
+
+Watches that can store enough (Pebble Time 2, Round 2 and 2 Duo, 1 MB of app
+storage) keep up to 3 paintings for the coming periods. The watch reports how
+many fit (`QueueCap`) and which it has (`QueueIds`, next due first) in every
+Hello; older watches report 0 and work as before.
+
+- **Phone** (`syncQueue` in `index.js`). For a daily, weekly or monthly
+  rotation (not pinned, not off) it plans the periods after the current one
+  (`rotation.upcoming`), fetches each one's crop like a normal painting (with
+  the look it will get: its saved look, or fresh colors, zoom and position)
+  and keeps them in `nw-queue`, one download at a time. It renders each with
+  the current frame and tuning and streams it in the background, after
+  anything else waiting (`QueueBegin` with `ArtId` and `QueueFrom`, the Unix
+  time the period starts; `ImgOffset` + `QueueChunk` in 256-byte multiples;
+  `QueueEnd`). A changed frame, tuning, crop, selection or rotation changes
+  the plan or the ids: `QueueKeep` tells the watch which to keep, and the
+  rest are sent again.
+- **Watch** (`queue_*` in `main.c`). Each chunk goes straight into storage
+  (`QUEUE_DATA_KEY` + slot × `QUEUE_SLOT_KEYS`), so receiving needs no extra
+  memory; the list (`QUEUE_META_KEY`) is sorted by due time. On launch and
+  every minute it hangs the latest painting that is due, drops the ones
+  before it, saves it as the current painting and sends Hello 2.
+- **Back on the phone.** A Hello whose `ArtId` is a queued painting makes
+  that one current (`nw-art`, its look in the settings) and fetches the next.
+  If a period starts and the phone sees it first, it sends `QueueShow` instead
+  of the image. A painting from a later period than the phone's own clock
+  counts as current (`rotation.isAfter`), so a watch a few seconds ahead at
+  midnight doesn't make the phone fetch yesterday's again.
+
+A pinned painting, rotation off, or a painting hung from the settings page
+doesn't use the queue; the paintings sent ahead stay for the periods after
+it. Downloads still go one per painting: just earlier.
 
 **Requests to the Rijksmuseum** stay low: the phone downloads one crop per new
 painting (daily at most) and one when a saved look changes its crop, zoom or
@@ -430,6 +467,10 @@ can be deleted by hand.
 | `PhoneReady` | phone → watch | JS started; watch replies with Hello |
 | `ShowTime`, `ClockMode`, `HideAmPm`, `ShowDate`, `DateFormat`, `DateSep`, `HideUntilShake`, `RevealMinutes`, `BoxMode`, `TextPos`, `TimeSize`, `TextInset` | phone → watch | settings (ints; `TextPos` = row × 3 + column (row 0 top, 1 bottom, 2 center), round screens always centered horizontally; `TimeSize` 0–2 = S/M/L, default S; `TextInset` = frame width in pixels, so the text sits on the painting) |
 | `ImgBegin`, `ImgOffset`, `ImgChunk`, `ImgEnd` | phone → watch | image transfer |
+| `QueueCap`, `QueueIds` | watch → phone | with Hello: paintings the watch can keep ahead, and the ids it has (little-endian uint32s, next due first) |
+| `QueueBegin`, `QueueFrom`, `QueueChunk`, `QueueEnd` | phone → watch | a painting sent ahead (with `ArtId`, `ImgOffset`); `QueueFrom` = when it is due (Unix time) |
+| `QueueKeep` | phone → watch | the ids to keep queued; the others are dropped |
+| `QueueShow` | phone → watch | hang this queued painting now |
 
 ## Known limits
 
@@ -450,7 +491,10 @@ can be deleted by hand.
 - **The phone needs the static site.** It loads the catalog from
   `SETTINGS_URL`, so it can only pick a new painting while the site is
   reachable (or from catalog files it cached before). Showing the current
-  painting needs neither the site nor the network.
+  painting needs neither the site nor the network. Pebble Time 2 and Round 2
+  keep the next few paintings themselves (see
+  [paintings sent ahead](#paintings-sent-ahead)); older watches need the phone
+  for each new one.
 - **App size.** The `.pbw` is ~260 KB; the catalog isn't in it.
 
 ## Checked, and still to check

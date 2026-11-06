@@ -21,6 +21,15 @@
  * Round 2 and 2 Duo; 4 KB on older watches, too little for a painting). */
 #define ART_META_KEY 2
 #define ART_DATA_KEY 100
+/* Paintings the phone sends ahead of time, each with the time it is due, so
+ * the next one is hung on time even when the phone is away. QUEUE_META_KEY
+ * holds the list (ArtQueue); slot i's bytes are in PERSIST_DATA_MAX_LENGTH
+ * pieces from QUEUE_DATA_KEY + i * QUEUE_SLOT_KEYS. Only where an app may
+ * store enough (see queue_capacity). */
+#define QUEUE_META_KEY 3
+#define QUEUE_DATA_KEY 1000
+#define QUEUE_SLOT_KEYS 1000
+#define QUEUE_MAX 3
 /* How long a flick shows the time is a setting: 1..REVEAL_MAX_MIN minutes. */
 #define REVEAL_MAX_MIN 60
 /* The revealed time fades in and out in this many frames. */
@@ -104,6 +113,28 @@ typedef struct {
   uint32_t id;
   uint32_t size;
 } ArtMeta;
+
+/* A painting waiting in storage: its id, when it is due (Unix time) and its
+ * storage slot. Kept sorted by `from`, so the first is the next one due. */
+typedef struct {
+  uint32_t id;
+  int32_t from;
+  uint8_t slot;
+} QueuedArt;
+
+typedef struct {
+  uint8_t count;
+  QueuedArt items[QUEUE_MAX];
+} ArtQueue;
+
+static ArtQueue s_queue;
+static uint8_t s_queue_cap;     /* slots this watch can store, 0 = no queue */
+/* The queued painting being received, written straight to storage. */
+static int s_q_slot = -1;       /* -1 = none */
+static uint32_t s_q_id;
+static int32_t s_q_from;
+static uint32_t s_q_size;
+static uint32_t s_q_next;       /* next byte expected (chunks come in order) */
 
 static bool s_revealed;         /* shown, or fading in or out */
 static AppTimer *s_reveal_timer;
@@ -209,6 +240,15 @@ static void send_hello(int32_t reason) {
   /* The painting we already show (restored from storage): the phone skips
    * sending it again when it would send the same one. */
   dict_write_int32(it, MESSAGE_KEY_ArtId, (int32_t)s_art_id);
+  /* Room for paintings sent ahead, and the ones we have (next due first). */
+  dict_write_int32(it, MESSAGE_KEY_QueueCap, s_queue_cap);
+  if (s_queue.count) {
+    uint32_t ids[QUEUE_MAX];
+    for (int i = 0; i < s_queue.count; i++) {
+      ids[i] = s_queue.items[i].id;
+    }
+    dict_write_data(it, MESSAGE_KEY_QueueIds, (const uint8_t *)ids, s_queue.count * sizeof(uint32_t));
+  }
   app_message_outbox_send();
 }
 
@@ -303,6 +343,8 @@ static void handle_image(DictionaryIterator *iter) {
   }
 }
 
+static void handle_queue(DictionaryIterator *iter);
+
 static bool read_int(DictionaryIterator *iter, uint32_t key, int32_t *out) {
   Tuple *t = dict_find(iter, key);
   if (!t) {
@@ -349,6 +391,7 @@ static void inbox_received(DictionaryIterator *iter, void *ctx) {
   }
 
   handle_image(iter);
+  handle_queue(iter);
 }
 
 /* ---------------------------------------------------------------- gestures */
@@ -600,11 +643,15 @@ static void text_update(Layer *layer, GContext *ctx) {
   }
 }
 
+static bool queue_advance(void);
+
 static void tick_handler(struct tm *t, TimeUnits changed) {
   update_strings();
   layer_mark_dirty(s_text_layer);
-  if (changed & DAY_UNIT) {
-    send_hello(2);  /* new day → the phone hangs a new painting */
+  /* A painting sent ahead is due: hang it ourselves, phone or not. */
+  bool hung = queue_advance();
+  if (hung || (changed & DAY_UNIT)) {
+    send_hello(2);  /* new day → the phone hangs a new painting (or learns ours) */
   }
 }
 
@@ -667,6 +714,218 @@ static void restore_art(void) {
   s_art_ready = true;
 }
 
+/* ------------------------------------------------------------------- queue */
+
+/* How many paintings fit in storage besides the one shown (and the settings). */
+static uint8_t queue_capacity(void) {
+  size_t size = art_size();
+  int max = persist_get_max_size();
+  if (!s_art || !size || max < (int)(2 * size + 4096)) {
+    return 0;
+  }
+  size_t slots = ((size_t)max - size - 4096) / size;
+  return slots > QUEUE_MAX ? QUEUE_MAX : slots;
+}
+
+static uint32_t slot_key(int slot) {
+  return QUEUE_DATA_KEY + (uint32_t)slot * QUEUE_SLOT_KEYS;
+}
+
+static void queue_save(void) {
+  persist_write_data(QUEUE_META_KEY, &s_queue, sizeof(s_queue));
+}
+
+static void queue_load(void) {
+  s_queue_cap = queue_capacity();
+  s_queue = (ArtQueue){ 0 };
+  if (!s_queue_cap || !persist_exists(QUEUE_META_KEY) ||
+      persist_read_data(QUEUE_META_KEY, &s_queue, sizeof(s_queue)) != (int)sizeof(s_queue) ||
+      s_queue.count > s_queue_cap) {
+    s_queue = (ArtQueue){ 0 };
+    return;
+  }
+  for (int i = 0; i < s_queue.count; i++) {
+    if (s_queue.items[i].slot >= s_queue_cap) {
+      s_queue = (ArtQueue){ 0 };
+      return;
+    }
+  }
+}
+
+/* Drop items [from, to) from the list. */
+static void queue_remove(int from, int to) {
+  memmove(&s_queue.items[from], &s_queue.items[to], (s_queue.count - to) * sizeof(QueuedArt));
+  s_queue.count -= to - from;
+}
+
+static int queue_find(uint32_t id) {
+  for (int i = 0; i < s_queue.count; i++) {
+    if (s_queue.items[i].id == id) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+static int queue_free_slot(void) {
+  for (int slot = 0; slot < s_queue_cap; slot++) {
+    bool used = false;
+    for (int i = 0; i < s_queue.count; i++) {
+      used = used || s_queue.items[i].slot == slot;
+    }
+    if (!used) {
+      return slot;
+    }
+  }
+  return -1;
+}
+
+/* Hang queued painting `index`; it and the ones before it leave the queue. */
+static void queue_show(int index) {
+  QueuedArt item = s_queue.items[index];
+  queue_remove(0, index + 1);
+  queue_save();
+  if (!s_art) {
+    return;
+  }
+  uint8_t *data = gbitmap_get_data(s_art);
+  size_t size = art_size();
+  for (size_t offset = 0, key = slot_key(item.slot); offset < size; offset += PERSIST_DATA_MAX_LENGTH, key++) {
+    size_t len = size - offset < PERSIST_DATA_MAX_LENGTH ? size - offset : PERSIST_DATA_MAX_LENGTH;
+    if (persist_read_data(key, data + offset, len) != (int)len) {
+      /* Unreadable: the phone sends the painting again when it can. */
+      APP_LOG(APP_LOG_LEVEL_WARNING, "queued painting unreadable at %u", (unsigned)offset);
+      s_art_id = 0;
+      return;
+    }
+  }
+  s_expected = 0; /* replaces any painting still arriving */
+  APP_LOG(APP_LOG_LEVEL_INFO, "hung queued painting %lu, %d left", (unsigned long)item.id, s_queue.count);
+  s_art_id = item.id;
+  s_art_ready = true;
+  s_art_unsaved = true;
+  /* Keep it right away (once a period), so a restart can't bring back the
+   * painting before it. */
+  save_art();
+  if (s_art_layer) {
+    layer_mark_dirty(s_art_layer);
+    layer_mark_dirty(s_text_layer);
+  }
+}
+
+/* Hang the latest queued painting that is due. Returns whether one was hung. */
+static bool queue_advance(void) {
+  time_t now = time(NULL);
+  int due = -1;
+  for (int i = 0; i < s_queue.count && s_queue.items[i].from <= now; i++) {
+    due = i;
+  }
+  if (due < 0) {
+    return false;
+  }
+  queue_show(due);
+  return true;
+}
+
+static void queue_insert(uint32_t id, int32_t from, uint8_t slot) {
+  int i = s_queue.count;
+  while (i > 0 && s_queue.items[i - 1].from > from) {
+    s_queue.items[i] = s_queue.items[i - 1];
+    i--;
+  }
+  s_queue.items[i] = (QueuedArt){ .id = id, .from = from, .slot = slot };
+  s_queue.count++;
+  queue_save();
+}
+
+static void handle_queue(DictionaryIterator *iter) {
+  Tuple *t;
+  uint32_t total = art_size();
+
+  /* The paintings the phone still wants queued; the rest go. */
+  if ((t = dict_find(iter, MESSAGE_KEY_QueueKeep))) {
+    uint32_t keep[QUEUE_MAX * 2];
+    int n = t->length / sizeof(uint32_t);
+    n = n > (int)ARRAY_LENGTH(keep) ? (int)ARRAY_LENGTH(keep) : n;
+    memcpy(keep, t->value->data, n * sizeof(uint32_t));
+    bool changed = false;
+    for (int i = s_queue.count - 1; i >= 0; i--) {
+      bool wanted = false;
+      for (int k = 0; k < n; k++) {
+        wanted = wanted || keep[k] == s_queue.items[i].id;
+      }
+      if (!wanted) {
+        queue_remove(i, i + 1);
+        changed = true;
+      }
+    }
+    if (changed) {
+      queue_save();
+    }
+  }
+
+  if ((t = dict_find(iter, MESSAGE_KEY_QueueBegin))) {
+    Tuple *id = dict_find(iter, MESSAGE_KEY_ArtId);
+    Tuple *from = dict_find(iter, MESSAGE_KEY_QueueFrom);
+    s_q_slot = -1;
+    /* Not one we show or keep already. */
+    if (t->value->uint32 == total && id && from && id->value->uint32 != s_art_id &&
+        queue_find(id->value->uint32) < 0) {
+      s_q_slot = queue_free_slot();
+      s_q_id = id->value->uint32;
+      s_q_from = from->value->int32;
+      s_q_size = total;
+      s_q_next = 0;
+    }
+    if (s_q_slot < 0) {
+      APP_LOG(APP_LOG_LEVEL_WARNING, "not queueing painting (%lu bytes, %d queued)",
+              (unsigned long)t->value->uint32, s_queue.count);
+    }
+  }
+
+  /* Chunks come in order, PERSIST_DATA_MAX_LENGTH-aligned: straight to storage. */
+  if ((t = dict_find(iter, MESSAGE_KEY_QueueChunk)) && s_q_slot >= 0) {
+    Tuple *o = dict_find(iter, MESSAGE_KEY_ImgOffset);
+    uint32_t offset = o ? o->value->uint32 : s_q_next;
+    uint32_t len = t->length;
+    if (offset < s_q_next) {
+      /* Sent again: we have it. */
+    } else if (offset != s_q_next || offset % PERSIST_DATA_MAX_LENGTH || offset + len > s_q_size) {
+      APP_LOG(APP_LOG_LEVEL_WARNING, "queued painting: unexpected chunk at %lu", (unsigned long)offset);
+      s_q_slot = -1;
+    } else {
+      uint32_t key = slot_key(s_q_slot) + offset / PERSIST_DATA_MAX_LENGTH;
+      for (uint32_t done = 0; done < len; done += PERSIST_DATA_MAX_LENGTH, key++) {
+        uint32_t n = len - done < PERSIST_DATA_MAX_LENGTH ? len - done : PERSIST_DATA_MAX_LENGTH;
+        if (persist_write_data(key, t->value->data + done, n) != (int)n) {
+          APP_LOG(APP_LOG_LEVEL_WARNING, "could not store the queued painting");
+          s_q_slot = -1;
+          return;
+        }
+      }
+      s_q_next = offset + len;
+    }
+  }
+
+  if (dict_find(iter, MESSAGE_KEY_QueueEnd) && s_q_slot >= 0) {
+    if (s_q_next == s_q_size && queue_find(s_q_id) < 0) {
+      queue_insert(s_q_id, s_q_from, s_q_slot);
+      APP_LOG(APP_LOG_LEVEL_INFO, "queued painting %lu (due %ld), %d queued",
+              (unsigned long)s_q_id, (long)s_q_from, s_queue.count);
+    }
+    s_q_slot = -1;
+  }
+
+  /* The phone hangs a queued painting (e.g. its period began while we were
+   * away from the watchface). */
+  if ((t = dict_find(iter, MESSAGE_KEY_QueueShow))) {
+    int i = queue_find(t->value->uint32);
+    if (i >= 0) {
+      queue_show(i);
+    }
+  }
+}
+
 /* ------------------------------------------------------------------ window */
 
 static void window_load(Window *window) {
@@ -682,6 +941,7 @@ static void window_load(Window *window) {
            (size_t)s_stride * s_screen.h);
     restore_art();
   }
+  queue_load();
 
   s_art_layer = layer_create(bounds);
   layer_set_update_proc(s_art_layer, art_update);
@@ -713,6 +973,8 @@ static void init(void) {
     .unload = window_unload,
   });
   window_stack_push(s_window, false);
+  /* Hang a painting sent ahead whose time came while the face wasn't running. */
+  queue_advance();
 
   update_strings();
   tick_timer_service_subscribe(MINUTE_UNIT | DAY_UNIT, tick_handler);

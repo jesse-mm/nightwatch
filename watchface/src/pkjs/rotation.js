@@ -62,7 +62,48 @@ function featuredDay(rotation, d) {
   return dayOfYear(periodStart(rotation === 'off' ? 'daily' : rotation, d));
 }
 
+/** First day of the period after the one starting on `start`. */
+function nextStart(rotation, start) {
+  if (rotation === 'weekly') {
+    return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+  }
+  if (rotation === 'monthly') {
+    return new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  }
+  return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+}
+
+/**
+ * The `count` periods after the one `d` falls in, for paintings sent to the
+ * watch ahead of time: `{period, start, featuredDay}` with `start` the local
+ * midnight the period begins. None for "off".
+ */
+function upcoming(rotation, d, count) {
+  var out = [];
+  if (rotation === 'off') {
+    return out;
+  }
+  var start = periodStart(rotation, d);
+  for (var i = 0; i < count; i++) {
+    start = nextStart(rotation, start);
+    out.push({ period: period(rotation, start), start: start, featuredDay: featuredDay(rotation, start) });
+  }
+  return out;
+}
+
+/**
+ * Whether period `a` comes after period `b` of the same rotation, e.g. the
+ * watch (whose clock may run a little ahead) already hung tomorrow's painting.
+ */
+function isAfter(a, b) {
+  var pa = String(a).split(':');
+  var pb = String(b).split(':');
+  return pa.length === 2 && pb.length === 2 && pa[0] === pb[0] && pa[1] > pb[1];
+}
+
 module.exports = {
   period: period,
-  featuredDay: featuredDay
+  featuredDay: featuredDay,
+  upcoming: upcoming,
+  isAfter: isAfter
 };

@@ -36,6 +36,9 @@ var ROWS_KEY = 'nw-rows';
 var SOURCE_KEY = 'nw-pinned-source';
 // A pinned painting we can no longer get: shown on the settings page.
 var UNAVAILABLE_KEY = 'nw-unavailable';
+// Paintings for the coming periods, sent to the watch ahead of time (see
+// syncQueue): like nw-art, plus the period's start and the id on the watch.
+var QUEUE_KEY = 'nw-queue';
 
 var DEFAULTS = settingsLib.DEFAULTS;
 
@@ -48,6 +51,11 @@ var watchEmpty = true;
 // Id of the painting the watch shows (it keeps it between launches where it
 // can); 0 = none or unknown. Sending the same painting again is skipped.
 var watchArtId = 0;
+// Ids of the paintings the watch keeps for later, next due first.
+var watchQueue = [];
+var prefetching = false;
+// Downloads ahead since the last Hello: a safety stop, never a download loop.
+var prefetches = 0;
 var retryTimer = null;
 var retryCount = 0;
 var RETRY_MINUTES = [2, 5, 15, 30];
@@ -111,6 +119,33 @@ function composeFor(art, settings) {
   });
 }
 
+/**
+ * The settings a painting is shown with: its saved look, or for one without
+ * the default colors, zoom and position (looks.FRESH); crop, frame and time
+ * placement carry over from `settings`.
+ */
+function lookFor(settings, key) {
+  var out = {};
+  for (var k in settings) {
+    if (Object.prototype.hasOwnProperty.call(settings, k)) {
+      out[k] = settings[k];
+    }
+  }
+  var look = looks.get(localStorage, key, settings);
+  if (look) {
+    for (var l in look) {
+      if (Object.prototype.hasOwnProperty.call(look, l)) {
+        out[l] = look[l];
+      }
+    }
+  } else {
+    looks.FRESH.forEach(function (f) {
+      out[f] = DEFAULTS[f];
+    });
+  }
+  return out;
+}
+
 /** Send the cached painting (render it first if it's a crop). */
 function showCached(art, settings) {
   if (art && art.crop) {
@@ -121,6 +156,9 @@ function showCached(art, settings) {
 // ---------------------------------------------------------------- messaging
 
 var queue = [];
+// Paintings sent ahead (QueueBegin/QueueChunk/QueueEnd): only while `queue`
+// is empty, so settings and the painting on show never wait for them.
+var background = [];
 var sending = false;
 
 /** AppMessages must go one at a time; retry with back-off on NACK. */
@@ -129,14 +167,33 @@ function enqueue(message, onDone) {
   pump();
 }
 
+function enqueueBackground(message, qid, onDone) {
+  background.push({ message: message, onDone: onDone, tries: 0, qid: qid });
+  pump();
+}
+
+/** Take a message off whichever list holds it now (both get replaced). */
+function drop(item) {
+  [queue, background].forEach(function (list) {
+    var i = list.indexOf(item);
+    if (i >= 0) {
+      list.splice(i, 1);
+    }
+  });
+}
+
 function pump() {
-  if (sending || queue.length === 0) {
+  if (sending) {
+    return;
+  }
+  var list = queue.length ? queue : background;
+  if (list.length === 0) {
     return;
   }
   sending = true;
-  var item = queue[0];
+  var item = list[0];
   Pebble.sendAppMessage(item.message, function () {
-    queue.shift();
+    drop(item);
     sending = false;
     if (item.onDone) {
       item.onDone();
@@ -147,7 +204,7 @@ function pump() {
     item.tries += 1;
     if (item.tries > 5) {
       console.log('Giving up on message after 5 tries');
-      queue.shift();
+      drop(item);
     }
     setTimeout(pump, 250 * item.tries);
   });
@@ -207,6 +264,16 @@ function sendImage(bytes) {
     watchEmpty = false;
     return;
   }
+  var queued = watchQueue.indexOf(id);
+  if (queued >= 0) {
+    // The watch has it stored already: just hang it (it drops the ones before).
+    console.log('Hanging the painting the watch keeps');
+    enqueue({ QueueShow: id });
+    watchQueue = watchQueue.slice(queued + 1);
+    watchArtId = id;
+    watchEmpty = false;
+    return;
+  }
   // Drop any half-sent older image still in the queue.
   queue = queue.filter(function (item) {
     return item.message.ImgChunk === undefined && item.message.ImgBegin === undefined &&
@@ -241,10 +308,14 @@ function ensureArt(hangKey) {
     return false;
   }
   var settings = loadSettings();
-  var art = readJson(ART_KEY);
-  var current = !!(art && art.crop && art.cropKey === cropKey(settings));
   var now = new Date();
   var period = rotation.period(settings.rotation, now);
+  // A new period with its painting fetched ahead: hang that one, no download.
+  if (!fetching && !hangKey && promoteDue(settings, period)) {
+    settings = loadSettings();
+  }
+  var art = readJson(ART_KEY);
+  var current = !!(art && art.crop && art.cropKey === cropKey(settings));
 
   // A freshly started watchface is black until it gets a painting. Send the
   // cached one straight away (even yesterday's, or one made with other
@@ -271,7 +342,9 @@ function ensureArt(hangKey) {
     }
     return false;
   }
-  var due = !art || !art.meta || (settings.rotation !== 'off' && art.period !== period);
+  // A painting from a later period is the watch running ahead of our clock.
+  var due = !art || !art.meta || (settings.rotation !== 'off' && art.period !== period &&
+    !rotation.isAfter(art.period, period));
   if (!due) {
     if (!current) {
       // Same painting, different screen, fit, zoom or position: fetch that crop.
@@ -408,7 +481,9 @@ function fetchDone() {
     var key = pendingHang;
     pendingHang = null;
     ensureArt(key);
+    return;
   }
+  syncQueue();
 }
 
 function fetchFailed(why) {
@@ -633,14 +708,10 @@ function cropFromCopy(cat, key, settings) {
 }
 
 /** Cache a painting's toned crop and send it to the watch. */
-function showNewArt(cat, key, settings, period, rgb, size) {
+/** What we keep of a painting's crop (nw-art, and each nw-queue entry). */
+function artRecord(cat, key, settings, period, rgb, size) {
   var painting = cat.get(key);
-  retryCount = 0;
-  if (retryTimer) {
-    clearTimeout(retryTimer);
-    retryTimer = null;
-  }
-  var record = {
+  return {
     date: today(),
     period: period,
     cropKey: cropKey(settings),
@@ -662,6 +733,15 @@ function showNewArt(cat, key, settings, period, rgb, size) {
       licenseUrl: painting.licenseUrl
     }
   };
+}
+
+function showNewArt(cat, key, settings, period, rgb, size) {
+  retryCount = 0;
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  var record = artRecord(cat, key, settings, period, rgb, size);
   try {
     localStorage.setItem(ART_KEY, JSON.stringify(record));
   } catch (e) {
@@ -717,24 +797,10 @@ function fetchArt(cat, key, period) {
   // A painting with a saved look gets it back; a new one without starts at its
   // planned view (zoom and position belong to one painting); others keep the
   // current settings.
-  var look = looks.get(localStorage, painting.key, settings);
   var previous = readJson(ART_KEY);
   var samePainting = previous && previous.meta && previous.meta.key === painting.key;
-  if (look) {
-    applyLook(settings, look);
-  } else if (!samePainting) {
-    // A painting without a saved look starts with default colors, zoom and
-    // position (looks.FRESH); crop, frame and time placement carry over.
-    var changed = false;
-    looks.FRESH.forEach(function (k) {
-      if (settings[k] !== DEFAULTS[k]) {
-        settings[k] = DEFAULTS[k];
-        changed = true;
-      }
-    });
-    if (changed) {
-      storeSettings(settings);
-    }
+  if (!samePainting || looks.get(localStorage, painting.key, settings)) {
+    applyLook(settings, lookFor(settings, painting.key));
   }
 
   var request = cat.cropRequest(painting.key, watch, settings.fit, settings);
@@ -770,6 +836,288 @@ function fetchArt(cat, key, period) {
   });
 }
 
+// ------------------------------------------------------------ sent ahead
+// Watches with room to store paintings (Pebble Time 2, Round 2: QueueCap in
+// the Hello) get the next few periods' paintings ahead of time, each with the
+// moment it is due. The watch hangs them itself, so a new painting still comes
+// at midnight when the phone is away. The phone keeps the same paintings in
+// nw-queue and, when the watch reports one on show, makes it the current one.
+
+/** What the coming periods should show: `{period, from, day, plan}`. */
+function upcomingPlan(settings, now) {
+  if (!watch || !watch.queueCap || settings.pinned || settings.rotation === 'off') {
+    return [];
+  }
+  var plan = settings.selection === 'featured' ? 'featured' : 'random:' + settings.era;
+  return rotation.upcoming(settings.rotation, now, watch.queueCap).map(function (p) {
+    return { period: p.period, from: Math.floor(p.start.getTime() / 1000), day: p.featuredDay, plan: plan };
+  });
+}
+
+function readQueue() {
+  var q = readJson(QUEUE_KEY);
+  return Object.prototype.toString.call(q) === '[object Array]' ? q : [];
+}
+
+function writeQueue(entries) {
+  try {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(entries));
+    return true;
+  } catch (e) {
+    console.log('Could not keep paintings ahead: ' + e);
+    return false;
+  }
+}
+
+/** Ids (int32) packed as little-endian bytes, as the watch reads them. */
+function packIds(ids) {
+  var bytes = [];
+  ids.forEach(function (id) {
+    for (var i = 0; i < 4; i++) {
+      bytes.push((id >>> (8 * i)) & 0xff);
+    }
+  });
+  return bytes;
+}
+
+function unpackIds(bytes) {
+  var ids = [];
+  for (var i = 0; bytes && i + 3 < bytes.length; i += 4) {
+    ids.push((bytes[i] | (bytes[i + 1] << 8) | (bytes[i + 2] << 16) | (bytes[i + 3] << 24)) | 0);
+  }
+  return ids;
+}
+
+/** What decides a painting's bytes besides its crop. */
+function renderSig(settings) {
+  return [watch.w, watch.h, watch.stride, watch.round, settings.fit, settings.frame, settings.palette,
+    settings.dither, settings.brightness, settings.contrast].join(':');
+}
+
+/**
+ * Make a painting sent ahead the current one (nw-art), with its look, and drop
+ * it and the ones before it from nw-queue.
+ */
+function promote(entry) {
+  var entries = readQueue();
+  var keep = entries.filter(function (e) {
+    return e.from > entry.from;
+  });
+  writeQueue(keep);
+  var settings = loadSettings();
+  applyLook(settings, lookFor(settings, entry.meta.key));
+  var record = {};
+  ['period', 'cropKey', 'crop', 'cropW', 'cropH', 'row', 'meta'].forEach(function (k) {
+    record[k] = entry[k];
+  });
+  record.date = today();
+  try {
+    localStorage.setItem(ART_KEY, JSON.stringify(record));
+  } catch (e) {
+    console.log('Could not cache painting: ' + e);
+  }
+  console.log('Now showing ' + entry.meta.key + ', sent ahead for ' + entry.period);
+}
+
+/** The watch hung a painting we sent ahead: make it ours too. */
+function promoteShown(id) {
+  var entries = readQueue();
+  for (var i = 0; id && i < entries.length; i++) {
+    if (entries[i].id === id) {
+      promote(entries[i]);
+      return;
+    }
+  }
+}
+
+/** A new period began and we have its painting: make it current. */
+function promoteDue(settings, period) {
+  if (settings.pinned || settings.rotation === 'off') {
+    return false;
+  }
+  var art = readJson(ART_KEY);
+  if (art && (art.period === period || rotation.isAfter(art.period, period))) {
+    return false;
+  }
+  var plan = settings.selection === 'featured' ? 'featured' : 'random:' + settings.era;
+  var entries = readQueue();
+  for (var i = 0; i < entries.length; i++) {
+    if (entries[i].period === period && entries[i].plan === plan) {
+      promote(entries[i]);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Stream a painting to the watch's store, in storage-sized pieces. */
+function sendAhead(entry, bytes) {
+  var id = entry.id;
+  console.log('Sending ' + entry.meta.key + ' ahead for ' + entry.period);
+  enqueueBackground({ QueueBegin: bytes.length, ArtId: id, QueueFrom: entry.from }, id);
+  // The watch writes each chunk straight to storage, in 256-byte pieces.
+  var chunk = Math.floor(watch.chunk / 256) * 256;
+  for (var offset = 0; offset < bytes.length; offset += chunk) {
+    enqueueBackground({
+      ImgOffset: offset,
+      QueueChunk: Array.prototype.slice.call(bytes, offset, offset + chunk)
+    }, id);
+  }
+  enqueueBackground({ QueueEnd: 1 }, id, function () {
+    if (watchQueue.indexOf(id) < 0) {
+      watchQueue.push(id);
+    }
+  });
+}
+
+/**
+ * Bring the paintings sent ahead in line with the settings: drop the ones no
+ * longer planned, render the rest (their ids change with frame or tuning),
+ * tell the watch which to keep, send it the missing ones and fetch the next
+ * one still missing.
+ */
+function syncQueue() {
+  if (!watch || !watch.queueCap) {
+    return;
+  }
+  var settings = loadSettings();
+  var art = readJson(ART_KEY);
+  // Only periods after the one on show (the watch's clock may run ahead of ours).
+  var plan = upcomingPlan(settings, new Date()).filter(function (p) {
+    return !(art && (art.period === p.period || rotation.isAfter(art.period, p.period)));
+  });
+  var stored = readQueue();
+  var entries = stored.filter(function (e) {
+    var wanted = plan.some(function (p) {
+      return p.period === e.period && p.plan === e.plan;
+    });
+    return wanted && e.meta && e.cropKey === cropKey(lookFor(settings, e.meta.key));
+  });
+  var dirty = entries.length !== stored.length;
+  entries.forEach(function (e) {
+    var look = lookFor(settings, e.meta.key);
+    var sig = renderSig(look);
+    if (e.sig !== sig || !e.id) {
+      e.id = artId(composeFor(e, look));
+      e.sig = sig;
+      dirty = true;
+    }
+  });
+  if (dirty) {
+    writeQueue(entries);
+  }
+
+  var ids = entries.map(function (e) {
+    return e.id;
+  });
+  // Pending transfers of paintings no longer wanted can go (qid 0: QueueKeep).
+  background = background.filter(function (item) {
+    return item.qid === 0 || ids.indexOf(item.qid) >= 0;
+  });
+  var sendingIds = background.map(function (item) {
+    return item.qid;
+  });
+  if (watchQueue.some(function (id) { return ids.indexOf(id) < 0; })) {
+    // An id 0 matches nothing: an empty list would be no list at all.
+    enqueueBackground({ QueueKeep: packIds(ids.length ? ids : [0]) }, 0);
+    watchQueue = watchQueue.filter(function (id) {
+      return ids.indexOf(id) >= 0;
+    });
+  }
+  entries.forEach(function (e) {
+    if (watchQueue.indexOf(e.id) < 0 && sendingIds.indexOf(e.id) < 0) {
+      sendAhead(e, composeFor(e, lookFor(settings, e.meta.key)));
+    }
+  });
+
+  var missing = plan.filter(function (p) {
+    return !entries.some(function (e) {
+      return e.period === p.period;
+    });
+  });
+  if (missing.length && !fetching && !prefetching && prefetches < 2 * watch.queueCap) {
+    prefetches += 1;
+    prefetch(missing[0], entries);
+  }
+}
+
+/** Fetch the painting for one coming period and keep it in nw-queue. */
+function prefetch(slot, entries) {
+  prefetching = true;
+  var art = readJson(ART_KEY);
+  var taken = entries.map(function (e) {
+    return e.meta.key;
+  });
+  if (art && art.meta) {
+    taken.push(art.meta.key);
+  }
+  var done = function (why) {
+    prefetching = false;
+    if (why) {
+      // Try again with the next Hello (launch or new day); no retry storm.
+      console.log('Could not fetch a painting ahead: ' + why);
+    }
+  };
+  withCatalog(false, function (cat) {
+    addKnownRows(cat);
+    var pick = function (pool) {
+      withPool(cat, pool, function () {
+        var p = null;
+        if (slot.plan === 'featured') {
+          p = cat.featured(slot.day);
+        } else {
+          // Not one we show or sent ahead already, if we can help it.
+          for (var tries = 0; tries < 10 && (!p || taken.indexOf(p.key) >= 0); tries++) {
+            p = cat.random(pool);
+          }
+        }
+        if (!p) {
+          done('no painting for ' + slot.period);
+          return;
+        }
+        var settings = lookFor(loadSettings(), p.key);
+        var request = cat.cropRequest(p.key, watch, settings.fit, settings);
+        if (!request) {
+          done('no crop for this screen');
+          return;
+        }
+        getBytes(request.url, function (file) {
+          var entry;
+          try {
+            var image = png.decode(file);
+            entry = artRecord(cat, p.key, settings, slot.period, render.tone(image.data),
+              { w: image.width, h: image.height });
+          } catch (e) {
+            done('could not decode the picture: ' + e);
+            return;
+          }
+          entry.from = slot.from;
+          entry.plan = slot.plan;
+          // Settings may have changed while downloading: syncQueue sorts it out.
+          var current = readQueue().filter(function (e) {
+            return e.period !== slot.period;
+          });
+          current.push(entry);
+          current.sort(function (a, b) {
+            return a.from - b.from;
+          });
+          var stored = writeQueue(current);
+          done(stored ? null : 'no room on the phone');
+          if (stored) {
+            syncQueue();
+          }
+        }, done);
+      }, done);
+    };
+    pick(slot.plan === 'featured' ? 'featured' : cat.poolFor(settingsEra(slot.plan)));
+  }, done);
+}
+
+/** The era of a "random:<era>" plan. */
+function settingsEra(plan) {
+  return plan.split(':')[1] || 'any';
+}
+
 // -------------------------------------------------------------------- events
 
 Pebble.addEventListener('ready', function () {
@@ -788,15 +1136,25 @@ Pebble.addEventListener('appmessage', function (e) {
     stride: p.RowStride,
     round: p.IsRound,
     chunk: p.ChunkSize,
-    is24h: p.Is24h
+    is24h: p.Is24h,
+    queueCap: p.QueueCap || 0
   };
   watchArtId = p.ArtId || 0;
+  watchQueue = unpackIds(p.QueueIds);
+  prefetches = 0;
+  // The watch may have hung a painting we sent ahead (e.g. at midnight).
+  promoteShown(watchArtId);
   if (p.Hello === 1) {
-    // The watchface just started: its screen is empty.
+    // The watchface just started: its screen is empty, and whatever was on
+    // its way to the watch's store is lost.
     watchEmpty = true;
+    background = [];
     sendSettings(loadSettings());
   }
-  ensureArt(); // Hello 2 = new day; the date check picks a new painting.
+  // Hello 2 = new day; the date check picks a new painting.
+  if (!ensureArt()) {
+    syncQueue();
+  }
 });
 
 /**
@@ -816,7 +1174,7 @@ function looksForPage() {
 
 /** Every localStorage key we use, with the cached catalog files. */
 function storageKeys() {
-  var keys = [SETTINGS_KEY, 'nw-looks', ART_KEY, CATALOG_KEY, ROWS_KEY, SOURCE_KEY, UNAVAILABLE_KEY];
+  var keys = [SETTINGS_KEY, 'nw-looks', ART_KEY, QUEUE_KEY, CATALOG_KEY, ROWS_KEY, SOURCE_KEY, UNAVAILABLE_KEY];
   var manifest = readJson(CATALOG_KEY);
   ((manifest && manifest.files) || []).forEach(function (f) {
     keys.push(CATALOG_KEY + '-' + f.pool);
@@ -840,7 +1198,12 @@ function debugInfo() {
     catalogId: manifest ? manifest.id : null,
     painting: art ? { key: art.meta.key, title: art.meta.title, period: art.period, cropKey: art.cropKey, date: art.date } : null,
     watchArtId: watchArtId,
+    queue: readQueue().map(function (e) {
+      return { key: e.meta.key, title: e.meta.title, period: e.period, id: e.id, onWatch: watchQueue.indexOf(e.id) >= 0 };
+    }),
+    watchQueue: watchQueue,
     fetching: fetching,
+    prefetching: prefetching,
     retryCount: retryCount,
     config: { SETTINGS_URL: PAGE_URL, DEV_BASE64_URL: CONFIG.DEV_BASE64_URL || null }
   };
@@ -981,5 +1344,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
   // applied here, no download).
   if (!ensureArt(typeof result.artKey === 'string' ? result.artKey : undefined)) {
     showCached(readJson(ART_KEY), settings);
+    // Frame, tuning or rotation may have changed what was sent ahead.
+    syncQueue();
   }
 });
